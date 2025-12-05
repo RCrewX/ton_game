@@ -1,9 +1,9 @@
 import { toNano } from '@ton/core';
-import { Map } from '../wrappers/Map';
+import { Game } from '../wrappers/Game';
 import { compile, NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
-    const map = provider.open(Map.createFromConfig({}, await compile('Map')));
+    const map = provider.open(Game.createFromConfig({}, await compile('Map')));
 
     await map.sendDeploy(provider.sender(), toNano('0.05'));
 

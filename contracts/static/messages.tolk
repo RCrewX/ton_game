@@ -1,40 +1,63 @@
-enum MoveMode: uint8 {
-    EXIT
-    LEFT
-    UP
-    RIGHT
+import "structs"
+import "constants"
+
+type AnyMessage = ReturnExcessesBack | LiteralyAnything
+
+struct ReturnExcessesBack {
+    queryId: uint64
 }
 
-// Map
-
-
-
-// CoordinateCell
-
-// from user to ship
-struct AskToMove {
-    mode: uint8
+struct LiteralyAnything {
+    queryId: uint64
 }
 
 // from ship to CC
+struct MoveShipToCC {
+    user: address
+    ship_hp: uint256
+    mode: MoveMode
+}
 // from CC to CC
 struct Move {
     user: address
     mode: MoveMode
-    ship_hp: int
-    ship_x: int
-    ship_y: int
+    moveData: Cell<MoveData>
 }
+
+
 
 // from CC to ship
 struct MoveEnd {
-    success: bool // may be int to make harder reward if bad exit
-    cc_x: int // for sanity checks
-    cc_y: int // for sanity checks
-
+    result: UniqueResult
+    gameFields: GameFields
 }
+
+
+
+
+// Ship
+
+// from user to ship
+struct RequestToMove {
+    mode: MoveMode
+}
+
+
 
 struct RequestMint {
-    amount: int
+    receiver: address
+    amount: coins
+    proof: Proof
 }
-// Ship
+
+struct RequestShipAddress {
+    userAddress: address,
+}
+struct RequestCoordinateCellAddress {
+    xy: XY
+}
+
+struct ResponseAddress {
+    requestedAddress: address 
+}
+

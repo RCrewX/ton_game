@@ -1,4 +1,7 @@
 
+import "structs"
+import "constants"
+
 // TODO move to another project
 struct GameManagerStorage {
     ownerAddress: address // multisig will be perfect
@@ -12,28 +15,26 @@ struct GameV1Storage {
     coordinateCellCode: cell // library cell will be perfect
 }
 
-struct CoordinateCellStorage {
-    gameAddress: address
-    coordinate_x: int
-    coordinate_y: int
-    hp: int
-    reward: coins 
-    passive_reward: int
-    used: bool
-    first_explorer: address?
-
+struct CCStorage {
+    hp: uint256
+    jettonAmount: coins
+    firstExplorer: address?
 }
 
-struct Ship {
-    ownerAddress: address
+struct CoordinateCellStorage {
     gameAddress: address
+    xy: XY
+    opened: bool
+    ccStorage: Cell<CCStorage>?
+    shipCode: cell
+}
 
-    max_hp: int
-    current_hp: int
-    current_amount: coins
-    current_x: int
-    current_y: int
-
+struct ShipStorage {
+    userAddress: address
+    gameAddress: address
+    max_hp: uint256
+    gameFields: Cell<GameFields>?
+    coordinateCellCode: cell
 }
 
 
@@ -54,6 +55,7 @@ fun GameV1Storage.save(self) {
     contract.setData(self.toCell())
 }
 
+
 fun CoordinateCellStorage.load() {
     return CoordinateCellStorage.fromCell(contract.getData())
 }
@@ -62,10 +64,12 @@ fun CoordinateCellStorage.save(self) {
     contract.setData(self.toCell())
 }
 
-fun Ship.load() {
-    return Ship.fromCell(contract.getData())
+
+fun ShipStorage.load() {
+    return ShipStorage.fromCell(contract.getData())
 }
 
-fun Ship.save(self) {
+fun ShipStorage.save(self) {
     contract.setData(self.toCell())
 }
+

@@ -1,22 +1,22 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 
-export type MapConfig = {};
+export type CoordinateCellConfig = {};
 
-export function mapConfigToCell(config: MapConfig): Cell {
+export function coordinateCellConfigToCell(config: CoordinateCellConfig): Cell {
     return beginCell().endCell();
 }
 
-export class Map implements Contract {
+export class CoordinateCell implements Contract {
     constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {}
 
     static createFromAddress(address: Address) {
-        return new Map(address);
+        return new CoordinateCell(address);
     }
 
-    static createFromConfig(config: MapConfig, code: Cell, workchain = 0) {
-        const data = mapConfigToCell(config);
+    static createFromConfig(config: CoordinateCellConfig, code: Cell, workchain = 0) {
+        const data = coordinateCellConfigToCell(config);
         const init = { code, data };
-        return new Map(contractAddress(workchain, init), init);
+        return new CoordinateCell(contractAddress(workchain, init), init);
     }
 
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {

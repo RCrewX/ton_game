@@ -1,32 +1,32 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Cell, toNano } from '@ton/core';
-import { Map } from '../wrappers/Map';
+import { CoordinateCell } from '../wrappers/CoordinateCell';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 
-describe('Map', () => {
+describe('CoordinateCell', () => {
     let code: Cell;
 
     beforeAll(async () => {
-        code = await compile('Map');
+        code = await compile('CoordinateCell');
     });
 
     let blockchain: Blockchain;
     let deployer: SandboxContract<TreasuryContract>;
-    let map: SandboxContract<Map>;
+    let coordinateCell: SandboxContract<CoordinateCell>;
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
 
-        map = blockchain.openContract(Map.createFromConfig({}, code));
+        coordinateCell = blockchain.openContract(CoordinateCell.createFromConfig({}, code));
 
         deployer = await blockchain.treasury('deployer');
 
-        const deployResult = await map.sendDeploy(deployer.getSender(), toNano('0.05'));
+        const deployResult = await coordinateCell.sendDeploy(deployer.getSender(), toNano('0.05'));
 
         expect(deployResult.transactions).toHaveTransaction({
             from: deployer.address,
-            to: map.address,
+            to: coordinateCell.address,
             deploy: true,
             success: true,
         });
@@ -34,6 +34,6 @@ describe('Map', () => {
 
     it('should deploy', async () => {
         // the check is done inside beforeEach
-        // blockchain and map are ready to use
+        // blockchain and coordinateCell are ready to use
     });
 });
