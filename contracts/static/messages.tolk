@@ -3,61 +3,58 @@ import "constants"
 
 type AnyMessage = ReturnExcessesBack | LiteralyAnything
 
-struct ReturnExcessesBack {
+struct (0xd53276db) ReturnExcessesBack {
     queryId: uint64
 }
 
-struct LiteralyAnything {
+struct (0x0a1b2c3d) LiteralyAnything {
     queryId: uint64
 }
 
-// from ship to CC
-struct MoveShipToCC {
+
+// To Coordinate Cell
+
+
+struct (0x1a2b3c4d) MoveShipToCC {
     user: address
     ship_hp: uint256
     mode: MoveMode
 }
-// from CC to CC
-struct Move {
+
+struct (0x2a3b4c5d) Move {
     user: address
     mode: MoveMode
     moveData: Cell<MoveData>
 }
 
 
+//  To Ship
 
-// from CC to ship
-struct MoveEnd {
+struct (0x3a4b5c6d) MoveEnd {
     result: UniqueResult
     gameFields: GameFields
 }
 
-
-
-
-// Ship
-
-// from user to ship
-struct RequestToMove {
+struct (0x4a5b6c7d) RequestToMove {
     mode: MoveMode
 }
 
+// To Game
 
-
-struct RequestMint {
+struct (0x5a6b7c8d) RequestMint {
     receiver: address
     amount: coins
     proof: Proof
 }
 
-struct RequestShipAddress {
-    userAddress: address,
+struct (0x6a7b8c9d) RequestShipAddress {
+    userAddress: address
 }
-struct RequestCoordinateCellAddress {
+
+struct (0x7a8b9cad) RequestCoordinateCellAddress {
     xy: XY
 }
 
-struct ResponseAddress {
+struct (0x8a9bacbd) ResponseAddress {
     requestedAddress: address 
 }
-

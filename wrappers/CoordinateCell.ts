@@ -1,9 +1,14 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
+import { XY } from './structs';
 
-export type CoordinateCellConfig = {};
+export type CoordinateCellConfig = {
+    gameAddress: Address,
+    xy: XY,
+    shipCode: Cell,
+};
 
 export function coordinateCellConfigToCell(config: CoordinateCellConfig): Cell {
-    return beginCell().endCell();
+    return beginCell().storeAddress(config.gameAddress).storeInt(config.xy.x, 256).storeUint(config.xy.y, 256).storeBit(false).storeMaybeRef(null).storeRef(config.shipCode).endCell();
 }
 
 export class CoordinateCell implements Contract {

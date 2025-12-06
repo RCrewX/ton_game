@@ -4,7 +4,11 @@ import "static/storage"
 import "static/structs"
 import "static/constants"
 
-type AllowedMessagesToGame = RequestMint | RequestShipAddress | RequestCoordinateCellAddress | AnyMessage
+type AllowedMessagesToGame = 
+    | RequestMint 
+    | RequestShipAddress 
+    | RequestCoordinateCellAddress 
+    | AnyMessage
 
 // get fun get_ship_address(userAddress: address): address {
 //     var storage: GameV1Storage = lazy GameV1Storage.load();
@@ -30,7 +34,7 @@ fun onInternalMessage(in: InMessage) {
                     requestedAddress: calcAddressOfShip(msg.userAddress, contract.getAddress(), storage.shipCode, storage.coordinateCellCode),
                 }
             });
-            responseMsg.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         RequestCoordinateCellAddress => {
             reserveValue(in.valueCoins);
@@ -42,7 +46,7 @@ fun onInternalMessage(in: InMessage) {
                     requestedAddress: calcAddressOfCoordinateCell(contract.getAddress(), msg.xy.x, msg.xy.y,  storage.coordinateCellCode, storage.shipCode),
                 }
             });
-            responseMsg.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         RequestMint => {
             val the_slice = msg.proof.data.toSlice();
