@@ -1,4 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
+import { encodeRequestShipAddress, encodeRequestCoordinateCellAddress } from './types';
+import { XY } from './structs';
 
 export type GameConfig = {
     managerAddress: Address,
@@ -32,6 +34,22 @@ export class Game implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell().endCell(),
+        });
+    }
+
+    async sendRequestShipAddress(provider: ContractProvider, via: Sender, value: bigint, userAddress: Address) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeRequestShipAddress({ userAddress }),
+        });
+    }
+
+    async sendRequestCoordinateCellAddress(provider: ContractProvider, via: Sender, value: bigint, xy: XY) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeRequestCoordinateCellAddress({ xy }),
         });
     }
 }
