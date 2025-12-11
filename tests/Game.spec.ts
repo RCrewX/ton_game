@@ -1,13 +1,13 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Cell, fromNano, toNano } from '@ton/core';
-import { Game } from '../wrappers/Game';
+import { Game } from '../wrappers/game/Game';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
-import { Ship } from '../wrappers/Ship';
+import { Ship } from '../wrappers/game/Ship';
 import { ContractSystem, initContractSystem } from './test_utils';
-import { MoveMode } from '../wrappers/structs';
-import { Opcodes } from '../wrappers/types';
-import { CoordinateCell } from '../wrappers/CoordinateCell';
+import { MoveMode } from '../wrappers/game/structs';
+import { Opcodes } from '../wrappers/game/types';
+import { CoordinateCell } from '../wrappers/game/CoordinateCell';
 
 describe('Game', () => {
     let SC_System: ContractSystem;
