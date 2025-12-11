@@ -1,5 +1,6 @@
 // Constants
 const BASIC_STORAGE_TAX = ton("0.01");
+const MINT_TON_AMOUNT: coins = ton("0.1");
 
 // Errors
 const ERR_UNAUTHORIZED = 901;
@@ -30,6 +31,31 @@ struct (0x1a2b3c4d) SetJettonMinterAddress {
 
 struct (0x2a3b4c5d) SetGames {
     games: cell
+}
+
+// Forwarded from Game (proof already verified by Game)
+struct (0x6b7c8d9e) ForwardMintRequest {
+    receiver: address
+    amount: coins
+}
+
+// Jetton message structures (from jetton project, redefined here for forwarding)
+type ForwardPayloadRemainder = RemainingBitsAndRefs
+
+struct (0x178d4519) InternalTransferStep {
+    queryId: uint64
+    jettonAmount: coins
+    transferInitiator: address? // is null when minting
+    sendExcessesTo: address?
+    forwardTonAmount: coins
+    forwardPayload: ForwardPayloadRemainder
+}
+
+struct (0x00000015) MintNewJettons {
+    queryId: uint64
+    mintRecipient: address
+    tonAmount: coins
+    internalTransferMsg: Cell<InternalTransferStep>
 }
 
 type AnyMessage = ReturnExcessesBack | LiteralyAnything

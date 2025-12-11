@@ -58,3 +58,9 @@ struct (0x7a8b9cad) RequestCoordinateCellAddress {
 struct (0x8a9bacbd) ResponseAddress {
     requestedAddress: address 
 }
+
+// To GameManager (proof already verified by Game)
+struct (0x6b7c8d9e) ForwardMintRequest {
+    receiver: address
+    amount: coins
+}

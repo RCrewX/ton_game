@@ -61,6 +61,18 @@ fun onInternalMessage(in: InMessage) {
             } else {
                 assert (false) throw 5;
             }
+            // Forward mint request to game manager (proof already verified, so send simplified message)
+            reserveValue(in.valueCoins);
+            val forwardMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: storage.managerAddress,
+                value: in.valueCoins,
+                body: ForwardMintRequest {
+                    receiver: msg.receiver,
+                    amount: msg.amount,
+                }
+            });
+            forwardMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}
