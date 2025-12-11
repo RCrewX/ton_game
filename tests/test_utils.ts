@@ -22,9 +22,9 @@ export async function initContractSystem(): Promise<ContractSystem> {
     const blockchain = await Blockchain.create();
     const ownerAccount = await blockchain.treasury("owner");
 
-    let gameCode = await compile('game/Game');
-    let shipCode = await compile('game/Ship');
-    let coordinateCellCode = await compile('game/CoordinateCell');
+    let gameCode = await compile('Game');
+    let shipCode = await compile('Ship');
+    let coordinateCellCode = await compile('CoordinateCell');
 
     let game = blockchain.openContract(Game.createFromConfig({ 
         managerAddress: ownerAccount.address,

@@ -14,10 +14,9 @@ fun onInternalMessage(in: InMessage) {
     match (msg) {
         SetJettonMinterAddress => {
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
-            if (msg.jettonMinterAddress != storage.jettonMinterAddress) {
-                storage.jettonMinterAddress = msg.jettonMinterAddress;
-                storage.save();
-            }
+
+            storage.jettonMinterAddress = msg.jettonMinterAddress;
+            storage.save();
             reserveValue(in.valueCoins);
             val responseMsg = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -31,9 +30,7 @@ fun onInternalMessage(in: InMessage) {
         }
         SetGames => {
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
-            if (msg.games != storage.games) {
-                storage.games = msg.games;
-            }
+            storage.games = msg.games;
             storage.save();
             reserveValue(in.valueCoins);
             val responseMsg = createMessage({
@@ -45,6 +42,24 @@ fun onInternalMessage(in: InMessage) {
                 }
             });
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
+        }
+        ReturnExcessesBack => {
+            reserveValue(in.valueCoins);
+            val responseMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: in.senderAddress,
+                value: 0,
+                body: msg
+            });
+        }
+        LiteralyAnything => {
+            reserveValue(in.valueCoins);
+            val responseMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: in.senderAddress,
+                value: 0,
+                body: msg
+            });
         }
         else => {
             assert (in.body.isEmpty()) throw 0xFFFF

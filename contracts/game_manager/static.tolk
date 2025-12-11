@@ -53,6 +53,7 @@ fun reserveValue(msgValue: coins, delta: coins = 0) {
 
 fun calcDeployedGameManager(
     ownerAddress: address,
+    gameManagerCode: cell,
 ): AutoDeployAddress {
     val initStorage: GameManagerStorage = {
         ownerAddress,
@@ -69,7 +70,8 @@ fun calcDeployedGameManager(
 
 fun calcAddressOfGameManager(
     ownerAddress: address,
+    gameManagerCode: cell,
 ): address {
-    val gameManagerDeployed = calcDeployedGameManager(ownerAddress);
+    val gameManagerDeployed = calcDeployedGameManager(ownerAddress, gameManagerCode);
     return gameManagerDeployed.calculateAddress();
 }
