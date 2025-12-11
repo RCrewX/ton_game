@@ -47,7 +47,7 @@ fun onInternalMessage(in: InMessage) {
         ForwardMintRequest => {
             assert (storage.jettonMinterAddress != null) throw 5;
             // Convert ForwardMintRequest to MintNewJettons format
-            val emptyPayload: RemainingBitsAndRefs = beginCell().endCell();
+            val emptyPayload: RemainingBitsAndRefs = beginCell().storeUint(1, 128).toSlice();
             val internalTransferStep = InternalTransferStep {
                 queryId: 0,
                 jettonAmount: msg.amount,
@@ -66,10 +66,10 @@ fun onInternalMessage(in: InMessage) {
             val forwardMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: storage.jettonMinterAddress!,
-                value: in.valueCoins,
+                value: 0,
                 body: mintNewJettons
             });
-            forwardMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
+            forwardMsg.send(128);
         }
         ReturnExcessesBack => {
             reserveValue(in.valueCoins);

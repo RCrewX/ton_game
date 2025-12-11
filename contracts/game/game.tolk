@@ -56,13 +56,13 @@ fun onInternalMessage(in: InMessage) {
             val forwardMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: storage.managerAddress,
-                value: in.valueCoins,
+                value: 0,
                 body: ForwardMintRequest {
                     receiver: msg.receiver,
                     amount: msg.amount,
                 }
             });
-            forwardMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
+            forwardMsg.send(128);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}

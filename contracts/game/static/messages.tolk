@@ -3,6 +3,19 @@ import "constants"
 
 type AnyMessage = ReturnExcessesBack | LiteralyAnything
 
+// Jetton message structures (redefined to avoid cross-project dependencies)
+type ForwardPayloadRemainder = RemainingBitsAndRefs
+
+struct (0x0f8a7ea5) AskToTransfer {
+    queryId: uint64
+    jettonAmount: coins
+    transferRecipient: address
+    sendExcessesTo: address?
+    customPayload: cell?
+    forwardTonAmount: coins
+    forwardPayload: ForwardPayloadRemainder
+}
+
 struct (0xd53276db) ReturnExcessesBack {
     queryId: uint64
 }
@@ -25,6 +38,20 @@ struct (0x2a3b4c5d) Move {
     user: address
     mode: MoveMode
     moveData: Cell<MoveData>
+}
+
+struct (0x9b0c1d2e) WithdrawTON {
+    queryId: uint64
+    recipient: address
+    amount: coins
+}
+
+struct (0x0c1d2e3f) WithdrawJetton {
+    queryId: uint64
+    jettonWalletAddress: address
+    recipient: address
+    amount: coins
+    forwardTonAmount: coins
 }
 
 

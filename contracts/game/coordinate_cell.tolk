@@ -9,6 +9,8 @@ import "@stdlib/gas-payments"
 type AllowedMessagesToCoordinateCell = 
     | Move 
     | MoveShipToCC 
+    | WithdrawTON
+    | WithdrawJetton
     | AnyMessage
 
 fun onBouncedMessage(in: InMessageBounced) {
@@ -111,6 +113,55 @@ fun onInternalMessage(in: InMessage) {
                 }
             });
             moveEndMsg.send(128);
+        }
+        WithdrawTON => {
+            var storage = lazy CoordinateCellStorage.load();
+            assert (storage.ccStorage != null) throw ERR_UNAUTHORIZED;
+            var ccStorage: CCStorage = lazy storage.ccStorage!.load();
+            assert (ccStorage.firstExplorer != null) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_UNAUTHORIZED;
+            
+            val currentBalance = contract.getOriginalBalance();
+            val minRequiredBalance = MINT_TON_AMOUNT; // 0.1 TON minimum
+            assert (currentBalance - in.valueCoins >= minRequiredBalance + msg.amount) throw ERR_NOT_ENOUGH_BALANCE;
+            
+            val withdrawMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: msg.recipient,
+                value: msg.amount,
+                body: ReturnExcessesBack {
+                    queryId: msg.queryId
+                }
+            });
+            withdrawMsg.send(0);
+        }
+        WithdrawJetton => {
+            var storage = lazy CoordinateCellStorage.load();
+            assert (storage.ccStorage != null) throw ERR_UNAUTHORIZED;
+            var ccStorage: CCStorage = lazy storage.ccStorage!.load();
+            assert (ccStorage.firstExplorer != null) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_UNAUTHORIZED;
+            
+            // Send AskToTransfer to CoordinateCell's jetton wallet
+            // The wallet will transfer jettons to the recipient
+            val coordinateCellAddress = contract.getAddress();
+            val forwardPayload = beginCell().storeUint(1, 128).toSlice();
+            reserveValue(in.valueCoins);
+            val askToTransferMsg = createMessage({
+                bounce: BounceMode.Only256BitsOfBody,
+                dest: msg.jettonWalletAddress,
+                value: msg.forwardTonAmount + ton("0.05"), // forward amount + gas for wallet operations
+                body: AskToTransfer {
+                    queryId: msg.queryId,
+                    jettonAmount: msg.amount,
+                    transferRecipient: msg.recipient,
+                    sendExcessesTo: in.senderAddress,
+                    customPayload: null,
+                    forwardTonAmount: msg.forwardTonAmount,
+                    forwardPayload: forwardPayload
+                }
+            });
+            askToTransferMsg.send(128);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}

@@ -2,12 +2,6 @@
 import "structs"
 import "constants"
 
-struct GameManagerStorage {
-    ownerAddress: address // multisig will be perfect
-    jettonMinterAddress: address
-    games: cell // Addresses of games, maybe stored differently
-}
-
 struct GameV1Storage {
     managerAddress: address
     shipCode: cell // library cell will be perfect
@@ -34,15 +28,6 @@ struct ShipStorage {
     max_hp: uint256
     gameFields: Cell<GameFields>?
     coordinateCellCode: cell
-}
-
-
-fun GameManagerStorage.load() {
-    return GameManagerStorage.fromCell(contract.getData())
-}
-
-fun GameManagerStorage.save(self) {
-    contract.setData(self.toCell())
 }
 
 

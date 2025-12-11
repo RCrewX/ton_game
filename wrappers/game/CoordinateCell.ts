@@ -1,6 +1,6 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
 import { XY, MoveMode, MoveData, storeMoveData } from './structs';
-import { encodeMove, encodeMoveShipToCC } from './types';
+import { encodeMove, encodeMoveShipToCC, encodeWithdrawTON, encodeWithdrawJetton } from './types';
 
 export type CoordinateCellConfig = {
     gameAddress: Address,
@@ -54,5 +54,43 @@ export class CoordinateCell implements Contract {
     async getTonBalance(provider: ContractProvider): Promise<bigint> {
         const result = await provider.get('tonBalance', []);
         return result.stack.readBigNumber();
+    }
+
+    async sendWithdrawTON(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        recipient: Address,
+        amount: bigint,
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeWithdrawTON({ queryId, recipient, amount }),
+        });
+    }
+
+    async sendWithdrawJetton(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        jettonWalletAddress: Address,
+        recipient: Address,
+        amount: bigint,
+        forwardTonAmount: bigint = toNano('0.1'),
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeWithdrawJetton({
+                queryId,
+                jettonWalletAddress,
+                recipient,
+                amount,
+                forwardTonAmount,
+            }),
+        });
     }
 }

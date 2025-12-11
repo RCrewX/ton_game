@@ -38,6 +38,8 @@ export const Opcodes = {
 
     OP_MOVE_SHIP_TO_CC: 0x1a2b3c4d,
     OP_MOVE: 0x2a3b4c5d,
+    OP_WITHDRAW_TON: 0x9b0c1d2e,
+    OP_WITHDRAW_JETTON: 0x0c1d2e3f,
 
     OP_MOVE_END: 0x3a4b5c6d,
     OP_REQUEST_TO_MOVE: 0x4a5b6c7d,
@@ -111,6 +113,20 @@ export type Move = {
     moveData: Cell;
 };
 
+export type WithdrawTON = {
+    queryId: bigint; // uint64
+    recipient: Address;
+    amount: bigint; // coins
+};
+
+export type WithdrawJetton = {
+    queryId: bigint; // uint64
+    jettonWalletAddress: Address;
+    recipient: Address;
+    amount: bigint; // coins
+    forwardTonAmount: bigint; // coins
+};
+
 // To Ship
 
 export type MoveEnd = {
@@ -148,6 +164,8 @@ export type AnyMessage =
     | ({ $$type: 'LiteralyAnything' } & LiteralyAnything)
     | ({ $$type: 'MoveShipToCC' } & MoveShipToCC)
     | ({ $$type: 'Move' } & Move)
+    | ({ $$type: 'WithdrawTON' } & WithdrawTON)
+    | ({ $$type: 'WithdrawJetton' } & WithdrawJetton)
     | ({ $$type: 'MoveEnd' } & MoveEnd)
     | ({ $$type: 'RequestToMove' } & RequestToMove)
     | ({ $$type: 'RequestMint' } & RequestMint)
@@ -195,6 +213,26 @@ export function encodeMove(msg: Move): Cell {
     storeMoveMode(b, msg.mode);
     // Cell<MoveData> — считаем, что это ref на сериализованный MoveData
     b.storeRef(msg.moveData);
+    return b.endCell();
+}
+
+export function encodeWithdrawTON(msg: WithdrawTON): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_WITHDRAW_TON, 32);
+    b.storeUint(msg.queryId, 64);
+    b.storeAddress(msg.recipient);
+    b.storeCoins(msg.amount);
+    return b.endCell();
+}
+
+export function encodeWithdrawJetton(msg: WithdrawJetton): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_WITHDRAW_JETTON, 32);
+    b.storeUint(msg.queryId, 64);
+    b.storeAddress(msg.jettonWalletAddress);
+    b.storeAddress(msg.recipient);
+    b.storeCoins(msg.amount);
+    b.storeCoins(msg.forwardTonAmount);
     return b.endCell();
 }
 
@@ -261,6 +299,10 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeMoveShipToCC(msg);
         case 'Move':
             return encodeMove(msg);
+        case 'WithdrawTON':
+            return encodeWithdrawTON(msg);
+        case 'WithdrawJetton':
+            return encodeWithdrawJetton(msg);
         case 'MoveEnd':
             return encodeMoveEnd(msg);
         case 'RequestToMove':
