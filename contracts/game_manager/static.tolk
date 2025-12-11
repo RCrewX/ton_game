@@ -88,7 +88,7 @@ fun calcDeployedGameManager(
     };
     return {
         stateInit: {
-            code: gameManagerCode, // TODO: change to library cell
+            code: gameManagerCode,
             data: initStorage.toCell()
         }
     }

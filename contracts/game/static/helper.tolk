@@ -14,11 +14,6 @@ fun calcDeployedCoordinateCell(
     coordinateCellCode: cell,
     shipCode: cell,
     ): AutoDeployAddress {
-    // val gameFields: GameFields = {
-    //     ,
-    //     hp: 0,
-    //     jettonAmount: 0,
-    // };
     val initStorage: CoordinateCellStorage = {
         gameAddress,
         xy: XY {x: coordinate_x, y: coordinate_y},
@@ -92,8 +87,6 @@ fun coordinate_plus_mode(x: int256, mode: MoveMode):int {
     match (mode) {
         MoveMode.LEFT => {return x-1}
         MoveMode.RIGHT => {return x+1}
-        // MoveMode.UP => {return x}
-        // MoveMode.EXIT => {return x}
         else => { return x },
     }
 }

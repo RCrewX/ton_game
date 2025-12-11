@@ -13,8 +13,6 @@ fun ProofData.toSlice(self):slice {
 struct Proof {
     mode: uint8 // if 0 then Cell and coordinates in check, if 1 then ship and userAddress is in check
     data: ProofData
-    // the_adress: address
-    // data: XY
 }
 
 struct XY {

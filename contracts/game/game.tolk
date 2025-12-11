@@ -10,16 +10,6 @@ type AllowedMessagesToGame =
     | RequestCoordinateCellAddress 
     | AnyMessage
 
-// get fun get_ship_address(userAddress: address): address {
-//     var storage: GameV1Storage = lazy GameV1Storage.load();
-//     return calcAddressOfShip(userAddress, contract.getAddress(), storage.shipCode, storage.coordinateCellCode);
-// }
-
-// get fun get_coordinate_cell_address(xy: XY): address {
-//     var storage: GameV1Storage = lazy GameV1Storage.load();
-//     return calcAddressOfCoordinateCell(contract.getAddress(), xy.x, xy.y,  storage.coordinateCellCode, storage.shipCode);
-// }
-
 fun onInternalMessage(in: InMessage) {
     val msg = lazy AllowedMessagesToGame.fromSlice(in.body);
     var storage = lazy GameV1Storage.load();

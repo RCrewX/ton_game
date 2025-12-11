@@ -30,10 +30,6 @@ describe('Game', () => {
             shipCode: SC_System.shipCode,
         }, SC_System.coordinateCellCode));
         
-        // console.log('ABRA');
-        // console.log(cc_old.address);
-        // console.log(cc_new.address);
-        
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -58,12 +54,9 @@ describe('Game', () => {
             success: true,
             op: Opcodes.OP_MOVE_END,
         });
-        console.log(await SC_System.ownerShip.getCurrentGameData());
     });
 
     it('Get Ship, pop-up ship, move UP x5', async () => {
-        console.log("BALANCE");
-        console.log(fromNano(await SC_System.ownerAccount.getBalance()));
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.UP);
 
         expect(SC_System.messageResult.transactions).toHaveTransaction({
@@ -79,7 +72,6 @@ describe('Game', () => {
         });
 
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.UP);
-        console.log(fromNano(await SC_System.ownerAccount.getBalance()));
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -93,7 +85,6 @@ describe('Game', () => {
         });
 
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.UP);
-        console.log(fromNano(await SC_System.ownerAccount.getBalance()));
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -107,7 +98,6 @@ describe('Game', () => {
         });
 
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.UP);
-        console.log(fromNano(await SC_System.ownerAccount.getBalance()));
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -121,7 +111,6 @@ describe('Game', () => {
         });
 
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.UP);
-        console.log(fromNano(await SC_System.ownerAccount.getBalance()));
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -135,7 +124,6 @@ describe('Game', () => {
         });
 
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.EXIT);
-        console.log(fromNano(await SC_System.ownerAccount.getBalance()));
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -147,8 +135,6 @@ describe('Game', () => {
             success: true,
             op: Opcodes.OP_MOVE_END,
         });
-        console.log(fromNano(await SC_System.ownerAccount.getBalance()));   
-        console.log(await SC_System.ownerShip.getCurrentGameData());
     });
 
     it('Test move LEFT - verify coordinates and message path', async () => {

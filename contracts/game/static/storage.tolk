@@ -2,7 +2,6 @@
 import "structs"
 import "constants"
 
-// TODO move to another project
 struct GameManagerStorage {
     ownerAddress: address // multisig will be perfect
     jettonMinterAddress: address
