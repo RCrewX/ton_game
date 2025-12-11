@@ -83,22 +83,6 @@ fun calcAddressOfShip(
 }
 
 fun reserveValue(msgValue: coins, delta: coins = 0) {
-    // debug.printString("reserveValue");
-    // debug.printString("contract.getOriginalBalance()");
-    // debug.print<coins>(contract.getOriginalBalance());
-    // debug.printString("msgValue");
-    // debug.print<coins>(msgValue);
-
-    // debug.printString("BASIC_STORAGE_TAX");
-    // debug.print<coins>(BASIC_STORAGE_TAX);
-
-    // debug.printString("delta");
-    // debug.print<coins>(delta);
-
-    // debug.printString("base + delta");
-    // debug.print<coins>((contract.getOriginalBalance() - msgValue) + BASIC_STORAGE_TAX + delta);
-
-
     val base = (contract.getOriginalBalance() - msgValue) + BASIC_STORAGE_TAX;
     reserveToncoinsOnBalance(base + delta, RESERVE_MODE_EXACT_AMOUNT);
 }

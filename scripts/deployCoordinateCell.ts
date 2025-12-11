@@ -1,5 +1,5 @@
 import { toNano } from '@ton/core';
-import { CoordinateCell } from '../wrappers/CoordinateCell';
+import { CoordinateCell } from '../wrappers/game/CoordinateCell';
 import { compile, NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {

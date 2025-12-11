@@ -1,6 +1,6 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Cell, toNano } from '@ton/core';
-import { Ship } from '../wrappers/Ship';
+import { Ship } from '../wrappers/game/Ship';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 

@@ -1,8 +1,8 @@
 import { compile } from "@ton/blueprint";
 import { Cell, toNano } from "@ton/core";
 import { Blockchain, SandboxContract, TreasuryContract } from "@ton/sandbox";
-import { Game } from "../wrappers/Game";
-import { Ship } from "../wrappers/Ship";
+import { Game } from "../wrappers/game/Game";
+import { Ship } from "../wrappers/game/Ship";
 
 export type ContractSystem = {
     blockchain: Blockchain;
@@ -22,9 +22,9 @@ export async function initContractSystem(): Promise<ContractSystem> {
     const blockchain = await Blockchain.create();
     const ownerAccount = await blockchain.treasury("owner");
 
-    let gameCode = await compile('Game');
-    let shipCode = await compile('Ship');
-    let coordinateCellCode = await compile('CoordinateCell');
+    let gameCode = await compile('game/Game');
+    let shipCode = await compile('game/Ship');
+    let coordinateCellCode = await compile('game/CoordinateCell');
 
     let game = blockchain.openContract(Game.createFromConfig({ 
         managerAddress: ownerAccount.address,

@@ -1,5 +1,5 @@
 import { toNano } from '@ton/core';
-import { Game } from '../wrappers/Game';
+import { Game } from '../wrappers/game/Game';
 import { compile, NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
