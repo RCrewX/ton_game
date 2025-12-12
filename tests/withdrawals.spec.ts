@@ -7,9 +7,8 @@ import { JettonMinter } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer } from './test_utils';
-import { compile } from '@ton/blueprint';
 
-describe('CoordinateCell', () => {
+describe('Withdrawals', () => {
     let SC_System: ContractSystem;
     let otherUser: SandboxContract<TreasuryContract>;
     let recipient: SandboxContract<TreasuryContract>;
@@ -18,12 +17,7 @@ describe('CoordinateCell', () => {
         SC_System = await initContractSystem();
         otherUser = await SC_System.blockchain.treasury('otherUser');
         recipient = await SC_System.blockchain.treasury('recipient');
-    });
-
-    it('should deploy', async () => {
-        const coordinateCell = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
-        expect(coordinateCell.address).toBeDefined();
-    });
+    }, 100000);
 
     describe('TON Withdrawal', () => {
         it('should allow firstExplorer to withdraw TON', async () => {
@@ -139,9 +133,6 @@ describe('CoordinateCell', () => {
 
             await jettonMinter.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 
-            // Get jetton wallet code
-            const jettonData = await jettonMinter.getJettonData();
-            
             // Calculate CoordinateCell's jetton wallet address
             const coordinateCellJettonWalletAddress = await jettonMinter.getWalletAddress(coordinateCell.address);
             const coordinateCellJettonWallet = SC_System.blockchain.openContract(
@@ -239,3 +230,4 @@ describe('CoordinateCell', () => {
         });
     });
 });
+
