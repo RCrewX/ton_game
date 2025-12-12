@@ -48,6 +48,7 @@ export const Opcodes = {
     OP_REQUEST_SHIP_ADDRESS: 0x6a7b8c9d,
     OP_REQUEST_COORDINATE_CELL_ADDRESS: 0x7a8b9cad,
     OP_RESPONSE_ADDRESS: 0x8a9bacbd,
+    OP_FORWARD_MINT_REQUEST: 0x6b7c8d9e,
 } as const;
 
 export function loadGameFieldsOpt(stack: TupleReader): GameFields | null {

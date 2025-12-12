@@ -1,5 +1,5 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
-import { encodeSetJettonMinterAddress, encodeSetGames } from './types';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
+import { encodeSetJettonMinterAddress, encodeSetGames, encodeRedirectMessage } from './types';
 
 export type GameManagerConfig = {
     ownerAddress: Address;
@@ -8,7 +8,7 @@ export type GameManagerConfig = {
 export function gameManagerConfigToCell(config: GameManagerConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
-        .storeMaybeRef(null) // jettonMinterAddress: address?
+        .storeAddress(null) // jettonMinterAddress: address?
         .storeMaybeRef(null) // games: cell?
         .endCell();
 }
@@ -47,6 +47,22 @@ export class GameManager implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: encodeSetGames({ games }),
+        });
+    }
+
+    async sendRedirectMessage(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        destination: Address,
+        messageBody: Cell,
+        forwardTonAmount: bigint = toNano('0.1'),
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeRedirectMessage({ queryId, destination, messageBody, forwardTonAmount }),
         });
     }
 

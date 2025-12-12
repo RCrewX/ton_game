@@ -4,15 +4,18 @@ import { Blockchain, SandboxContract, TreasuryContract } from "@ton/sandbox";
 import { Game } from "../wrappers/game/Game";
 import { Ship } from "../wrappers/game/Ship";
 import { CoordinateCell } from "../wrappers/game/CoordinateCell";
+import { GameManager } from "../wrappers/game_manager/GameManager";
 import { MoveMode } from "../wrappers/game/structs";
 
 export type ContractSystem = {
     blockchain: Blockchain;
     ownerAccount: SandboxContract<TreasuryContract>;
 
+    gameManager: SandboxContract<GameManager>;
     game: SandboxContract<Game>;
     ownerShip: SandboxContract<Ship>; //hehe, ownership
 
+    gameManagerCode: Cell;
     gameCode: Cell;
     shipCode: Cell;
     coordinateCellCode: Cell;
@@ -26,25 +29,35 @@ export async function initContractSystem(): Promise<ContractSystem> {
     const blockchain = await Blockchain.create();
     const ownerAccount = await blockchain.treasury("owner");
 
+    let gameManagerCode = await compile('GameManager');
     let gameCode = await compile('Game');
     let shipCode = await compile('Ship');
     let coordinateCellCode = await compile('CoordinateCell');
     let jettonWalletCode = await compile('JettonWallet');
     let jettonMinterCode = await compile('JettonMinter');
 
+    // Deploy GameManager first
+    let gameManager = blockchain.openContract(GameManager.createFromConfig({
+        ownerAddress: ownerAccount.address,
+    }, gameManagerCode));
+
+    let messageResult = await gameManager.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
+
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: gameManager.address,
+        deploy: true,
+        success: true,
+    });
+
+    // Deploy Game with GameManager as manager
     let game = blockchain.openContract(Game.createFromConfig({ 
-        managerAddress: ownerAccount.address,
+        managerAddress: gameManager.address,
         shipCode,
         coordinateCellCode,
     }, gameCode));
 
-    let ownerShip = blockchain.openContract(Ship.createFromConfig({
-        userAddress: ownerAccount.address,
-        gameAddress: game.address,
-        coordinateCellCode,
-    }, shipCode))
-    
-    let messageResult = await game.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
+    messageResult = await game.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
 
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
@@ -53,6 +66,13 @@ export async function initContractSystem(): Promise<ContractSystem> {
         success: true,
     });
 
+    // Deploy Ship
+    let ownerShip = blockchain.openContract(Ship.createFromConfig({
+        userAddress: ownerAccount.address,
+        gameAddress: game.address,
+        coordinateCellCode,
+    }, shipCode))
+    
     messageResult = await ownerShip.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
 
     expect(messageResult.transactions).toHaveTransaction({
@@ -65,8 +85,10 @@ export async function initContractSystem(): Promise<ContractSystem> {
     return {
         blockchain,
         ownerAccount,
+        gameManager,
         game,
         ownerShip,
+        gameManagerCode,
         gameCode,
         shipCode,
         coordinateCellCode,

@@ -3,6 +3,7 @@ import "static"
 type AllowedMessagesToGameManager = 
     | SetJettonMinterAddress
     | SetGames 
+    | RedirectMessage
     | ForwardMintRequest
     | AnyMessage
 
@@ -43,6 +44,17 @@ fun onInternalMessage(in: InMessage) {
                 }
             });
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
+        }
+        RedirectMessage => {
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            reserveValue(in.valueCoins);
+            val redirectMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: msg.destination,
+                value: msg.forwardTonAmount,
+                body: msg.messageBody
+            });
+            redirectMsg.send(128);
         }
         ForwardMintRequest => {
             assert (storage.jettonMinterAddress != null) throw 5;

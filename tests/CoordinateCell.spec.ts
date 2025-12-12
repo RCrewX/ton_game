@@ -11,15 +11,11 @@ import { compile } from '@ton/blueprint';
 
 describe('CoordinateCell', () => {
     let SC_System: ContractSystem;
-    let jettonWalletCode: Cell;
-    let jettonMinterCode: Cell;
     let otherUser: SandboxContract<TreasuryContract>;
     let recipient: SandboxContract<TreasuryContract>;
 
-
     beforeEach(async () => {
         SC_System = await initContractSystem();
-
         otherUser = await SC_System.blockchain.treasury('otherUser');
         recipient = await SC_System.blockchain.treasury('recipient');
     });
@@ -138,8 +134,8 @@ describe('CoordinateCell', () => {
             const jettonMinter = SC_System.blockchain.openContract(JettonMinter.createFromConfig({
                 admin: SC_System.ownerAccount.address,
                 content: jettonContent,
-                wallet_code: SC_System.jettonWalletCode!,
-            }, SC_System.jettonMinterCode!));
+                wallet_code: SC_System.jettonWalletCode,
+            }, SC_System.jettonMinterCode));
 
             await jettonMinter.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 
@@ -207,8 +203,8 @@ describe('CoordinateCell', () => {
             const jettonMinter = SC_System.blockchain.openContract(JettonMinter.createFromConfig({
                 admin: SC_System.ownerAccount.address,
                 content: jettonContent,
-                wallet_code: SC_System.jettonWalletCode!,
-            }, SC_System.jettonMinterCode!));
+                wallet_code: SC_System.jettonWalletCode,
+            }, SC_System.jettonMinterCode));
 
             await jettonMinter.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 

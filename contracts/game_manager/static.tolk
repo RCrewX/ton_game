@@ -33,6 +33,13 @@ struct (0x2a3b4c5d) SetGames {
     games: cell
 }
 
+struct (0x3b4c5d6e) RedirectMessage {
+    queryId: uint64
+    destination: address
+    messageBody: cell
+    forwardTonAmount: coins
+}
+
 // Forwarded from Game (proof already verified by Game)
 struct (0x6b7c8d9e) ForwardMintRequest {
     receiver: address
