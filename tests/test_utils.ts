@@ -8,6 +8,7 @@ import { GameManager } from "../wrappers/game_manager/GameManager";
 import { MoveMode } from "../wrappers/game/structs";
 import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
 import { JettonWallet } from "../wrappers/jetton/JettonWallet";
+import { Opcodes } from "../wrappers/game_manager/types";
 
 export type ContractSystem = {
     blockchain: Blockchain;
@@ -97,7 +98,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
     });
 
     // Set jetton minter address in GameManager
-    messageResult = await gameManager.sendSetJettonMinterAddress(ownerAccount.getSender(), toNano('0.1'), jettonMinter.address);
+    messageResult = await gameManager.sendSetJettonMinterAddress(ownerAccount.getSender(), toNano('0.1'), jettonMinter.address, jettonWalletCode);
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
         to: gameManager.address,
@@ -125,7 +126,34 @@ export async function initContractSystem(): Promise<ContractSystem> {
     let gameAddress = games?.beginParse().loadAddress();
     expect(gameAddress).toEqualAddress(game.address);
 
+    // Mint jettons thru redirecting mint message to game manager to user first (so they can transfer)
+    const mintAmount = toNano('1000');
+    const redirectMessage = JettonMinter.mintMessage(jettonMinter.address, ownerAccount.address, mintAmount, toNano('0.1'), toNano('0.2'));
+    messageResult = await gameManager.sendRedirectMessage(
+        ownerAccount.getSender(),
+        toNano('0.1'),
+        jettonMinter.address,
+        redirectMessage,
+        toNano('0.1')
+    );
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: gameManager.address,
+        success: true,
+    });
+    expect(messageResult.transactions).toHaveTransaction({
+        from: gameManager.address,
+        to: jettonMinter.address,
+        success: true,
+    });
+    expect(messageResult.transactions).toHaveTransaction({
+        from: jettonMinter.address,
+        to: ownerJettonWallet.address,
+        success: true,
+    });
 
+    const userBalance = await ownerJettonWallet.getJettonBalance();
+    expect(userBalance).toBe(mintAmount);
     // Deploy Ship
     let ownerShip = blockchain.openContract(Ship.createFromConfig({
         userAddress: ownerAccount.address,

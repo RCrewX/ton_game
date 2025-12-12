@@ -7,11 +7,19 @@ export const Opcodes = {
     OP_REDIRECT_MESSAGE: 0x3b4c5d6e,
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
     OP_LITERALY_ANYTHING: 0x0a1b2c3d,
+    OP_TRANSFER_NOTIFICATION_FOR_RECIPIENT: 0x7362d09c,
+    OP_UPGRADE_SHIP_REQUEST: 0x8b9cad0e,
 } as const;
 
 // Message types
 export type SetJettonMinterAddress = {
     jettonMinterAddress: Address;
+    jettonWalletCode: Cell;
+};
+
+export type UpgradeShipRequest = {
+    shipAddress: Address;
+    hpIncrease: bigint;
 };
 
 export type SetGames = {
@@ -30,6 +38,7 @@ export function encodeSetJettonMinterAddress(msg: SetJettonMinterAddress): Cell 
     return beginCell()
         .storeUint(Opcodes.OP_SET_JETTON_MINTER_ADDRESS, 32)
         .storeAddress(msg.jettonMinterAddress)
+        .storeRef(msg.jettonWalletCode)
         .endCell();
 }
 

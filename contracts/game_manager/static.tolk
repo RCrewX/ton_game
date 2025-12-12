@@ -10,6 +10,7 @@ const ERR_UNAUTHORIZED = 901;
 struct GameManagerStorage {
     ownerAddress: address // multisig will be perfect
     jettonMinterAddress: address? // jetton minter address
+    jettonWalletCode: cell? // jetton wallet code for address calculation
     games: cell? // Addresses of games, maybe stored differently
 }
 
@@ -27,6 +28,7 @@ fun GameManagerStorage.save(self) {
 
 struct (0x1a2b3c4d) SetJettonMinterAddress {
     jettonMinterAddress: address
+    jettonWalletCode: cell
 }
 
 struct (0x2a3b4c5d) SetGames {
@@ -44,6 +46,20 @@ struct (0x3b4c5d6e) RedirectMessage {
 struct (0x6b7c8d9e) ForwardMintRequest {
     receiver: address
     amount: coins
+}
+
+// Jetton transfer notification (from jetton wallet to GameManager)
+struct (0x7362d09c) TransferNotificationForRecipient {
+    queryId: uint64
+    jettonAmount: coins
+    transferInitiator: address?
+    forwardPayload: ForwardPayloadRemainder
+}
+
+// From GameManager to Game
+struct (0x8b9cad0e) UpgradeShipRequest {
+    shipAddress: address
+    hpIncrease: uint256
 }
 
 // Jetton message structures (from jetton project, redefined here for forwarding)
@@ -91,6 +107,7 @@ fun calcDeployedGameManager(
     val initStorage: GameManagerStorage = {
         ownerAddress,
         jettonMinterAddress: null,
+        jettonWalletCode: null,
         games: null,
     };
     return {
@@ -107,4 +124,25 @@ fun calcAddressOfGameManager(
 ): address {
     val gameManagerDeployed = calcDeployedGameManager(ownerAddress, gameManagerCode);
     return gameManagerDeployed.calculateAddress();
+}
+
+// Jetton wallet address calculation (redefined to avoid cross-project dependencies)
+fun calcDeployedJettonWallet(ownerAddress: address, minterAddress: address, jettonWalletCode: cell): AutoDeployAddress {
+    val emptyWalletStorage = beginCell()
+        .storeCoins(0) // jettonBalance
+        .storeAddress(ownerAddress) // ownerAddress
+        .storeAddress(minterAddress) // minterAddress
+        .endCell();
+
+    return {
+        stateInit: {
+            code: jettonWalletCode,
+            data: emptyWalletStorage
+        }
+    }
+}
+
+fun calcAddressOfJettonWallet(ownerAddress: address, minterAddress: address, jettonWalletCode: cell): address {
+    val jwDeployed = calcDeployedJettonWallet(ownerAddress, minterAddress, jettonWalletCode);
+    return jwDeployed.calculateAddress()
 }

@@ -47,6 +47,8 @@ export const Opcodes = {
     OP_REQUEST_COORDINATE_CELL_ADDRESS: 0x7a8b9cad,
     OP_RESPONSE_ADDRESS: 0x8a9bacbd,
     OP_FORWARD_MINT_REQUEST: 0x6b7c8d9e,
+    OP_UPGRADE_SHIP_REQUEST: 0x8b9cad0e,
+    OP_SHIP_UPGRADE: 0x9a8b9cad,
 } as const;
 
 export function loadGameFieldsOpt(stack: TupleReader): GameFields | null {
@@ -157,6 +159,15 @@ export type ResponseAddress = {
     requestedAddress: Address;
 };
 
+export type UpgradeShipRequest = {
+    shipAddress: Address;
+    hpIncrease: bigint; // uint256
+};
+
+export type ShipUpgrade = {
+    hpIncrease: bigint; // uint256
+};
+
 // Удобный union, если захочешь матчить по $$type
 export type AnyMessage =
     | ({ $$type: 'ReturnExcessesBack' } & ReturnExcessesBack)
@@ -170,7 +181,9 @@ export type AnyMessage =
     | ({ $$type: 'RequestMint' } & RequestMint)
     | ({ $$type: 'RequestShipAddress' } & RequestShipAddress)
     | ({ $$type: 'RequestCoordinateCellAddress' } & RequestCoordinateCellAddress)
-    | ({ $$type: 'ResponseAddress' } & ResponseAddress);
+    | ({ $$type: 'ResponseAddress' } & ResponseAddress)
+    | ({ $$type: 'UpgradeShipRequest' } & UpgradeShipRequest)
+    | ({ $$type: 'ShipUpgrade' } & ShipUpgrade);
 
 // -------------------------
 // encode-функции для body сообщений
@@ -284,6 +297,21 @@ export function encodeResponseAddress(msg: ResponseAddress): Cell {
     return b.endCell();
 }
 
+export function encodeUpgradeShipRequest(msg: UpgradeShipRequest): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_UPGRADE_SHIP_REQUEST, 32);
+    b.storeAddress(msg.shipAddress);
+    b.storeUint(msg.hpIncrease, 256);
+    return b.endCell();
+}
+
+export function encodeShipUpgrade(msg: ShipUpgrade): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_SHIP_UPGRADE, 32);
+    b.storeUint(msg.hpIncrease, 256);
+    return b.endCell();
+}
+
 // -------------------------
 // (опционально) универсальный encoder по $$type
 // -------------------------
@@ -314,6 +342,10 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeRequestCoordinateCellAddress(msg);
         case 'ResponseAddress':
             return encodeResponseAddress(msg);
+        case 'UpgradeShipRequest':
+            return encodeUpgradeShipRequest(msg);
+        case 'ShipUpgrade':
+            return encodeShipUpgrade(msg);
         default:
             // TS должен не дать сюда добраться, но на всякий случай:
             throw new Error('Unknown message type');

@@ -9,6 +9,7 @@ export function gameManagerConfigToCell(config: GameManagerConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
         .storeAddress(null) // jettonMinterAddress: address?
+        .storeMaybeRef(null) // jettonWalletCode: cell?
         .storeMaybeRef(null) // games: cell?
         .endCell();
 }
@@ -34,11 +35,11 @@ export class GameManager implements Contract {
         });
     }
 
-    async sendSetJettonMinterAddress(provider: ContractProvider, via: Sender, value: bigint, jettonMinterAddress: Address) {
+    async sendSetJettonMinterAddress(provider: ContractProvider, via: Sender, value: bigint, jettonMinterAddress: Address, jettonWalletCode: Cell) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeSetJettonMinterAddress({ jettonMinterAddress }),
+            body: encodeSetJettonMinterAddress({ jettonMinterAddress, jettonWalletCode }),
         });
     }
 

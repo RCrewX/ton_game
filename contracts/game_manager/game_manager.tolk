@@ -5,6 +5,7 @@ type AllowedMessagesToGameManager =
     | SetGames 
     | RedirectMessage
     | ForwardMintRequest
+    | TransferNotificationForRecipient
     | AnyMessage
 
 
@@ -18,6 +19,7 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
 
             storage.jettonMinterAddress = msg.jettonMinterAddress;
+            storage.jettonWalletCode = msg.jettonWalletCode;
             storage.save();
             reserveValue(in.valueCoins);
             val responseMsg = createMessage({
@@ -86,6 +88,50 @@ fun onInternalMessage(in: InMessage) {
                 body: mintNewJettons
             });
             forwardMsg.send(128);
+        }
+        TransferNotificationForRecipient => {
+            var storage = lazy GameManagerStorage.load();
+            assert (storage.jettonMinterAddress != null) throw ERR_UNAUTHORIZED;
+            assert (storage.jettonWalletCode != null) throw ERR_UNAUTHORIZED;
+            // Verify sender is GameManager's jetton wallet (native jetton)
+            val expectedWalletAddress = calcAddressOfJettonWallet(contract.getAddress(), storage.jettonMinterAddress!, storage.jettonWalletCode!);
+            assert (in.senderAddress == expectedWalletAddress) throw ERR_UNAUTHORIZED;
+            
+            // Extract ship address from forwardPayload
+            // forwardPayload is RemainingBitsAndRefs, which can be a slice or contain a ref
+            // If it's stored as a Cell in the test, it will be in a ref
+            var forwardPayloadSlice: slice = msg.forwardPayload;
+            var shipAddress: address;
+            if (forwardPayloadSlice.remainingRefsCount() > 0) {
+                // Address is stored in a ref (Cell)
+                val payloadCell = forwardPayloadSlice.loadRef();
+                shipAddress = payloadCell.beginParse().loadAddress();
+            } else {
+                // Address is stored directly in the slice
+                shipAddress = forwardPayloadSlice.loadAddress();
+            }
+            // Calculate HP increase using random by time (1 to N, where N is jettonAmount)
+            random.initialize();
+            val jettonAmountUint = msg.jettonAmount as uint256;
+            val hpIncrease = random.range(jettonAmountUint) + 1; // 1 to N inclusive
+            
+            // Get game address from games
+            assert (storage.games != null) throw ERR_UNAUTHORIZED;
+            val game = storage.games!.beginParse().loadAddress();
+            
+            reserveValue(in.valueCoins);
+            
+            // Send upgrade request to Game
+            val upgradeRequestMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: game,
+                value: 0,
+                body: UpgradeShipRequest {
+                    shipAddress: shipAddress,
+                    hpIncrease: hpIncrease,
+                }
+            });
+            upgradeRequestMsg.send(128);
         }
         ReturnExcessesBack => {
             reserveValue(in.valueCoins);

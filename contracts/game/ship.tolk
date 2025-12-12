@@ -8,6 +8,7 @@ import "static/constants"
 type AllowedMessagesToShip = 
     | MoveEnd 
     | RequestToMove 
+    | ShipUpgrade
     | AnyMessage
 
 get fun currentGameData(): GameFields? {
@@ -104,6 +105,22 @@ fun onInternalMessage(in: InMessage) {
                 }
             });
             moveMsg.send(128);
+        }
+        ShipUpgrade => {
+            var storage = ShipStorage.load();
+            // Only Game can upgrade ships
+            assert (in.senderAddress == storage.gameAddress) throw ERR_UNAUTHORIZED;
+            
+            if (storage.gameFields == null) {
+                val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
+                storage.gameFields = gameFields;
+                storage.save();
+            }
+            var gameFields: GameFields = lazy storage.gameFields!.load();
+            gameFields.hp += msg.hpIncrease;
+            storage.gameFields = gameFields.toCell();
+            storage.save();
+            reserveValue(in.valueCoins);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}

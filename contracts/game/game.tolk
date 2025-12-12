@@ -9,6 +9,7 @@ type AllowedMessagesToGame =
     | RequestMint 
     | RequestShipAddress 
     | RequestCoordinateCellAddress 
+    | UpgradeShipRequest
     | AnyMessage
 
 fun onInternalMessage(in: InMessage) {
@@ -56,6 +57,24 @@ fun onInternalMessage(in: InMessage) {
                 }
             });
             forwardMsg.send(128);
+        }
+        UpgradeShipRequest => {
+            var storage = lazy GameV1Storage.load();
+            // Only GameManager can request ship upgrades
+            assert (in.senderAddress == storage.managerAddress) throw ERR_UNAUTHORIZED;
+            
+            reserveValue(in.valueCoins);
+            
+            // Send upgrade message to Ship
+            val upgradeMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: msg.shipAddress,
+                value: 0,
+                body: ShipUpgrade {
+                    hpIncrease: msg.hpIncrease,
+                }
+            });
+            upgradeMsg.send(128);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}

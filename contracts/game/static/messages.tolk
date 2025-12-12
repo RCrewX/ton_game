@@ -66,6 +66,10 @@ struct (0x4a5b6c7d) RequestToMove {
     mode: MoveMode
 }
 
+struct (0x9a8b9cad) ShipUpgrade {
+    hpIncrease: uint256
+}
+
 // To Game
 
 struct (0x5a6b7c8d) RequestMint {
@@ -73,6 +77,7 @@ struct (0x5a6b7c8d) RequestMint {
     amount: coins
     ship: address
 }
+
 
 struct (0x6a7b8c9d) RequestShipAddress {
     userAddress: address
@@ -90,4 +95,10 @@ struct (0x8a9bacbd) ResponseAddress {
 struct (0x6b7c8d9e) ForwardMintRequest {
     receiver: address
     amount: coins
+}
+
+// From GameManager to Game
+struct (0x8b9cad0e) UpgradeShipRequest {
+    shipAddress: address
+    hpIncrease: uint256
 }
