@@ -6,7 +6,9 @@
         "start": "blueprint run",
         "build": "blueprint build",
         "test": "jest --verbose",
-        "release": "blueprint pack && npm publish --access public"
+        "deploy": "ts-node scripts/deploySystem.ts",
+        "release": "blueprint pack && npm publish --access public",
+        "generate-key": "ts-node scripts/generatePrivateKey.ts"
     },
     "dependencies": {
         "@ton/core": "~0.62.0"
@@ -22,6 +24,7 @@
         "@ton/ton": "^15.4.0",
         "@types/jest": "^30.0.0",
         "@types/node": "^22.19.1",
+        "dotenv": "^16.4.5",
         "jest": "^30.2.0",
         "prettier": "^3.7.3",
         "ts-jest": "^29.4.5",
