@@ -40,7 +40,7 @@ struct (0x3b4c5d6e) RedirectMessage {
     forwardTonAmount: coins
 }
 
-// Forwarded from Game (proof already verified by Game)
+// Forwarded from Game
 struct (0x6b7c8d9e) ForwardMintRequest {
     receiver: address
     amount: coins

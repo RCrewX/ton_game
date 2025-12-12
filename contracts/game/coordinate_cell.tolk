@@ -33,12 +33,11 @@ fun onInternalMessage(in: InMessage) {
             if (firstTimeOpened && storage.ccStorage == null) {
                 var ccStorage: CCStorage = {hp: 0, jettonAmount: 0, firstExplorer: msg.user};
                 random.initialize();
-                val range = storage.xy.x*storage.xy.x + storage.xy.y*storage.xy.y;
+                val range = storage.xy.y;
                 val my_random_indicator = random.range(range);
-                ccStorage.hp = range;
-                if (my_random_indicator > range / 2) {
-                    ccStorage.jettonAmount = my_random_indicator;
-                }
+                ccStorage.hp = my_random_indicator;
+                ccStorage.jettonAmount = my_random_indicator as coins;
+                
                 ccStorage.firstExplorer = msg.user;
                 storage.opened = true;
                 storage.ccStorage = ccStorage.toCell();
@@ -65,19 +64,18 @@ fun onInternalMessage(in: InMessage) {
                 totalReward = 0;
             }
 
-            if (totalReward > 0) {
-                val requestMintMsg = createMessage({
-                    bounce: BounceMode.NoBounce,
-                    dest: storage.gameAddress,
-                    value: MINT_TON_AMOUNT,
-                    body: RequestMint {
-                        receiver: rewardReceiver,
-                        amount: totalReward,
-                        proof: Proof { mode: 0, data: storage.xy},
-                    }
-                });
-                requestMintMsg.send(0);
-            }
+            // if (totalReward > 0) {
+            //     val requestMintMsg = createMessage({
+            //         bounce: BounceMode.NoBounce,
+            //         dest: storage.gameAddress,
+            //         value: MINT_TON_AMOUNT,
+            //         body: RequestMint {
+            //             receiver: rewardReceiver,
+            //             amount: totalReward,
+            //         }
+            //     });
+            //     requestMintMsg.send(0);
+            // }
             reserveValue(in.valueCoins);
             val moveEndMsg = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -122,7 +120,7 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_UNAUTHORIZED;
             
             val currentBalance = contract.getOriginalBalance();
-            val minRequiredBalance = MINT_TON_AMOUNT; // 0.1 TON minimum
+            val minRequiredBalance = BASIC_STORAGE_TAX;
             assert (currentBalance - in.valueCoins >= minRequiredBalance + msg.amount) throw ERR_NOT_ENOUGH_BALANCE;
             
             val withdrawMsg = createMessage({

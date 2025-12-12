@@ -76,10 +76,10 @@ describe('Withdrawals', () => {
             const balanceBefore = await coordinateCell.getTonBalance();
             
             // Try to withdraw more than allowed (would leave less than 0.1 TON)
-            const withdrawAmount = balanceBefore - toNano('0.05'); // Would leave only 0.05 TON
+            const withdrawAmount = balanceBefore - toNano('0.05') + sendAmount; // Would leave only 0.05 TON
             SC_System.messageResult = await coordinateCell.sendWithdrawTON(
                 SC_System.ownerAccount.getSender(),
-                toNano('0.1'),
+                sendAmount,
                 recipient.address,
                 withdrawAmount
             );

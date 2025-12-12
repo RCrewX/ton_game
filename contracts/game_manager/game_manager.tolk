@@ -58,6 +58,10 @@ fun onInternalMessage(in: InMessage) {
         }
         ForwardMintRequest => {
             assert (storage.jettonMinterAddress != null) throw 5;
+
+            // Check if sender is game from games
+            val game = storage.games!.beginParse().loadAddress();
+            assert (in.senderAddress == game) throw ERR_UNAUTHORIZED;
             // Convert ForwardMintRequest to MintNewJettons format
             val emptyPayload: RemainingBitsAndRefs = beginCell().storeUint(1, 128).toSlice();
             val internalTransferStep = InternalTransferStep {

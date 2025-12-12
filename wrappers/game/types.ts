@@ -22,8 +22,6 @@ import {
     storeUniqueResult,
     GameFields,
     storeGameFields,
-    Proof,
-    storeProof,
     XY,
     storeXY,
 } from './structs';
@@ -144,7 +142,7 @@ export type RequestToMove = {
 export type RequestMint = {
     receiver: Address;
     amount: bigint; // coins (нанотоны)
-    proof: Proof;
+    ship: Address;
 };
 
 export type RequestShipAddress = {
@@ -261,7 +259,7 @@ export function encodeRequestMint(msg: RequestMint): Cell {
     b.storeUint(Opcodes.OP_REQUEST_MINT, 32);
     b.storeAddress(msg.receiver);
     b.storeCoins(msg.amount);
-    storeProof(b, msg.proof);
+    b.storeAddress(msg.ship);
     return b.endCell();
 }
 

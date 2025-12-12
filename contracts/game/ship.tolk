@@ -58,7 +58,8 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
 
             if (totalReward > 0) {
-                var MINT_TON_AMOUNT: coins = ton("0.1");
+                
+                
                 val requestMintMsg = createMessage({
                     bounce: BounceMode.NoBounce,
                     dest: storage.gameAddress,
@@ -66,10 +67,10 @@ fun onInternalMessage(in: InMessage) {
                     body: RequestMint {
                         receiver: storage.userAddress,
                         amount: totalReward,
-                        proof: Proof { mode: 1, data: contract.getAddress()},
+                        ship: contract.getAddress(),
                     }
                 });
-                requestMintMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
+                requestMintMsg.send(0);
             }
             reserveValue(in.valueCoins);
             val cashbackMsg = createMessage({

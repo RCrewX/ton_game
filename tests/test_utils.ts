@@ -1,11 +1,13 @@
 import { compile } from "@ton/blueprint";
-import { Cell, toNano } from "@ton/core";
+import { beginCell, Cell, toNano } from "@ton/core";
 import { Blockchain, SandboxContract, TreasuryContract } from "@ton/sandbox";
 import { Game } from "../wrappers/game/Game";
 import { Ship } from "../wrappers/game/Ship";
 import { CoordinateCell } from "../wrappers/game/CoordinateCell";
 import { GameManager } from "../wrappers/game_manager/GameManager";
 import { MoveMode } from "../wrappers/game/structs";
+import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
+import { JettonWallet } from "../wrappers/jetton/JettonWallet";
 
 export type ContractSystem = {
     blockchain: Blockchain;
@@ -14,7 +16,9 @@ export type ContractSystem = {
     gameManager: SandboxContract<GameManager>;
     game: SandboxContract<Game>;
     ownerShip: SandboxContract<Ship>; //hehe, ownership
+    jettonMinter: SandboxContract<JettonMinter>;
 
+    ownerJettonWallet: SandboxContract<JettonWallet>;
     gameManagerCode: Cell;
     gameCode: Cell;
     shipCode: Cell;
@@ -66,6 +70,62 @@ export async function initContractSystem(): Promise<ContractSystem> {
         success: true,
     });
 
+    // Deploy JettonMinter
+    let jettonMinter = blockchain.openContract(JettonMinter.createFromConfig({
+        admin: gameManager.address,
+        content: jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' }),
+        wallet_code: jettonWalletCode,
+    }, jettonMinterCode));
+
+    messageResult = await jettonMinter.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: jettonMinter.address,
+        deploy: true,
+        success: true,
+    });
+    let ownerJettonWallet = blockchain.openContract(JettonWallet.createFromConfig({
+        ownerAddress: ownerAccount.address,
+        minterAddress: jettonMinter.address,
+    }, jettonWalletCode));
+    messageResult = await ownerJettonWallet.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: ownerJettonWallet.address,
+        deploy: true,
+        success: true,
+    });
+
+    // Set jetton minter address in GameManager
+    messageResult = await gameManager.sendSetJettonMinterAddress(ownerAccount.getSender(), toNano('0.1'), jettonMinter.address);
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: gameManager.address,
+        success: true,
+    });
+
+    // Set game address in game manager
+    messageResult = await gameManager.sendSetGames(ownerAccount.getSender(), toNano('0.1'), beginCell().storeAddress(game.address).endCell());
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: gameManager.address,
+        success: true,
+    });
+
+    // Check game manager address in minter
+    let minterOwnerAddress = await jettonMinter.getAdminAddress();
+    expect(minterOwnerAddress).toEqualAddress(gameManager.address);
+
+    // Check jetton minter address in game manager
+    let jettonMinterAddress = await gameManager.getJettonMinterAddress();
+    expect(jettonMinterAddress).toEqualAddress(jettonMinter.address);
+
+    // Check game address in game manager
+    let games = await gameManager.getGames();
+    let gameAddress = games?.beginParse().loadAddress();
+    expect(gameAddress).toEqualAddress(game.address);
+
+
     // Deploy Ship
     let ownerShip = blockchain.openContract(Ship.createFromConfig({
         userAddress: ownerAccount.address,
@@ -88,6 +148,8 @@ export async function initContractSystem(): Promise<ContractSystem> {
         gameManager,
         game,
         ownerShip,
+        jettonMinter,
+        ownerJettonWallet,
         gameManagerCode,
         gameCode,
         shipCode,

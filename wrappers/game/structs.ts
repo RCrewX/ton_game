@@ -47,21 +47,6 @@ export type GameFields = {
     jettonAmount: bigint; // coins
 };
 
-// ProofData = XY | address
-// Proof {
-//   mode: uint8 // 0 -> XY, 1 -> address
-//   data: ProofData
-// }
-export type Proof =
-    | {
-          mode: 0;
-          data: XY;
-      }
-    | {
-          mode: 1;
-          data: Address;
-      };
-
 // =======================
 // store-функции
 // =======================
@@ -91,30 +76,6 @@ export function storeGameFields(builder: Builder, src: GameFields) {
     storeXY(builder, src.xy);
     builder.storeUint(src.hp, 256);
     builder.storeCoins(src.jettonAmount);
-}
-
-// ProofData.toSlice(self):
-//   XY      => self.toSlice()  (x:int256, y:uint256)
-//   address => self.toSlice()
-//
-// Proof {
-//   mode: uint8
-//   data: ProofData
-// }
-export function storeProof(builder: Builder, src: Proof) {
-    // mode
-    builder.storeUint(src.mode, 8);
-
-    if (src.mode === 0) {
-        // data: XY
-        storeXY(builder, src.data);
-    } else if (src.mode === 1) {
-        // data: address
-        builder.storeAddress(src.data);
-    } else {
-        // На всякий случай, чтобы не получить разъезд сериализации
-        throw new Error(`Invalid Proof.mode: ${0}`);
-    }
 }
 
 // MoveMode — см. комментарий к типу.

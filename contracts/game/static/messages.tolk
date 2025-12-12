@@ -71,7 +71,7 @@ struct (0x4a5b6c7d) RequestToMove {
 struct (0x5a6b7c8d) RequestMint {
     receiver: address
     amount: coins
-    proof: Proof
+    ship: address
 }
 
 struct (0x6a7b8c9d) RequestShipAddress {
@@ -86,7 +86,7 @@ struct (0x8a9bacbd) ResponseAddress {
     requestedAddress: address 
 }
 
-// To GameManager (proof already verified by Game)
+// To GameManager
 struct (0x6b7c8d9e) ForwardMintRequest {
     receiver: address
     amount: coins

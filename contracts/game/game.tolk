@@ -3,6 +3,7 @@ import "static/helper"
 import "static/storage"
 import "static/structs"
 import "static/constants"
+import "static/errors"
 
 type AllowedMessagesToGame = 
     | RequestMint 
@@ -39,20 +40,12 @@ fun onInternalMessage(in: InMessage) {
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         RequestMint => {
-            val the_slice = msg.proof.data.toSlice();
 
-            if (msg.proof.mode == 0) {    
-                val xy: XY = XY.fromSlice(the_slice);
-                assert (in.senderAddress == calcAddressOfCoordinateCell(contract.getAddress(),  xy.x, xy.y, storage.coordinateCellCode, storage.shipCode)) throw 5;
-            } else 
-            if (msg.proof.mode == 1) {
-                val user: address = address.fromSlice(the_slice);
-                assert (in.senderAddress == calcAddressOfShip(user, contract.getAddress(),  storage.shipCode, storage.coordinateCellCode)) throw 5;
-            } else {
-                assert (false) throw 5;
-            }
-            // Forward mint request to game manager (proof already verified, so send simplified message)
+            assert (in.valueCoins > BASIC_STORAGE_TAX) throw ERR_NOT_ENOUGH_VALUE_COINS;
+            assert (in.senderAddress == calcAddressOfShip(msg.receiver, contract.getAddress(),  storage.shipCode, storage.coordinateCellCode)) throw 5;
+
             reserveValue(in.valueCoins);
+
             val forwardMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: storage.managerAddress,
