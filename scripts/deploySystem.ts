@@ -307,11 +307,15 @@ export async function run(provider: NetworkProvider) {
         saveBuildFile(deploymentData, buildFilePath);
 
         // Deploy JettonMinter
+        // Get jetton content URI from .env or use default
+        const jettonContentUri = process.env.JETTON_CONTENT_URI || 'https://example.com/jetton.json';
+        console.log(`Using jetton content URI: ${jettonContentUri}`);
+        
         const jettonMinter = provider.open(
             JettonMinter.createFromConfig(
                 {
                     admin: gameManager.address,
-                    content: jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' }),
+                    content: jettonContentToCell({ type: 1, uri: jettonContentUri }),
                     wallet_code: jettonWalletCode,
                 },
                 jettonMinterCode
@@ -439,8 +443,11 @@ export async function run(provider: NetworkProvider) {
         );
         const mintAmount = toNano('1000');
         
+        let userBalance: bigint;
+        
         if (currentBalance >= mintAmount) {
             console.log('Initial jettons already minted (balance:', currentBalance.toString(), ')');
+            userBalance = currentBalance;
         } else {
             // Mint jettons through redirecting mint message to game manager
             console.log('Minting initial jettons...');
@@ -462,16 +469,34 @@ export async function run(provider: NetworkProvider) {
                 API_TIMEOUT,
                 'Minting initial jettons'
             );
-            await sleep(TRANSACTION_WAIT_TIME);
-            console.log('Initial jettons minted');
+            console.log('Mint transaction sent, waiting for jettons to arrive...');
+            
+            // Wait and retry checking balance - minting can take time through the redirect chain
+            userBalance = await withTimeout(
+                ownerJettonWallet.getJettonBalance(),
+                API_TIMEOUT,
+                'Getting jetton balance after mint'
+            );
+            let balanceRetries = 10; // More retries for minting as it goes through multiple contracts
+            while (userBalance < mintAmount && balanceRetries > 0) {
+                console.log(`Waiting for jettons to arrive (${balanceRetries} retries left, current balance: ${userBalance.toString()})...`);
+                await sleep(TRANSACTION_WAIT_TIME);
+                userBalance = await withTimeout(
+                    ownerJettonWallet.getJettonBalance(),
+                    API_TIMEOUT,
+                    'Getting jetton balance (retry)'
+                );
+                balanceRetries--;
+            }
+            
+            if (userBalance < mintAmount) {
+                console.warn(`Warning: Expected balance of at least ${mintAmount.toString()}, but got ${userBalance.toString()}. The mint transaction may still be processing.`);
+            } else {
+                console.log('Initial jettons minted successfully');
+            }
         }
 
-        // Verify jetton balance
-        const userBalance = await withTimeout(
-            ownerJettonWallet.getJettonBalance(),
-            API_TIMEOUT,
-            'Getting final jetton balance'
-        );
+        // Save final balance
         deploymentData.ownerJettonBalance = userBalance.toString();
         console.log('Owner jetton balance:', userBalance.toString());
         saveBuildFile(deploymentData, buildFilePath);
