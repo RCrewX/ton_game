@@ -8,7 +8,8 @@ import { GameManager } from "../wrappers/game_manager/GameManager";
 import { MoveMode } from "../wrappers/game/structs";
 import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
 import { JettonWallet } from "../wrappers/jetton/JettonWallet";
-import { Opcodes } from "../wrappers/game_manager/types";
+import { Opcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from "../wrappers/game_manager/types";
+import { GAS_COST_REQUEST_TO_MOVE } from "../wrappers/game/types";
 
 export type ContractSystem = {
     blockchain: Blockchain;
@@ -98,7 +99,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
     });
 
     // Set jetton minter address in GameManager
-    messageResult = await gameManager.sendSetJettonMinterAddress(ownerAccount.getSender(), toNano('0.1'), jettonMinter.address, jettonWalletCode);
+    messageResult = await gameManager.sendSetJettonMinterAddress(ownerAccount.getSender(), GAS_COST_SET_JETTON_MINTER_ADDRESS, jettonMinter.address, jettonWalletCode);
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
         to: gameManager.address,
@@ -106,7 +107,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
     });
 
     // Set game address in game manager
-    messageResult = await gameManager.sendSetGames(ownerAccount.getSender(), toNano('0.1'), beginCell().storeAddress(game.address).endCell());
+    messageResult = await gameManager.sendSetGames(ownerAccount.getSender(), GAS_COST_SET_GAMES, beginCell().storeAddress(game.address).endCell());
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
         to: gameManager.address,
@@ -128,13 +129,15 @@ export async function initContractSystem(): Promise<ContractSystem> {
 
     // Mint jettons thru redirecting mint message to game manager to user first (so they can transfer)
     const mintAmount = toNano('1000');
+    const forwardAmount = toNano('0.1');
     const redirectMessage = JettonMinter.mintMessage(jettonMinter.address, ownerAccount.address, mintAmount, toNano('0.1'), toNano('0.2'));
+    // Need to send gas cost + forward amount for redirect message
     messageResult = await gameManager.sendRedirectMessage(
         ownerAccount.getSender(),
-        toNano('0.1'),
+        GAS_COST_REDIRECT_MESSAGE + forwardAmount,
         jettonMinter.address,
         redirectMessage,
-        toNano('0.1')
+        forwardAmount
     );
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
@@ -161,7 +164,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
         coordinateCellCode,
     }, shipCode))
     
-    messageResult = await ownerShip.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
+    messageResult = await ownerShip.sendDeploy(ownerAccount.getSender(), toNano('5'));
 
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
@@ -199,7 +202,7 @@ export async function setupCoordinateCellWithFirstExplorer(
         coordinateCellCode: SC_System.coordinateCellCode,
     }, SC_System.shipCode));
 
-    await firstExplorerShip.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+    await firstExplorerShip.sendDeploy(SC_System.ownerAccount.getSender(), toNano('5'));
 
     // Create the CoordinateCell
     const coordinateCell = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({
@@ -214,7 +217,7 @@ export async function setupCoordinateCellWithFirstExplorer(
     // Open the cell by moving to it (this sets firstExplorer)
     SC_System.messageResult = await firstExplorerShip.sendMove(
         SC_System.ownerAccount.getSender(),
-        toNano('2'),
+        GAS_COST_REQUEST_TO_MOVE,
         MoveMode.UP
     );
 

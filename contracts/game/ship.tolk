@@ -85,7 +85,8 @@ fun onInternalMessage(in: InMessage) {
         RequestToMove => {
             var storage = ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_UNAUTHORIZED;
-            assert (contract.getOriginalBalance() > ton("1")) throw 5;
+            assert (in.valueCoins >= GAS_COST_REQUEST_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            assert (contract.getOriginalBalance() > ton("1")) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
 
             if (storage.gameFields == null) {
                 val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
@@ -94,10 +95,13 @@ fun onInternalMessage(in: InMessage) {
             }
             var gameFields: GameFields = lazy storage.gameFields!.load();
             reserveValue(in.valueCoins);
+            // Send enough TON for coordinate cell operations (storage + MoveEnd message)
+            // Need enough for: initial storage fee + gas for MoveEnd + buffer
+            val coordinateCellGas = ton("1");
             val moveMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: calcDeployedCoordinateCell(storage.gameAddress, gameFields.xy.x, gameFields.xy.y, storage.coordinateCellCode, contract.getCode()),
-                value: 0,
+                value: coordinateCellGas,
                 body: MoveShipToCC {
                     user: in.senderAddress,
                     mode: msg.mode,

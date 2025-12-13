@@ -17,6 +17,7 @@ fun onInternalMessage(in: InMessage) {
     var storage = lazy GameV1Storage.load();
     match (msg) {
         RequestShipAddress => {
+            assert (in.valueCoins >= GAS_COST_REQUEST_SHIP_ADDRESS) throw ERR_MESSAGE_VALUE_TOO_LOW;
             reserveValue(in.valueCoins);
             val responseMsg = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -29,6 +30,7 @@ fun onInternalMessage(in: InMessage) {
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         RequestCoordinateCellAddress => {
+            assert (in.valueCoins >= GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS) throw ERR_MESSAGE_VALUE_TOO_LOW;
             reserveValue(in.valueCoins);
             val responseMsg = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -43,7 +45,7 @@ fun onInternalMessage(in: InMessage) {
         RequestMint => {
 
             assert (in.valueCoins > BASIC_STORAGE_TAX) throw ERR_NOT_ENOUGH_VALUE_COINS;
-            assert (in.senderAddress == calcAddressOfShip(msg.receiver, contract.getAddress(),  storage.shipCode, storage.coordinateCellCode)) throw 5;
+            assert (in.senderAddress == calcAddressOfShip(msg.receiver, contract.getAddress(),  storage.shipCode, storage.coordinateCellCode)) throw ERR_INVALID_SENDER_ADDRESS;
 
             reserveValue(in.valueCoins);
 

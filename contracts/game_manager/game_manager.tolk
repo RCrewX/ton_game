@@ -17,6 +17,7 @@ fun onInternalMessage(in: InMessage) {
     match (msg) {
         SetJettonMinterAddress => {
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.valueCoins >= GAS_COST_SET_JETTON_MINTER_ADDRESS) throw ERR_MESSAGE_VALUE_TOO_LOW;
 
             storage.jettonMinterAddress = msg.jettonMinterAddress;
             storage.jettonWalletCode = msg.jettonWalletCode;
@@ -34,6 +35,7 @@ fun onInternalMessage(in: InMessage) {
         }
         SetGames => {
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.valueCoins >= GAS_COST_SET_GAMES) throw ERR_MESSAGE_VALUE_TOO_LOW;
             storage.games = msg.games;
             storage.save();
             reserveValue(in.valueCoins);
@@ -49,6 +51,7 @@ fun onInternalMessage(in: InMessage) {
         }
         RedirectMessage => {
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.valueCoins >= GAS_COST_REDIRECT_MESSAGE) throw ERR_MESSAGE_VALUE_TOO_LOW;
             reserveValue(in.valueCoins);
             val redirectMsg = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -59,7 +62,7 @@ fun onInternalMessage(in: InMessage) {
             redirectMsg.send(128);
         }
         ForwardMintRequest => {
-            assert (storage.jettonMinterAddress != null) throw 5;
+            assert (storage.jettonMinterAddress != null) throw ERR_MISSING_REQUIRED_DATA;
 
             // Check if sender is game from games
             val game = storage.games!.beginParse().loadAddress();

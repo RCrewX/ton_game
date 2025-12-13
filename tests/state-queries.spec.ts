@@ -3,6 +3,7 @@ import '@ton/test-utils';
 import { ContractSystem, initContractSystem } from './test_utils';
 import { MoveMode } from '../wrappers/game/structs';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
+import { GAS_COST_REQUEST_TO_MOVE } from '../wrappers/game/types';
 
 describe('State Queries', () => {
     let SC_System: ContractSystem;
@@ -16,7 +17,7 @@ describe('State Queries', () => {
     });
 
     it('Test Ship getCurrentGameData - verify after move', async () => {
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
         
         const gameData = await SC_System.ownerShip.getCurrentGameData();
         expect(gameData).not.toBeNull();
@@ -35,7 +36,7 @@ describe('State Queries', () => {
 
     it('Test CoordinateCell getTonBalance', async () => {
         // First move to create a coordinate cell
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), toNano(2), MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
         
         const cc = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
             gameAddress: SC_System.game.address,

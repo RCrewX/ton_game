@@ -76,7 +76,11 @@ fun onInternalMessage(in: InMessage) {
             //     });
             //     requestMintMsg.send(0);
             // }
-            reserveValue(in.valueCoins);
+            // For new cells, don't reserve at all - just leave enough for MoveEnd
+            // For existing cells, use normal reserve
+            if (!firstTimeOpened) {
+                reserveValue(in.valueCoins);
+            }
             val moveEndMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: shipAddress,
@@ -97,10 +101,13 @@ fun onInternalMessage(in: InMessage) {
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
             assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_UNAUTHORIZED;
             reserveValue(in.valueCoins);
+            // Forward most of the received TON to the new coordinate cell so it can send MoveEnd back
+            // Need enough for: initial storage fee + gas for MoveEnd + buffer
+            val coordinateCellGas = ton("1");
             val moveEndMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: calcDeployedCoordinateCell(storage.gameAddress, coordinate_plus_mode(storage.xy.x, msg.mode), storage.xy.y+1, contract.getCode(), storage.shipCode),
-                value: 0,
+                value: coordinateCellGas,
                 body: Move {
                     user: msg.user,
                     mode: msg.mode,

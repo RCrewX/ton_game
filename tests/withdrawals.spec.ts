@@ -7,6 +7,8 @@ import { JettonMinter } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer } from './test_utils';
+import { BASIC_STORAGE_TAX } from '../wrappers/game/types';
+
 
 describe('Withdrawals', () => {
     let SC_System: ContractSystem;
@@ -32,7 +34,7 @@ describe('Withdrawals', () => {
             });
 
             const balanceBefore = await coordinateCell.getTonBalance();
-            expect(balanceBefore).toBeGreaterThan(sendAmount);
+            expect(balanceBefore).toBeGreaterThanOrEqual(sendAmount - BASIC_STORAGE_TAX * 2n);
 
             // Withdraw TON
             const withdrawAmount = toNano('0.5');

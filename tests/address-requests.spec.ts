@@ -2,7 +2,7 @@ import { toNano } from '@ton/core';
 import { Game } from '../wrappers/game/Game';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem } from './test_utils';
-import { Opcodes } from '../wrappers/game/types';
+import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../wrappers/game/types';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
 
 describe('Address Requests', () => {
@@ -14,7 +14,7 @@ describe('Address Requests', () => {
     it('Test Game sendRequestShipAddress - verify response message', async () => {
         SC_System.messageResult = await SC_System.game.sendRequestShipAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_REQUEST_SHIP_ADDRESS,
             SC_System.ownerAccount.address
         );
         
@@ -37,7 +37,7 @@ describe('Address Requests', () => {
     it('Test Game sendRequestCoordinateCellAddress - verify response message', async () => {
         SC_System.messageResult = await SC_System.game.sendRequestCoordinateCellAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS,
             { x: 0n, y: 0n }
         );
         
@@ -58,7 +58,7 @@ describe('Address Requests', () => {
     it('Test address calculation consistency - verify ship address matches', async () => {
         SC_System.messageResult = await SC_System.game.sendRequestShipAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_REQUEST_SHIP_ADDRESS,
             SC_System.ownerAccount.address
         );
         
@@ -77,7 +77,7 @@ describe('Address Requests', () => {
         
         SC_System.messageResult = await SC_System.game.sendRequestCoordinateCellAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS,
             testXY
         );
         

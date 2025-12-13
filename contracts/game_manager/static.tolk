@@ -2,8 +2,16 @@
 const BASIC_STORAGE_TAX = ton("0.01");
 const MINT_TON_AMOUNT: coins = ton("0.1");
 
+// Gas costs from gas consumption tests (in TON)
+// These are maximum expected costs for each operation
+const GAS_COST_SET_JETTON_MINTER_ADDRESS: coins = ton("0.02"); // 0.018347201 + buffer
+const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141708 + buffer
+const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.005"); // 0.0031816 + buffer
+
 // Errors
 const ERR_UNAUTHORIZED = 901;
+const ERR_MESSAGE_VALUE_TOO_LOW = 904;  // Message value is too low (less than estimated gas cost)
+const ERR_MISSING_REQUIRED_DATA = 906;  // Required data (like jettonMinterAddress) is null
 
 //  Storage
 

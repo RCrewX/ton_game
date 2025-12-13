@@ -1,10 +1,16 @@
 import { toNano, TupleReader } from "@ton/core";
 
-const BASIC_STORAGE_TAX = toNano("0.01");
+export const BASIC_STORAGE_TAX = toNano("0.01");
 
-const BASIC_SHIP_HP: bigint = 100n;
-const MINT_TON_AMOUNT: bigint = toNano("0.1");
+export const BASIC_SHIP_HP: bigint = 100n;
+export const MINT_TON_AMOUNT: bigint = toNano("0.2");
 
+// Gas costs from gas consumption tests (in TON)
+// These match the constants in contracts/game/static/constants.tolk
+export const GAS_COST_REQUEST_SHIP_ADDRESS = toNano("0.014"); // 0.0139108 + buffer
+export const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS = toNano("0.015"); // 0.0143492 + buffer
+export const GAS_COST_REQUEST_TO_MOVE = toNano("0.07"); // 0.068966401 + buffer
+export const GAS_COST_ANY_MESSAGE = toNano("1");
 const var_mutableVar: bigint = 10n;
 const val_immutableVal: bigint = 20n;
 

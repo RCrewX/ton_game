@@ -5,6 +5,7 @@ import { Game } from '../wrappers/game/Game';
 import { Ship } from '../wrappers/game/Ship';
 import { JettonMinter, jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
+import { GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import * as dotenv from 'dotenv';
 import { WalletContractV4, WalletContractV5R1 } from '@ton/ton';
 import { keyPairFromSecretKey } from '@ton/crypto';
@@ -169,7 +170,7 @@ async function checkAndSetJettonMinter(
         await withTimeout(
             gameManager.sendSetJettonMinterAddress(
                 provider.sender(),
-                toNano('0.1'),
+                GAS_COST_SET_JETTON_MINTER_ADDRESS,
                 jettonMinter,
                 jettonWalletCode
             ),
@@ -210,7 +211,7 @@ async function checkAndSetGames(
         await withTimeout(
             gameManager.sendSetGames(
                 provider.sender(),
-                toNano('0.1'),
+                GAS_COST_SET_GAMES,
                 beginCell().storeAddress(game).endCell()
             ),
             API_TIMEOUT,
@@ -461,7 +462,7 @@ export async function run(provider: NetworkProvider) {
             await withTimeout(
                 gameManager.sendRedirectMessage(
                     provider.sender(),
-                    toNano('0.1'),
+                    GAS_COST_REDIRECT_MESSAGE,
                     jettonMinter.address,
                     redirectMessage,
                     toNano('0.1')

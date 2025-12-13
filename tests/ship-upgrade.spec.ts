@@ -3,7 +3,7 @@ import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem } from './test_utils';
 import { Opcodes } from '../wrappers/game/types';
-import { Opcodes as GameManagerOpcodes } from '../wrappers/game_manager/types';
+import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import { JettonMinter } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
@@ -50,7 +50,7 @@ describe('Ship Upgrade', () => {
         // Set jetton minter address and wallet code in GameManager
         SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_SET_JETTON_MINTER_ADDRESS,
             SC_System.jettonMinter.address,
             SC_System.jettonWalletCode
         );
@@ -134,7 +134,7 @@ describe('Ship Upgrade', () => {
         // Set jetton minter address and wallet code in GameManager
         SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_SET_JETTON_MINTER_ADDRESS,
             SC_System.jettonMinter.address,
             SC_System.jettonWalletCode
         );
@@ -146,7 +146,7 @@ describe('Ship Upgrade', () => {
             coordinateCellCode: SC_System.coordinateCellCode,
         }, SC_System.shipCode));
 
-        await anotherUserShip.sendDeploy(anotherUser.getSender(), toNano('0.5'));
+        await anotherUserShip.sendDeploy(anotherUser.getSender(), toNano('2'));
 
         // Get initial HP of another user's ship
         const initialGameData = await anotherUserShip.getCurrentGameData();
@@ -215,7 +215,7 @@ describe('Ship Upgrade', () => {
         // Set jetton minter address and wallet code in GameManager
         SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_SET_JETTON_MINTER_ADDRESS,
             SC_System.jettonMinter.address,
             SC_System.jettonWalletCode
         );
@@ -289,7 +289,7 @@ describe('Ship Upgrade', () => {
         // Set jetton minter address and wallet code in GameManager
         SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_SET_JETTON_MINTER_ADDRESS,
             SC_System.jettonMinter.address,
             SC_System.jettonWalletCode
         );
@@ -304,7 +304,7 @@ describe('Ship Upgrade', () => {
         const redirectMessage = JettonMinter.mintMessage(SC_System.jettonMinter.address, SC_System.ownerAccount.address, toNano('10000'), toNano('0.1'), toNano('0.2'));
         SC_System.messageResult = await SC_System.gameManager.sendRedirectMessage(
             SC_System.ownerAccount.getSender(),
-            toNano('0.1'),
+            GAS_COST_REDIRECT_MESSAGE,
             SC_System.ownerAccount.address,
             redirectMessage,
             toNano('0.1')
