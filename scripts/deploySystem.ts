@@ -462,7 +462,7 @@ export async function run(provider: NetworkProvider) {
             await withTimeout(
                 gameManager.sendRedirectMessage(
                     provider.sender(),
-                    GAS_COST_REDIRECT_MESSAGE,
+                    toNano(1),
                     jettonMinter.address,
                     redirectMessage,
                     toNano('0.1')
