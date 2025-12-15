@@ -8,7 +8,8 @@
         "test": "jest --verbose",
         "deploy": "ts-node scripts/deploySystem.ts",
         "release": "blueprint pack && npm publish --access public",
-        "generate-key": "ts-node scripts/generatePrivateKey.ts"
+        "generate-key": "ts-node scripts/generatePrivateKey.ts",
+        "move-ship": "blueprint run moveShip"
     },
     "dependencies": {
         "@ton/core": "~0.62.0"

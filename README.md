@@ -265,7 +265,8 @@ Estimated gas costs (in TON):
 - `npm run release` - Package and publish (if applicable)
 
 ## Blueprint Commands
-
+<!-- pnpm move-ship --testnet --mnemonic -- --exit  -->
+<!-- pnpm move-ship --testnet --mnemonic -- --left -->
 - `npx blueprint build` - Build contracts
 - `npx blueprint test` - Run tests
 - `npx blueprint run <script>` - Run deployment script

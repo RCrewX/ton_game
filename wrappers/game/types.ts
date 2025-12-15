@@ -14,7 +14,7 @@ export const GAS_COST_ANY_MESSAGE = toNano("1");
 const var_mutableVar: bigint = 10n;
 const val_immutableVal: bigint = 20n;
 
-
+export const GAS_COST_SEND_MOVE = toNano("1");
 
 // messages.ts
 import { Address, Cell, beginCell } from '@ton/core';
@@ -150,7 +150,6 @@ export type RequestToMove = {
 export type RequestMint = {
     receiver: Address;
     amount: bigint; // coins (нанотоны)
-    ship: Address;
 };
 
 export type RequestShipAddress = {
@@ -278,7 +277,6 @@ export function encodeRequestMint(msg: RequestMint): Cell {
     b.storeUint(Opcodes.OP_REQUEST_MINT, 32);
     b.storeAddress(msg.receiver);
     b.storeCoins(msg.amount);
-    b.storeAddress(msg.ship);
     return b.endCell();
 }
 

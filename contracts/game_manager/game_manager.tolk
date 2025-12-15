@@ -68,14 +68,20 @@ fun onInternalMessage(in: InMessage) {
             val game = storage.games!.beginParse().loadAddress();
             assert (in.senderAddress == game) throw ERR_UNAUTHORIZED;
             // Convert ForwardMintRequest to MintNewJettons format
-            val emptyPayload: RemainingBitsAndRefs = beginCell().storeUint(1, 128).toSlice();
+            // The TransferNotification will be sent to the receiver (user) by the JettonWallet
+            // Note: forwardPayload is empty because GameManager doesn't receive TransferNotificationForRecipient
+            // in the minting flow (it goes to the user, not GameManager)
+            val forwardPayload: RemainingBitsAndRefs = beginCell().toSlice();
+            // Set forwardTonAmount to ensure TransferNotification is sent from JettonWallet to recipient
+            val forwardTonAmount = ton("0.05"); // Enough for notification message
+            // sendExcessesTo should be the receiver (user who will receive jettons), not the ship
             val internalTransferStep = InternalTransferStep {
                 queryId: 0,
                 jettonAmount: msg.amount,
                 transferInitiator: null, // null when minting
-                sendExcessesTo: null,
-                forwardTonAmount: 0,
-                forwardPayload: emptyPayload,
+                sendExcessesTo: msg.receiver, // Send excesses to the receiver (user who gets jettons)
+                forwardTonAmount: forwardTonAmount,
+                forwardPayload: forwardPayload,
             };
             val mintNewJettons = MintNewJettons {
                 queryId: 0,

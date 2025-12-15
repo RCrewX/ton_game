@@ -134,10 +134,123 @@ describe('Jetton Minting', () => {
             success: true,
         });
 
-        // Verify jettons were minted to user
+        // Verify jettons were minted to user's jetton wallet (not ship's wallet)
         const finalJettonBalance = await userJettonWallet.getJettonBalance();
         expect(finalJettonBalance).toBeGreaterThan(initialJettonBalance);
         expect(finalJettonBalance).toBeGreaterThanOrEqual(initialJettonBalance+accumulatedAmount);
+
+        // Verify jettons did NOT go to ship's jetton wallet
+        const shipJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.ownerShip.address);
+        const shipJettonWallet = SC_System.blockchain.openContract(
+            JettonWallet.createFromAddress(shipJettonWalletAddress)
+        );
+        const shipJettonBalance = await shipJettonWallet.getJettonBalance();
+        expect(shipJettonBalance).toBe(0n); // Ship should have 0 jettons
+
+        // Verify TransferNotification was sent to user (receiver)
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: userJettonWalletAddress,
+            to: SC_System.ownerAccount.address, // user address
+            success: true,
+            op: GameManagerOpcodes.OP_TRANSFER_NOTIFICATION_FOR_RECIPIENT,
+        });
+
+        // Verify excesses were sent to receiver (user who gets jettons)
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: userJettonWalletAddress,
+            to: SC_System.ownerAccount.address, // receiver (user) receives excesses
+            success: true,
+            op: Opcodes.OP_RETURN_EXCESSES_BACK,
+        });
+    });
+
+    it('Test mint flow - verify jettons go to user wallet and excesses to receiver', async () => {
+        // Do a few moves to accumulate some rewards
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        
+        // Get accumulated amount
+        let gameData = await SC_System.ownerShip.getCurrentGameData();
+        const accumulatedAmount = gameData ? gameData.jettonAmount : 0n;
+        expect(accumulatedAmount).toBeGreaterThan(0n);
+
+        // Get wallet addresses
+        const userJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.ownerAccount.address);
+        const shipJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.ownerShip.address);
+        
+        const userJettonWallet = SC_System.blockchain.openContract(
+            JettonWallet.createFromAddress(userJettonWalletAddress)
+        );
+        const shipJettonWallet = SC_System.blockchain.openContract(
+            JettonWallet.createFromAddress(shipJettonWalletAddress)
+        );
+
+        // Get initial balances
+        const initialUserBalance = await userJettonWallet.getJettonBalance();
+        const initialShipBalance = await shipJettonWallet.getJettonBalance();
+
+        // Get initial user TON balance to verify excesses
+        const initialUserTonBalance = await SC_System.ownerAccount.getBalance();
+
+        // Trigger safe exit to mint
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_ANY_MESSAGE, MoveMode.EXIT);
+
+        // Verify complete message chain
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerShip.address,
+            to: SC_System.game.address,
+            success: true,
+            op: Opcodes.OP_REQUEST_MINT,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.game.address,
+            to: SC_System.gameManager.address,
+            success: true,
+            op: Opcodes.OP_FORWARD_MINT_REQUEST,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.gameManager.address,
+            to: SC_System.jettonMinter.address,
+            success: true,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.jettonMinter.address,
+            to: userJettonWalletAddress,
+            success: true,
+        });
+
+        // Verify jettons went to USER's wallet (not ship's wallet)
+        const finalUserBalance = await userJettonWallet.getJettonBalance();
+        expect(finalUserBalance).toBeGreaterThan(initialUserBalance);
+        expect(finalUserBalance).toBeGreaterThanOrEqual(initialUserBalance + accumulatedAmount);
+
+        // Verify jettons did NOT go to ship's wallet
+        const finalShipBalance = await shipJettonWallet.getJettonBalance();
+        expect(finalShipBalance).toBe(initialShipBalance); // Ship wallet should still have 0
+
+        // Verify TransferNotification was sent to user
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: userJettonWalletAddress,
+            to: SC_System.ownerAccount.address, // user (receiver)
+            success: true,
+            op: GameManagerOpcodes.OP_TRANSFER_NOTIFICATION_FOR_RECIPIENT,
+        });
+
+        // Verify excesses were sent to receiver (user who gets jettons)
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: userJettonWalletAddress,
+            to: SC_System.ownerAccount.address, // receiver (user) receives excesses
+            success: true,
+            op: Opcodes.OP_RETURN_EXCESSES_BACK,
+        });
+
+        // Note: We don't check balance increase because user also spent TON on moves
+        // The excesses transaction confirms that excesses were sent to the receiver
     });
 });
 

@@ -61,7 +61,6 @@ fun onInternalMessage(in: InMessage) {
             forwardMsg.send(128);
         }
         UpgradeShipRequest => {
-            var storage = lazy GameV1Storage.load();
             // Only GameManager can request ship upgrades
             assert (in.senderAddress == storage.managerAddress) throw ERR_UNAUTHORIZED;
             

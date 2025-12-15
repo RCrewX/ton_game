@@ -5,7 +5,7 @@ import '@ton/test-utils';
 import { Ship } from '../wrappers/game/Ship';
 import { ContractSystem, initContractSystem } from './test_utils';
 import { MoveMode } from '../wrappers/game/structs';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_ANY_MESSAGE } from '../wrappers/game/types';
+import { Opcodes, GAS_COST_SEND_MOVE, GAS_COST_ANY_MESSAGE } from '../wrappers/game/types';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
 
 describe('Ship Movement', () => {
@@ -15,7 +15,7 @@ describe('Ship Movement', () => {
     }, 100000);
 
     it('Get Ship, pop-up ship, move UP', async () => {
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         let cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
             gameAddress: SC_System.game.address,
             xy: {x: 0n, y: 0n},
@@ -54,7 +54,7 @@ describe('Ship Movement', () => {
     });
 
     it('Get Ship, pop-up ship, move UP x5', async () => {
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
 
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
@@ -68,7 +68,7 @@ describe('Ship Movement', () => {
             op: Opcodes.OP_MOVE_END,
         });
 
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -81,7 +81,7 @@ describe('Ship Movement', () => {
             op: Opcodes.OP_MOVE_END,
         });
 
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -94,7 +94,7 @@ describe('Ship Movement', () => {
             op: Opcodes.OP_MOVE_END,
         });
 
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -107,7 +107,7 @@ describe('Ship Movement', () => {
             op: Opcodes.OP_MOVE_END,
         });
 
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.ownerShip.address,
@@ -136,10 +136,10 @@ describe('Ship Movement', () => {
 
     it('Test move LEFT - verify coordinates and message path', async () => {
         // First move UP to get to (0, 1)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         
         // Now move LEFT from (0, 1) to (-1, 2)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.LEFT);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.LEFT);
         
         const cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
             gameAddress: SC_System.game.address,
@@ -187,10 +187,10 @@ describe('Ship Movement', () => {
 
     it('Test move RIGHT - verify coordinates and message path', async () => {
         // First move UP to get to (0, 1)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         
         // Now move RIGHT from (0, 1) to (1, 2)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.RIGHT);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.RIGHT);
         
         const cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
             gameAddress: SC_System.game.address,
@@ -238,11 +238,11 @@ describe('Ship Movement', () => {
 
     it('Test move EXIT - verify complete message path', async () => {
         // First move UP to get to (0, 1)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         
         // Now move EXIT from (0, 1)
         // EXIT mode: x stays same (0), y increases by 1 -> (0, 2)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.EXIT);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.EXIT);
         
         const cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
             gameAddress: SC_System.game.address,
@@ -283,10 +283,10 @@ describe('Ship Movement', () => {
 
     it('Test complete message path with all opcodes - LEFT move', async () => {
         // Move UP first
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         
         // Move LEFT
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.LEFT);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.LEFT);
         
         const cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
             gameAddress: SC_System.game.address,
@@ -334,10 +334,10 @@ describe('Ship Movement', () => {
 
     it('Test complete message path with all opcodes - RIGHT move', async () => {
         // Move UP first
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         
         // Move RIGHT
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.RIGHT);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.RIGHT);
         
         const cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
             gameAddress: SC_System.game.address,
@@ -385,7 +385,7 @@ describe('Ship Movement', () => {
 
     it('Test multiple moves and verify coordinate progression', async () => {
         // Initial move UP: (0,0) -> (0,1)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         let gameData = await SC_System.ownerShip.getCurrentGameData();
         expect(gameData).not.toBeNull();
         if (gameData) {
@@ -394,7 +394,7 @@ describe('Ship Movement', () => {
         }
         
         // Move RIGHT: (0,1) -> (1,2)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.RIGHT);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.RIGHT);
         gameData = await SC_System.ownerShip.getCurrentGameData();
         expect(gameData).not.toBeNull();
         if (gameData) {
@@ -403,7 +403,7 @@ describe('Ship Movement', () => {
         }
         
         // Move LEFT: (1,2) -> (0,3)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.LEFT);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.LEFT);
         gameData = await SC_System.ownerShip.getCurrentGameData();
         expect(gameData).not.toBeNull();
         if (gameData) {
@@ -412,7 +412,7 @@ describe('Ship Movement', () => {
         }
         
         // Move UP again: (0,3) -> (0,4)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         gameData = await SC_System.ownerShip.getCurrentGameData();
         expect(gameData).not.toBeNull();
         if (gameData) {

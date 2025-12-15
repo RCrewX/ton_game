@@ -75,7 +75,6 @@ struct (0x9a8b9cad) ShipUpgrade {
 struct (0x5a6b7c8d) RequestMint {
     receiver: address
     amount: coins
-    ship: address
 }
 
 

@@ -68,7 +68,6 @@ fun onInternalMessage(in: InMessage) {
                     body: RequestMint {
                         receiver: storage.userAddress,
                         amount: totalReward,
-                        ship: contract.getAddress(),
                     }
                 });
                 requestMintMsg.send(0);
