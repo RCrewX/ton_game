@@ -3,7 +3,7 @@ import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem } from './test_utils';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
-import { GAS_COST_REDIRECT_MESSAGE } from '../wrappers/subcontract/types';
+import { GAS_COST_REDIRECT_MESSAGE, encodeRedirectMessage } from '../wrappers/subcontract/types';
 import { Ship } from '../wrappers/game/Ship';
 import { MoveMode } from '../wrappers/game/structs';
 import { encodeRequestToMove } from '../wrappers/game/types';
@@ -217,6 +217,101 @@ describe('Subcontract', () => {
 
         expect(ownerAddress).toEqualAddress(SC_System.ownerAccount.address);
         expect(id).toBe(subcontractId);
+
+        // Test getting address of owned subcontract
+        const ownedSubcontractId = 10n;
+        const ownedSubcontractAddress = await subcontract.getSubcontractAddress(ownedSubcontractId);
+        
+        // Verify the address matches the calculated address
+        const expectedSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: subcontract.address,
+            id: ownedSubcontractId,
+        }, SC_System.subcontractCode));
+        
+        expect(ownedSubcontractAddress).toEqualAddress(expectedSubcontract.address);
+    });
+
+    it('Test nested subcontracts - owner -> subcontract -> subcontract -> ship', async () => {
+        // Create first level subcontract (owned by owner)
+        const firstLevelId = 100n;
+        const firstLevelSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: firstLevelId,
+        }, SC_System.subcontractCode));
+
+        await firstLevelSubcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Get address of second level subcontract (owned by first level)
+        const secondLevelId = 200n;
+        const secondLevelSubcontractAddress = await firstLevelSubcontract.getSubcontractAddress(secondLevelId);
+        
+        // Create and deploy second level subcontract
+        const secondLevelSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: firstLevelSubcontract.address,
+            id: secondLevelId,
+        }, SC_System.subcontractCode));
+
+        await secondLevelSubcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Verify the address matches
+        expect(secondLevelSubcontractAddress).toEqualAddress(secondLevelSubcontract.address);
+
+        // Create ship owned by second level subcontract
+        const shipForNestedSubcontract = SC_System.blockchain.openContract(Ship.createFromConfig({
+            userAddress: secondLevelSubcontract.address,
+            gameAddress: SC_System.game.address,
+            coordinateCellCode: SC_System.coordinateCellCode,
+        }, SC_System.shipCode));
+
+        await shipForNestedSubcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('5'));
+
+        // Create RequestToMove message
+        const moveMessage = encodeRequestToMove({ mode: MoveMode.UP });
+        const forwardAmount = toNano('1');
+
+        // Create RedirectMessage to be sent to second level subcontract (which will forward to ship)
+        const redirectToShipMessage = encodeRedirectMessage({
+            queryId: 0n,
+            destination: shipForNestedSubcontract.address,
+            messageBody: moveMessage,
+            forwardTonAmount: forwardAmount,
+        });
+
+        // Redirect through first level subcontract to second level subcontract
+        // The body contains a RedirectMessage that second level will forward to ship
+        SC_System.messageResult = await firstLevelSubcontract.sendRedirectMessage(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REDIRECT_MESSAGE + forwardAmount,
+            secondLevelSubcontract.address,
+            redirectToShipMessage,
+            forwardAmount
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: firstLevelSubcontract.address,
+            success: true,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: firstLevelSubcontract.address,
+            to: secondLevelSubcontract.address,
+            success: true,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: secondLevelSubcontract.address,
+            to: shipForNestedSubcontract.address,
+            success: true,
+            op: Opcodes.OP_REQUEST_TO_MOVE,
+        });
+
+        // Verify ship processed the move
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            to: shipForNestedSubcontract.address,
+            success: true,
+            op: Opcodes.OP_MOVE_END,
+        });
     });
 });
 

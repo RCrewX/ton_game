@@ -54,3 +54,7 @@ get fun get_id(): uint256 {
     return storage.id;
 }
 
+get fun get_subcontract_address(id: uint256): address {
+    return calcAddressOfSubcontract(contract.getAddress(), id, contract.getCode());
+}
+

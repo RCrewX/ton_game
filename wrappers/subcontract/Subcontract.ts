@@ -59,5 +59,12 @@ export class Subcontract implements Contract {
         const result = await provider.get('get_id', []);
         return result.stack.readBigNumber();
     }
+
+    async getSubcontractAddress(provider: ContractProvider, id: bigint): Promise<Address> {
+        const result = await provider.get('get_subcontract_address', [
+            { type: 'int', value: id }
+        ]);
+        return result.stack.readAddress();
+    }
 }
 
