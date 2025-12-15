@@ -27,6 +27,7 @@ export type ContractSystem = {
     coordinateCellCode: Cell;
     jettonWalletCode: Cell;
     jettonMinterCode: Cell;
+    subcontractCode: Cell;
 
     messageResult: any;
 }
@@ -41,6 +42,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
     let coordinateCellCode = await compile('CoordinateCell');
     let jettonWalletCode = await compile('JettonWallet');
     let jettonMinterCode = await compile('JettonMinter');
+    let subcontractCode = await compile('Subcontract');
 
     // Deploy GameManager first
     let gameManager = blockchain.openContract(GameManager.createFromConfig({
@@ -187,6 +189,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
         coordinateCellCode,
         jettonMinterCode,
         jettonWalletCode,
+        subcontractCode,
         messageResult,
     }
 }

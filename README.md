@@ -13,7 +13,8 @@ This project implements a complete game system on TON blockchain using Tolk (Tac
 - **Rewards**: Earn jettons by exploring cells and completing safe exits
 - **Ship Upgrades**: Transfer jettons to upgrade ship HP
 - **First Explorer Rights**: First player to explore a cell can withdraw accumulated TON and jettons
-- **Deterministic Addresses**: Ships and cells have deterministic addresses for efficient on-demand deployment
+- **Deterministic Addresses**: Ships, cells, and subcontracts have deterministic addresses for efficient on-demand deployment
+- **Subcontract System**: Technical contracts for message redirection, allowing owners to deploy ships for users without wallets
 
 ## Project Structure
 
@@ -22,6 +23,7 @@ ton_game/
 ├── contracts/          # Tolk smart contract source code
 │   ├── game/          # Game, Ship, and CoordinateCell contracts
 │   ├── game_manager/  # GameManager contract
+│   ├── subcontract/   # Subcontract contract (message redirection)
 │   └── jetton/        # Jetton minter and wallet contracts
 ├── wrappers/          # TypeScript wrapper classes for contracts
 ├── tests/             # Comprehensive test suite
@@ -220,6 +222,13 @@ The first player to explore a cell becomes the "first explorer" and can:
 - Standard TON jetton implementation
 - Used for game rewards and upgrades
 
+### Subcontract
+- Technical contract for message redirection
+- Created with owner address and unique ID
+- Owner can redirect any message to any destination
+- Enables deploying ships for users without wallets
+- Use case: Owner deploys ships with SubContract(id) as userAddress, then redirects move requests through subcontract to ship
+
 ## Testing
 
 The project includes comprehensive tests covering:
@@ -232,6 +241,7 @@ The project includes comprehensive tests covering:
 - State queries
 - Gas consumption
 - Address calculations
+- Subcontract message redirection
 
 Run specific test files:
 ```bash
@@ -247,7 +257,7 @@ Estimated gas costs (in TON):
 - `GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS`: 0.015 TON
 - `GAS_COST_SET_JETTON_MINTER_ADDRESS`: 0.02 TON
 - `GAS_COST_SET_GAMES`: 0.015 TON
-- `GAS_COST_REDIRECT_MESSAGE`: 0.005 TON
+- `GAS_COST_REDIRECT_MESSAGE`: 0.005 TON (GameManager and Subcontract)
 
 ## Constants
 
