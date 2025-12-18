@@ -3,7 +3,8 @@ const BASIC_STORAGE_TAX = ton("0.01");
 
 // Gas costs from gas consumption tests (in TON)
 // These are maximum expected costs for each operation
-const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.005"); // 0.0031816 + buffer
+const GAS_COST_FORWARD: coins = ton("0.005"); // 0.0031816 + buffer
+const GAS_COST_FORWARD_WITH_INIT: coins = ton("0.01"); // Higher cost for deploy messages
 
 // Errors
 const ERR_UNAUTHORIZED = 901;
@@ -26,26 +27,37 @@ fun SubcontractStorage.save(self) {
 
 // Messages
 
-struct (0x3b4c5d6e) RedirectMessage {
+// Forward message without stateInit (no deploy)
+struct (0x3b4c5d6e) Forward {
     queryId: uint64
     destination: address
-    messageBody: cell
     forwardTonAmount: coins
+    bounce: bool  // true = Bounce, false = NoBounce
+    sendMode: uint8
+    messageBody: cell
 }
 
-type AnyMessage = ReturnExcessesBack | LiteralyAnything
-
-struct (0xd53276db) ReturnExcessesBack {
+// Forward message with stateInit (for deploy)
+struct (0x4c5d6e7f) ForwardWithInit {
     queryId: uint64
-}
-
-struct (0x0a1b2c3d) LiteralyAnything {
-    queryId: uint64
+    destination: address
+    forwardTonAmount: coins
+    sendMode: uint8
+    stateInit: cell  // StateInit cell for contract deployment
+    messageBody: cell
 }
 
 fun reserveValue(msgValue: coins, delta: coins = 0) {
     val base = (contract.getOriginalBalance() - msgValue) + BASIC_STORAGE_TAX;
-    reserveToncoinsOnBalance(base + delta, RESERVE_MODE_EXACT_AMOUNT);
+    val reserveAmount = base + delta;
+    // Ensure reserve is at least BASIC_STORAGE_TAX (can't reserve negative or too low)
+    var finalReserve: coins;
+    if (reserveAmount < BASIC_STORAGE_TAX) {
+        finalReserve = BASIC_STORAGE_TAX;
+    } else {
+        finalReserve = reserveAmount;
+    }
+    reserveToncoinsOnBalance(finalReserve, RESERVE_MODE_EXACT_AMOUNT);
 }
 
 fun calcDeployedSubcontract(

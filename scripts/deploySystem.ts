@@ -5,6 +5,7 @@ import { Game } from '../wrappers/game/Game';
 import { Ship } from '../wrappers/game/Ship';
 import { JettonMinter, jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
+import { Subcontract } from '../wrappers/subcontract/Subcontract';
 import { GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import * as dotenv from 'dotenv';
 import { WalletContractV4, WalletContractV5R1 } from '@ton/ton';
@@ -44,6 +45,10 @@ interface DeploymentData {
         nonBounceable: string;
     };
     ownerShip?: {
+        bounceable: string;
+        nonBounceable: string;
+    };
+    ship_station?: {
         bounceable: string;
         nonBounceable: string;
     };
@@ -257,6 +262,7 @@ export async function run(provider: NetworkProvider) {
         const coordinateCellCode = await compile('CoordinateCell');
         const jettonWalletCode = await compile('JettonWallet');
         const jettonMinterCode = await compile('JettonMinter');
+        const subcontractCode = await compile('Subcontract');
         console.log('Contracts compiled successfully');
 
         // Deploy GameManager first
@@ -527,6 +533,30 @@ export async function run(provider: NetworkProvider) {
         console.log('Owner Ship (non-bounceable):', deploymentData.ownerShip.nonBounceable);
         saveBuildFile(deploymentData, buildFilePath);
 
+        // Deploy Ship Station (Subcontract with id=1)
+        const shipStation = provider.open(
+            Subcontract.createFromConfig(
+                {
+                    ownerAddress: ownerAddress,
+                    id: 1n,
+                },
+                subcontractCode
+            )
+        );
+
+        await checkAndDeploy(
+            provider,
+            shipStation,
+            'Ship Station',
+            shipStation.address,
+            async () => await shipStation.sendDeploy(provider.sender(), toNano('0.5'))
+        );
+        
+        deploymentData.ship_station = formatAddress(shipStation.address, isTestnet);
+        console.log('Ship Station (bounceable):', deploymentData.ship_station.bounceable);
+        console.log('Ship Station (non-bounceable):', deploymentData.ship_station.nonBounceable);
+        saveBuildFile(deploymentData, buildFilePath);
+
         deploymentData.status = 'completed';
         saveBuildFile(deploymentData, buildFilePath);
 
@@ -544,6 +574,8 @@ export async function run(provider: NetworkProvider) {
         console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet!.nonBounceable);
         console.log('Owner Ship (bounceable):', deploymentData.ownerShip!.bounceable);
         console.log('Owner Ship (non-bounceable):', deploymentData.ownerShip!.nonBounceable);
+        console.log('Ship Station (bounceable):', deploymentData.ship_station!.bounceable);
+        console.log('Ship Station (non-bounceable):', deploymentData.ship_station!.nonBounceable);
         console.log('Owner jetton balance:', deploymentData.ownerJettonBalance);
         console.log(`\nBuild file saved to: ${buildFilePath}`);
         console.log('========================\n');

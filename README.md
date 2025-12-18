@@ -102,6 +102,8 @@ This will:
 npm run deploy
 # or
 npx blueprint run deploySystem
+# or
+clear && pnpm build --all && pnpm blueprint run deploySystem --testnet --mnemonic
 ```
 
 The deployment script will:
