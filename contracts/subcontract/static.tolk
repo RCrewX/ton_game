@@ -1,10 +1,12 @@
 // Constants
 const BASIC_STORAGE_TAX = ton("0.01");
+const EXCESS_THRESHOLD = ton("0.5"); // Minimum excess amount to forward to owner
 
 // Gas costs from gas consumption tests (in TON)
 // These are maximum expected costs for each operation
 const GAS_COST_FORWARD: coins = ton("0.005"); // 0.0031816 + buffer
 const GAS_COST_FORWARD_WITH_INIT: coins = ton("0.01"); // Higher cost for deploy messages
+const GAS_COST_WITHDRAW: coins = ton("0.005"); // Gas cost for withdraw operation
 
 // Errors
 const ERR_UNAUTHORIZED = 901;
@@ -45,6 +47,16 @@ struct (0x4c5d6e7f) ForwardWithInit {
     sendMode: uint8
     stateInit: cell  // StateInit cell for contract deployment
     messageBody: cell
+}
+
+// Withdraw message - owner can withdraw all funds (leaving BASIC_STORAGE_TAX for gas safety)
+struct (0x5d6e7f8a) Withdraw {
+    queryId: uint64
+}
+
+// Excess message (from jetton transfers or other operations)
+struct (0xd53276db) ReturnExcessesBack {
+    queryId: uint64
 }
 
 fun reserveValue(msgValue: coins, delta: coins = 0) {

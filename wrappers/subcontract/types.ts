@@ -9,6 +9,8 @@ export const GAS_COST_FORWARD_WITH_INIT = toNano("0.01"); // Higher cost for dep
 export const Opcodes = {
     OP_FORWARD: 0x3b4c5d6e,
     OP_FORWARD_WITH_INIT: 0x4c5d6e7f,
+    OP_WITHDRAW: 0x5d6e7f8a,
+    OP_RETURN_EXCESSES_BACK: 0xd53276db,
 } as const;
 
 // Message types
@@ -28,6 +30,14 @@ export type ForwardWithInit = {
     sendMode: number;
     stateInit: Cell; // StateInit cell for contract deployment
     messageBody: Cell;
+};
+
+export type Withdraw = {
+    queryId: bigint;
+};
+
+export type ReturnExcessesBack = {
+    queryId: bigint;
 };
 
 // Encode functions
@@ -52,6 +62,20 @@ export function encodeForwardWithInit(msg: ForwardWithInit): Cell {
         .storeUint(msg.sendMode, 8)
         .storeRef(msg.stateInit)
         .storeRef(msg.messageBody)
+        .endCell();
+}
+
+export function encodeWithdraw(msg: Withdraw): Cell {
+    return beginCell()
+        .storeUint(Opcodes.OP_WITHDRAW, 32)
+        .storeUint(msg.queryId, 64)
+        .endCell();
+}
+
+export function encodeReturnExcessesBack(msg: ReturnExcessesBack): Cell {
+    return beginCell()
+        .storeUint(Opcodes.OP_RETURN_EXCESSES_BACK, 32)
+        .storeUint(msg.queryId, 64)
         .endCell();
 }
 

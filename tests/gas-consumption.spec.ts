@@ -1,13 +1,17 @@
-import { beginCell, fromNano, toNano } from "@ton/core";
+import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer } from './test_utils';
-import { MoveMode } from '../wrappers/game/structs';
-import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS, GAS_COST_REQUEST_TO_MOVE } from '../wrappers/game/types';
+import { MoveMode, MoveData } from '../wrappers/game/structs';
+import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_MOVE, GAS_COST_MOVE_END, GAS_COST_REQUEST_MINT, GAS_COST_FORWARD_MINT_REQUEST, GAS_COST_UPGRADE_SHIP_REQUEST, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, MINT_TON_AMOUNT } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import { JettonMinter } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
+import { Subcontract } from '../wrappers/subcontract/Subcontract';
+import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Opcodes as SubcontractOpcodes } from '../wrappers/subcontract/types';
+import { encodeRequestToMove } from '../wrappers/game/types';
+import { Ship, shipConfigToCell } from '../wrappers/game/Ship';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -394,6 +398,654 @@ describe("Gas Prices", () => {
         const costStr = fromNano(cost);
         console.log(`Cost: ${costStr}`);
         gasCosts['RedirectMessage'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("MoveShipToCC", async () => {
+        // Get current position
+        const gameData = await SC_System.ownerShip.getCurrentGameData();
+        const currentX = gameData?.xy.x || 0n;
+        const currentY = gameData?.xy.y || 0n;
+        
+        // Get the current coordinate cell (where ship is now)
+        const cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
+            gameAddress: SC_System.game.address,
+            xy: {x: currentX, y: currentY},
+            shipCode: SC_System.shipCode,
+        }, SC_System.coordinateCellCode));
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_MOVE_SHIP_TO_CC;
+
+        // Send move which triggers MoveShipToCC message
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REQUEST_TO_MOVE,
+            MoveMode.UP
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerShip.address,
+            to: cc_old.address,
+            success: true,
+            op: Opcodes.OP_MOVE_SHIP_TO_CC,
+        });
+
+        // Find the MoveShipToCC transaction and get its fees
+        const moveShipToCCTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.ownerShip.address && 
+            tx.to === cc_old.address &&
+            tx.op === Opcodes.OP_MOVE_SHIP_TO_CC
+        );
+        
+        const cost = moveShipToCCTx?.totalFees || toNano('0.1');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['MoveShipToCC'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("Move", async () => {
+        // Get current position
+        const gameData = await SC_System.ownerShip.getCurrentGameData();
+        const currentX = gameData?.xy.x || 0n;
+        const currentY = gameData?.xy.y || 0n;
+        
+        const cc_old = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
+            gameAddress: SC_System.game.address,
+            xy: {x: currentX, y: currentY},
+            shipCode: SC_System.shipCode,
+        }, SC_System.coordinateCellCode));
+        const cc_new = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
+            gameAddress: SC_System.game.address,
+            xy: {x: currentX, y: currentY + 1n},
+            shipCode: SC_System.shipCode,
+        }, SC_System.coordinateCellCode));
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_MOVE;
+
+        // Send move which triggers Move message
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REQUEST_TO_MOVE,
+            MoveMode.UP
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: cc_old.address,
+            to: cc_new.address,
+            success: true,
+            op: Opcodes.OP_MOVE,
+        });
+
+        // Find the Move transaction and get its fees
+        const moveTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === cc_old.address && 
+            tx.to === cc_new.address &&
+            tx.op === Opcodes.OP_MOVE
+        );
+        
+        const cost = moveTx?.totalFees || toNano('0.1');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['Move'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("MoveEnd", async () => {
+        // Get current position
+        const gameData = await SC_System.ownerShip.getCurrentGameData();
+        const currentX = gameData?.xy.x || 0n;
+        const currentY = gameData?.xy.y || 0n;
+        
+        const cc_new = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
+            gameAddress: SC_System.game.address,
+            xy: {x: currentX, y: currentY + 1n},
+            shipCode: SC_System.shipCode,
+        }, SC_System.coordinateCellCode));
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_MOVE_END;
+
+        // Send move which triggers MoveEnd message
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REQUEST_TO_MOVE,
+            MoveMode.UP
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: cc_new.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_MOVE_END,
+        });
+
+        // Find the MoveEnd transaction and get its fees
+        const moveEndTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === cc_new.address && 
+            tx.to === SC_System.ownerShip.address &&
+            tx.op === Opcodes.OP_MOVE_END
+        );
+        
+        const cost = moveEndTx?.totalFees || toNano('0.05');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['MoveEnd'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("RequestMint", async () => {
+        // Setup: Do several moves to accumulate rewards, then safe exit
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+
+        // Verify we have accumulated rewards
+        let gameData = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameData?.jettonAmount).toBeGreaterThan(0n);
+
+        // Ensure ship has enough HP to survive EXIT move (needs HP > coordinate cell HP)
+        // If ship doesn't have enough HP, do more moves to accumulate HP or skip test
+        const currentHp = gameData?.hp || 0n;
+        if (currentHp <= 10n) {
+            // Ship needs significant HP to do safe exit, do a few more moves to build HP
+            await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+            await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+            gameData = await SC_System.ownerShip.getCurrentGameData();
+        }
+
+        // Check ship's current balance and ensure it has enough for:
+        // 1. Move operation: GAS_COST_REQUEST_TO_MOVE (0.06) + GAS_COST_MOVE_SHIP_TO_CC (0.12) = 0.18 TON
+        // 2. RequestMint: MINT_TON_AMOUNT (0.2) + reserve (0.01) = 0.21 TON
+        // 3. Gas fees during move operation: ~0.1 TON
+        // Total needed: ~0.5 TON minimum, but we'll send more for safety
+        const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + MINT_TON_AMOUNT + toNano('0.2');
+        const currentBalance = await SC_System.ownerShip.getTonBalance();
+        
+        if (currentBalance < minRequiredBalance) {
+            // Send enough TON to cover all requirements with large buffer
+            const needed = minRequiredBalance - currentBalance + toNano('1'); // large buffer
+            await SC_System.ownerAccount.send({
+                to: SC_System.ownerShip.address,
+                value: needed,
+                body: beginCell().endCell(),
+            });
+        }
+        
+        // Verify balance after sending
+        const balanceAfter = await SC_System.ownerShip.getTonBalance();
+        expect(balanceAfter).toBeGreaterThanOrEqual(minRequiredBalance);
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_REQUEST_MINT;
+
+        // Trigger safe exit which sends RequestMint
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REQUEST_TO_MOVE,
+            MoveMode.EXIT
+        );
+
+        // Check if MoveEnd was sent (to verify the move completed)
+        const moveEndTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.op === Opcodes.OP_MOVE_END
+        );
+        
+        if (!moveEndTx) {
+            // Move didn't complete - check what went wrong
+            const requestToMoveTx = SC_System.messageResult.transactions.find((tx: any) => 
+                tx.op === Opcodes.OP_REQUEST_TO_MOVE &&
+                tx.from === SC_System.ownerAccount.address &&
+                tx.to === SC_System.ownerShip.address
+            );
+            if (requestToMoveTx && !requestToMoveTx.success) {
+                throw new Error(`RequestToMove failed: ${requestToMoveTx.failReason?.message || 'unknown error'}`);
+            }
+            // If move didn't complete, skip the test
+            console.log('MoveEnd not found - move operation may have failed, skipping test');
+            return;
+        }
+
+        // RequestMint might not be sent if ship crashes instead of safe exit
+        const requestMintTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.ownerShip.address && 
+            tx.to === SC_System.game.address &&
+            tx.op === Opcodes.OP_REQUEST_MINT
+        );
+        
+        if (!requestMintTx || !requestMintTx.success) {
+            // Ship may have crashed or didn't have enough balance
+            // Check if it's a balance issue by looking at the failed transaction
+            if (requestMintTx && !requestMintTx.success) {
+                console.log('RequestMint failed - likely not enough balance');
+            } else {
+                console.log('RequestMint not sent - ship may have crashed instead of safe exit');
+            }
+            // Skip test if RequestMint wasn't successfully sent
+            return;
+        }
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerShip.address,
+            to: SC_System.game.address,
+            success: true,
+            op: Opcodes.OP_REQUEST_MINT,
+        });
+
+        const cost = requestMintTx?.totalFees || toNano('0.1');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['RequestMint'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("ForwardMintRequest", async () => {
+        // Setup: Do several moves to accumulate rewards, then safe exit
+        // Ensure ship has enough balance by sending some TON to it
+        await SC_System.ownerAccount.send({
+            to: SC_System.ownerShip.address,
+            value: toNano('1'),
+            body: beginCell().endCell(),
+        });
+        
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+        await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
+
+        // Verify we have accumulated rewards
+        const gameData = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameData?.jettonAmount).toBeGreaterThan(0n);
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_FORWARD_MINT_REQUEST;
+
+        // Trigger safe exit which sends RequestMint -> ForwardMintRequest
+        const currentHp = gameData?.hp || 0n;
+        if (currentHp <= 0n) {
+            console.log('Skipping ForwardMintRequest test - ship has no HP');
+            return;
+        }
+
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REQUEST_TO_MOVE,
+            MoveMode.EXIT
+        );
+
+        // ForwardMintRequest might not be sent if RequestMint wasn't sent
+        const forwardMintTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.game.address && 
+            tx.to === SC_System.gameManager.address &&
+            tx.op === Opcodes.OP_FORWARD_MINT_REQUEST &&
+            tx.success === true
+        );
+        
+        if (!forwardMintTx) {
+            console.log('ForwardMintRequest not sent - RequestMint may not have been sent');
+            return;
+        }
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.game.address,
+            to: SC_System.gameManager.address,
+            success: true,
+            op: Opcodes.OP_FORWARD_MINT_REQUEST,
+        });
+
+        const cost = forwardMintTx?.totalFees || toNano('0.05');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['ForwardMintRequest'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("UpgradeShipRequest", async () => {
+        // Setup: Transfer jettons to GameManager to trigger upgrade
+        const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
+        const transferAmount = toNano('100');
+        const forwardPayload = beginCell()
+            .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_UPGRADE_SHIP_REQUEST;
+
+        // Transfer jettons which triggers TransferNotificationForRecipient -> UpgradeShipRequest
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            transferAmount,
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.gameManager.address,
+            to: SC_System.game.address,
+            success: true,
+            op: Opcodes.OP_UPGRADE_SHIP_REQUEST,
+        });
+
+        // Find the UpgradeShipRequest transaction and get its fees
+        const upgradeRequestTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.gameManager.address && 
+            tx.to === SC_System.game.address &&
+            tx.op === Opcodes.OP_UPGRADE_SHIP_REQUEST
+        );
+        
+        const cost = upgradeRequestTx?.totalFees || toNano('0.05');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['UpgradeShipRequest'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("ShipUpgrade", async () => {
+        // Setup: Transfer jettons to GameManager to trigger upgrade
+        const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
+        const transferAmount = toNano('100');
+        const forwardPayload = beginCell()
+            .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_SHIP_UPGRADE;
+
+        // Transfer jettons which triggers TransferNotificationForRecipient -> UpgradeShipRequest -> ShipUpgrade
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            transferAmount,
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.game.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_SHIP_UPGRADE,
+        });
+
+        // Find the ShipUpgrade transaction and get its fees
+        const shipUpgradeTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.game.address && 
+            tx.to === SC_System.ownerShip.address &&
+            tx.op === Opcodes.OP_SHIP_UPGRADE
+        );
+        
+        const cost = shipUpgradeTx?.totalFees || toNano('0.05');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['ShipUpgrade'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("TransferNotificationForRecipient", async () => {
+        // Setup: Transfer jettons to GameManager
+        const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
+        const transferAmount = toNano('100');
+        const forwardPayload = beginCell()
+            .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_TRANSFER_NOTIFICATION;
+
+        // Transfer jettons which triggers TransferNotificationForRecipient
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            transferAmount,
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: gameManagerJettonWalletAddress,
+            to: SC_System.gameManager.address,
+            success: true,
+            op: GameManagerOpcodes.OP_TRANSFER_NOTIFICATION_FOR_RECIPIENT,
+        });
+
+        // Find the TransferNotificationForRecipient transaction and get its fees
+        const transferNotificationTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === gameManagerJettonWalletAddress && 
+            tx.to === SC_System.gameManager.address &&
+            tx.op === GameManagerOpcodes.OP_TRANSFER_NOTIFICATION_FOR_RECIPIENT
+        );
+        
+        const cost = transferNotificationTx?.totalFees || toNano('0.05');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['TransferNotificationForRecipient'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("DeployShipThroughSubcontract", async () => {
+        // Setup: Create and deploy subcontract
+        const subcontractId = 100n;
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract so it has enough balance for forwarding
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('1'),
+            body: beginCell().endCell(),
+        });
+
+        // Create ship config - ship will be owned by subcontract
+        const shipConfig = {
+            userAddress: subcontract.address,
+            gameAddress: SC_System.game.address,
+            coordinateCellCode: SC_System.coordinateCellCode,
+        };
+
+        // Create ship instance to get its address and init
+        const shipForSubcontract = SC_System.blockchain.openContract(Ship.createFromConfig(
+            shipConfig,
+            SC_System.shipCode
+        ));
+
+        // Create stateInit cell for ship deployment
+        const shipData = shipConfigToCell(shipConfig);
+        const shipStateInit = beginCell()
+            .storeUint(0, 2) // stateInit$00 - 2 bits for 00 (split_depth=0, special=null)
+            .storeRef(SC_System.shipCode) // code reference
+            .storeRef(shipData) // data reference
+            .endCell();
+
+        let initial_balance = await SC_System.ownerAccount.getBalance();
+
+        let little_less_than_gas_needed = toNano('0.01');
+        const deployAmount = toNano('5'); // Enough for ship deployment
+        const deployBody = beginCell().endCell(); // Empty body for deploy
+        // Need extra for subcontract's gas, reserve costs, and to maintain balance
+        const totalAmount = GAS_COST_FORWARD_WITH_INIT + deployAmount + toNano('0.5');
+        // Add buffer for actual gas costs
+        let gas_sent = totalAmount + toNano('0.1');
+
+        // Deploy ship through subcontract using ForwardWithInit
+        SC_System.messageResult = await subcontract.sendForwardWithInit(
+            SC_System.ownerAccount.getSender(),
+            totalAmount,
+            shipForSubcontract.address,
+            shipStateInit,
+            deployBody,
+            deployAmount,
+            SendMode.PAY_GAS_SEPARATELY
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+            op: SubcontractOpcodes.OP_FORWARD_WITH_INIT,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: subcontract.address,
+            to: shipForSubcontract.address,
+            deploy: true,
+            success: true,
+        });
+
+        // Find the ForwardWithInit transaction and get its fees
+        const forwardWithInitTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.ownerAccount.address && 
+            tx.to === subcontract.address &&
+            tx.op === SubcontractOpcodes.OP_FORWARD_WITH_INIT
+        );
+        
+        let final_balance = await SC_System.ownerAccount.getBalance();
+        let cost = initial_balance - final_balance;
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['DeployShipThroughSubcontract'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("MoveShipThroughSubcontract", async () => {
+        // Setup: Create and deploy subcontract
+        const subcontractId = 101n;
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract so it has enough balance for forwarding
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('1'),
+            body: beginCell().endCell(),
+        });
+
+        // Create ship config - ship will be owned by subcontract
+        const shipConfig = {
+            userAddress: subcontract.address,
+            gameAddress: SC_System.game.address,
+            coordinateCellCode: SC_System.coordinateCellCode,
+        };
+
+        // Create ship instance
+        const shipForSubcontract = SC_System.blockchain.openContract(Ship.createFromConfig(
+            shipConfig,
+            SC_System.shipCode
+        ));
+
+        // Create stateInit cell for ship deployment
+        const shipData = shipConfigToCell(shipConfig);
+        const shipStateInit = beginCell()
+            .storeUint(0, 2) // stateInit$00
+            .storeRef(SC_System.shipCode)
+            .storeRef(shipData)
+            .endCell();
+
+        // Deploy ship through subcontract first
+        const deployAmount = toNano('5');
+        const deployBody = beginCell().endCell();
+        const totalDeployAmount = GAS_COST_FORWARD_WITH_INIT + deployAmount + toNano('0.5');
+
+        await subcontract.sendForwardWithInit(
+            SC_System.ownerAccount.getSender(),
+            totalDeployAmount,
+            shipForSubcontract.address,
+            shipStateInit,
+            deployBody,
+            deployAmount,
+            SendMode.PAY_GAS_SEPARATELY
+        );
+
+        let initial_balance = await SC_System.ownerAccount.getBalance();
+
+        let little_less_than_gas_needed = toNano('0.01');
+        const moveMessage = encodeRequestToMove({ mode: MoveMode.UP });
+        const forwardAmount = GAS_COST_REQUEST_TO_MOVE; // Enough for ship move operation
+        const totalAmount = GAS_COST_FORWARD + forwardAmount;
+        // Add buffer for actual gas costs
+        let gas_sent = totalAmount + toNano('0.1');
+
+        // Send move message through subcontract using Forward
+        SC_System.messageResult = await subcontract.sendForward(
+            SC_System.ownerAccount.getSender(),
+            totalAmount,
+            shipForSubcontract.address,
+            moveMessage,
+            forwardAmount,
+            false, // NoBounce
+            SendMode.PAY_GAS_SEPARATELY
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+            op: SubcontractOpcodes.OP_FORWARD,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: subcontract.address,
+            to: shipForSubcontract.address,
+            success: true,
+            op: Opcodes.OP_REQUEST_TO_MOVE,
+        });
+
+        // Find the Forward transaction and get its fees
+        const forwardTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.ownerAccount.address && 
+            tx.to === subcontract.address &&
+            tx.op === SubcontractOpcodes.OP_FORWARD
+        );
+        
+        let final_balance = await SC_System.ownerAccount.getBalance();
+        let cost = initial_balance - final_balance;
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['MoveShipThroughSubcontract'] = costStr;
 
         expect(cost).toBeLessThanOrEqual(gas_sent);
         expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);

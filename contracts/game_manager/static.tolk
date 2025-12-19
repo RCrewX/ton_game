@@ -3,10 +3,10 @@ const BASIC_STORAGE_TAX = ton("0.01");
 const MINT_TON_AMOUNT: coins = ton("0.1");
 
 // Gas costs from gas consumption tests (in TON)
-// These are maximum expected costs for each operation
-const GAS_COST_SET_JETTON_MINTER_ADDRESS: coins = ton("0.02"); // 0.018347201 + buffer
-const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141708 + buffer
-const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.005"); // 0.0031816 + buffer
+// These are maximum expected costs for each operation (updated from test results)
+const GAS_COST_SET_JETTON_MINTER_ADDRESS: coins = ton("0.019"); // 0.0184204 + buffer
+const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141556 + buffer
+const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.009"); // 0.0081816 + buffer
 
 // Errors
 const ERR_UNAUTHORIZED = 901;

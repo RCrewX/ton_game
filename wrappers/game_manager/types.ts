@@ -2,9 +2,9 @@ import { Address, beginCell, Cell, toNano } from '@ton/core';
 
 // Gas costs from gas consumption tests (in TON)
 // These match the constants in contracts/game_manager/static.tolk
-export const GAS_COST_SET_JETTON_MINTER_ADDRESS = toNano("0.02"); // 0.018347201 + buffer
-export const GAS_COST_SET_GAMES = toNano("0.015"); // 0.0141708 + buffer
-export const GAS_COST_REDIRECT_MESSAGE = toNano("0.005"); // 0.0031816 + buffer
+export const GAS_COST_SET_JETTON_MINTER_ADDRESS = toNano("0.019"); // 0.0184204 + buffer
+export const GAS_COST_SET_GAMES = toNano("0.015"); // 0.0141556 + buffer
+export const GAS_COST_REDIRECT_MESSAGE = toNano("0.009"); // 0.0081816 + buffer
 
 // Opcodes
 export const Opcodes = {

@@ -606,5 +606,211 @@ describe('Subcontract', () => {
             op: Opcodes.OP_MOVE_END,
         });
     });
+
+    it('Test Subcontract withdraw - owner can withdraw all funds leaving BASIC_STORAGE_TAX', async () => {
+        const subcontractId = 7n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract with some TON
+        const fundAmount = toNano('2');
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: fundAmount,
+        });
+
+        // Get initial owner balance
+        const initialOwnerBalance = await SC_System.ownerAccount.getBalance();
+
+        // Withdraw funds
+        SC_System.messageResult = await subcontract.sendWithdraw(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.01')
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+        });
+
+        // Verify funds were sent to owner
+        // The contract had initial deployment funds (0.5 TON) plus the fundAmount (2 TON)
+        // So withdrawn amount should be approximately (0.5 + 2) - BASIC_STORAGE_TAX
+        const withdrawTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.inMessage?.info.src?.equals(subcontract.address) === true &&
+            tx.inMessage?.info.dest?.equals(SC_System.ownerAccount.address) === true
+        );
+        expect(withdrawTx).toBeDefined();
+        if (withdrawTx?.inMessage?.info.value) {
+            const withdrawnAmount = withdrawTx.inMessage.info.value.coins;
+            // Should be approximately (deployment + fundAmount) - BASIC_STORAGE_TAX
+            // Deployment was 0.5 TON, fundAmount is 2 TON, so total ~2.5 TON
+            // After BASIC_STORAGE_TAX (0.01 TON), should be ~2.49 TON
+            expect(withdrawnAmount).toBeGreaterThan(toNano('2.4'));
+        }
+
+        // Verify owner balance increased
+        const finalOwnerBalance = await SC_System.ownerAccount.getBalance();
+        expect(finalOwnerBalance).toBeGreaterThan(initialOwnerBalance);
+    });
+
+    it('Test Subcontract withdraw - unauthorized user cannot withdraw', async () => {
+        const subcontractId = 8n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('1'),
+        });
+
+        // Create unauthorized sender
+        const unauthorizedAccount = await SC_System.blockchain.treasury('unauthorized');
+        
+        // Try to withdraw as unauthorized user - should fail
+        SC_System.messageResult = await subcontract.sendWithdraw(
+            unauthorizedAccount.getSender(),
+            toNano('0.01')
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: unauthorizedAccount.address,
+            to: subcontract.address,
+            success: false,
+            exitCode: 901, // ERR_UNAUTHORIZED
+        });
+    });
+
+    it('Test Subcontract excess handling - excess > 0.5 TON is forwarded to owner', async () => {
+        const subcontractId = 9n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Send excess message with value > 0.5 TON
+        const excessAmount = toNano('1');
+        const queryId = 12345n;
+        const excessMessage = beginCell()
+            .storeUint(0xd53276db, 32) // ReturnExcessesBack opcode
+            .storeUint(queryId, 64) // queryId
+            .endCell();
+
+        SC_System.messageResult = await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: excessAmount,
+            body: excessMessage,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+            op: 0xd53276db, // ReturnExcessesBack opcode
+        });
+
+        // Verify excess was forwarded to owner
+        // Since excessAmount (1 TON) > threshold (0.5 TON), it should be forwarded
+        // Check that subcontract sent the excess back to owner
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: subcontract.address,
+            to: SC_System.ownerAccount.address,
+            success: true,
+            op: 0xd53276db, // ReturnExcessesBack opcode
+        });
+    });
+
+    it('Test Subcontract excess handling - excess <= 0.5 TON is not forwarded', async () => {
+        const subcontractId = 10n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Send excess message with value <= 0.5 TON
+        const excessAmount = toNano('0.4'); // Less than threshold
+        const excessMessage = beginCell()
+            .storeUint(0xd53276db, 32) // ReturnExcessesBack opcode
+            .storeUint(12346, 64) // queryId
+            .endCell();
+
+        SC_System.messageResult = await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: excessAmount,
+            body: excessMessage,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+        });
+
+        // Verify excess was NOT forwarded to owner (no transaction from subcontract to owner with excess opcode)
+        const excessForwardTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.inMessage?.info.src?.equals(subcontract.address) === true &&
+            tx.inMessage?.info.dest?.equals(SC_System.ownerAccount.address) === true &&
+            tx.inMessage?.body &&
+            tx.inMessage.body.beginParse().preloadUint(32) === 0xd53276db
+        );
+        expect(excessForwardTx).toBeUndefined();
+    });
+
+    it('Test Subcontract excess handling - excess exactly 0.5 TON is not forwarded', async () => {
+        const subcontractId = 11n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Send excess message with value exactly 0.5 TON (threshold, should not forward)
+        const excessAmount = toNano('0.5');
+        const excessMessage = beginCell()
+            .storeUint(0xd53276db, 32) // ReturnExcessesBack opcode
+            .storeUint(12347, 64) // queryId
+            .endCell();
+
+        SC_System.messageResult = await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: excessAmount,
+            body: excessMessage,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+        });
+
+        // Verify excess was NOT forwarded (threshold is >, not >=)
+        const excessForwardTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.inMessage?.info.src?.equals(subcontract.address) === true &&
+            tx.inMessage?.info.dest?.equals(SC_System.ownerAccount.address) === true &&
+            tx.inMessage?.body &&
+            tx.inMessage.body.beginParse().preloadUint(32) === 0xd53276db
+        );
+        expect(excessForwardTx).toBeUndefined();
+    });
 });
 

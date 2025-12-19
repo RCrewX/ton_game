@@ -101,9 +101,9 @@ fun onInternalMessage(in: InMessage) {
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
             assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_UNAUTHORIZED;
             reserveValue(in.valueCoins);
-            // Forward most of the received TON to the new coordinate cell so it can send MoveEnd back
-            // Need enough for: initial storage fee + gas for MoveEnd + buffer
-            val coordinateCellGas = ton("1");
+            // Forward enough TON to the new coordinate cell so it can send MoveEnd back
+            // Need enough for: initial storage fee (if new cell) + gas for Move + buffer
+            val coordinateCellGas = GAS_COST_MOVE;
             val moveEndMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: calcDeployedCoordinateCell(storage.gameAddress, coordinate_plus_mode(storage.xy.x, msg.mode), storage.xy.y+1, contract.getCode(), storage.shipCode),

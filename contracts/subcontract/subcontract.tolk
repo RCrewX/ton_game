@@ -3,8 +3,33 @@ import "static"
 type AllowedMessagesToSubcontract = 
     | Forward
     | ForwardWithInit
+    | Withdraw
 
 fun onInternalMessage(in: InMessage) {
+    // Check for excess messages first (they have a specific opcode)
+    if (!in.body.isEmpty()) {
+        val opcode = in.body.preloadUint(32);
+        if (opcode == 0xd53276db) {
+            // Handle excess message
+            val excessMsg = lazy ReturnExcessesBack.fromSlice(in.body);
+            var storage = lazy SubcontractStorage.load();
+            // If excess value is greater than threshold, resend to owner
+            if (in.valueCoins > EXCESS_THRESHOLD) {
+                // Use value 0 with CARRY_ALL_REMAINING_MESSAGE_VALUE to forward all excess after gas
+                val out = createMessage({
+                    bounce: BounceMode.NoBounce,
+                    dest: storage.ownerAddress,
+                    value: 0,
+                    body: ReturnExcessesBack {
+                        queryId: excessMsg.queryId
+                    }
+                });
+                out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            }
+            return;
+        }
+    }
+    
     val msg = lazy AllowedMessagesToSubcontract.fromSlice(in.body);
     var storage = lazy SubcontractStorage.load();
     match (msg) {
@@ -69,6 +94,25 @@ fun onInternalMessage(in: InMessage) {
             });
             // Send with sendMode from command
             out.send(msg.sendMode);
+        }
+        Withdraw => {
+            // Auth check
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            // Calculate withdrawable amount: current balance - BASIC_STORAGE_TAX (for gas safety)
+            // getOriginalBalance() returns balance before processing the current message
+            // We need to account for the incoming message value
+            val balanceBeforeMsg = contract.getOriginalBalance() - in.valueCoins;
+            val withdrawAmount = balanceBeforeMsg - BASIC_STORAGE_TAX;
+            // Only withdraw if we have more than BASIC_STORAGE_TAX
+            if (withdrawAmount > 0) {
+                val out = createMessage({
+                    bounce: BounceMode.NoBounce,
+                    dest: storage.ownerAddress,
+                    value: withdrawAmount,
+                    body: beginCell().endCell() // Empty body for simple transfer
+                });
+                out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            }
         }
         else => {
             assert (in.body.isEmpty()) throw 0xFFFF

@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
-import { encodeForward, encodeForwardWithInit, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward, ForwardWithInit } from './types';
+import { encodeForward, encodeForwardWithInit, encodeWithdraw, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward, ForwardWithInit, Withdraw } from './types';
 
 export type SubcontractConfig = {
     ownerAddress: Address;
@@ -67,6 +67,19 @@ export class Subcontract implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: encodeForwardWithInit({ queryId, destination, forwardTonAmount, sendMode, stateInit, messageBody }),
+        });
+    }
+
+    async sendWithdraw(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint = toNano('0.01'),
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeWithdraw({ queryId }),
         });
     }
 

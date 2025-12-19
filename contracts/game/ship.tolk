@@ -85,18 +85,20 @@ fun onInternalMessage(in: InMessage) {
             var storage = ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_UNAUTHORIZED;
             assert (in.valueCoins >= GAS_COST_REQUEST_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            assert (contract.getOriginalBalance() > ton("1")) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
+            // Check we have enough balance for the operation: gas cost + coordinate cell gas
+            assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
 
             if (storage.gameFields == null) {
                 val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
                 storage.gameFields = gameFields;
+                storage.max_hp = BASIC_SHIP_HP;
                 storage.save();
             }
             var gameFields: GameFields = lazy storage.gameFields!.load();
             reserveValue(in.valueCoins);
-            // Send enough TON for coordinate cell operations (storage + MoveEnd message)
-            // Need enough for: initial storage fee + gas for MoveEnd + buffer
-            val coordinateCellGas = ton("1");
+            // Send enough TON for coordinate cell operations (storage + Move message)
+            // Need enough for: initial storage fee (if new cell) + gas for Move + buffer
+            val coordinateCellGas = GAS_COST_MOVE_SHIP_TO_CC;
             val moveMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: calcDeployedCoordinateCell(storage.gameAddress, gameFields.xy.x, gameFields.xy.y, storage.coordinateCellCode, contract.getCode()),
@@ -117,6 +119,7 @@ fun onInternalMessage(in: InMessage) {
             if (storage.gameFields == null) {
                 val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
                 storage.gameFields = gameFields;
+                storage.max_hp = BASIC_SHIP_HP;
                 storage.save();
             }
             var gameFields: GameFields = lazy storage.gameFields!.load();

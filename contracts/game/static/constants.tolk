@@ -6,10 +6,20 @@ const BASIC_SHIP_HP: uint256 = 100;
 const MINT_TON_AMOUNT: coins = ton("0.2");
 
 // Gas costs from gas consumption tests (in TON)
-// These are maximum expected costs for each operation
-const GAS_COST_REQUEST_SHIP_ADDRESS: coins = ton("0.014"); // 0.0139108 + buffer
-const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS: coins = ton("0.015"); // 0.0143492 + buffer
-const GAS_COST_REQUEST_TO_MOVE: coins = ton("0.07"); // 0.068966401 + buffer
+// These are maximum expected costs for each operation (updated from test results)
+const GAS_COST_REQUEST_SHIP_ADDRESS: coins = ton("0.014"); // 0.013948 + buffer
+const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS: coins = ton("0.015"); // 0.0144428 + buffer
+const GAS_COST_REQUEST_TO_MOVE: coins = ton("0.06"); // 0.0589864 + buffer
+
+// Internal message gas costs (from test results, with buffer)
+const GAS_COST_MOVE_SHIP_TO_CC: coins = ton("0.12"); // Ship -> CoordinateCell (MoveShipToCC) - includes storage + gas for Move (estimated from move flow)
+const GAS_COST_MOVE: coins = ton("0.12"); // CoordinateCell -> CoordinateCell (Move) - includes storage (if new) + gas for MoveEnd (estimated from move flow)
+const GAS_COST_MOVE_END: coins = ton("0.06"); // CoordinateCell -> Ship (MoveEnd) - just gas (estimated)
+const GAS_COST_REQUEST_MINT: coins = ton("0.22"); // Ship -> Game (RequestMint) - includes MINT_TON_AMOUNT (0.2) + gas (~0.02)
+const GAS_COST_FORWARD_MINT_REQUEST: coins = ton("0.06"); // Game -> GameManager (ForwardMintRequest) - just gas (estimated)
+const GAS_COST_UPGRADE_SHIP_REQUEST: coins = ton("0.06"); // GameManager -> Game (UpgradeShipRequest) - just gas (estimated)
+const GAS_COST_SHIP_UPGRADE: coins = ton("0.06"); // Game -> Ship (ShipUpgrade) - just gas (estimated)
+const GAS_COST_TRANSFER_NOTIFICATION: coins = ton("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - just gas (estimated)
 
 const var_mutableVar: int = 10;
 const val_immutableVal: int = 20;

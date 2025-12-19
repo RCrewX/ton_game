@@ -7,14 +7,24 @@ export const MINT_TON_AMOUNT: bigint = toNano("0.2");
 
 // Gas costs from gas consumption tests (in TON)
 // These match the constants in contracts/game/static/constants.tolk
-export const GAS_COST_REQUEST_SHIP_ADDRESS = toNano("0.014"); // 0.0139108 + buffer
-export const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS = toNano("0.015"); // 0.0143492 + buffer
-export const GAS_COST_REQUEST_TO_MOVE = toNano("0.07"); // 0.068966401 + buffer
+export const GAS_COST_REQUEST_SHIP_ADDRESS = toNano("0.014"); // 0.013948 + buffer
+export const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS = toNano("0.015"); // 0.0144428 + buffer
+export const GAS_COST_REQUEST_TO_MOVE = toNano("0.06"); // 0.0589864 + buffer
 export const GAS_COST_ANY_MESSAGE = toNano("1");
 const var_mutableVar: bigint = 10n;
 const val_immutableVal: bigint = 20n;
 
 export const GAS_COST_SEND_MOVE = toNano("1");
+
+// Internal message gas costs (from test results, with buffer)
+export const GAS_COST_MOVE_SHIP_TO_CC = toNano("0.12"); // Ship -> CoordinateCell (MoveShipToCC) - estimated from move flow
+export const GAS_COST_MOVE = toNano("0.12"); // CoordinateCell -> CoordinateCell (Move) - estimated from move flow
+export const GAS_COST_MOVE_END = toNano("0.06"); // CoordinateCell -> Ship (MoveEnd) - estimated
+export const GAS_COST_REQUEST_MINT = toNano("0.22"); // Ship -> Game (RequestMint) - includes MINT_TON_AMOUNT (0.2) + gas
+export const GAS_COST_FORWARD_MINT_REQUEST = toNano("0.06"); // Game -> GameManager (ForwardMintRequest) - estimated
+export const GAS_COST_UPGRADE_SHIP_REQUEST = toNano("0.06"); // GameManager -> Game (UpgradeShipRequest) - estimated
+export const GAS_COST_SHIP_UPGRADE = toNano("0.06"); // Game -> Ship (ShipUpgrade) - estimated
+export const GAS_COST_TRANSFER_NOTIFICATION = toNano("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - estimated
 
 // messages.ts
 import { Address, Cell, beginCell } from '@ton/core';
