@@ -10,8 +10,14 @@ const GAS_COST_FORWARD_WITH_INIT: coins = ton("0.01"); // Higher cost for deploy
 const GAS_COST_WITHDRAW: coins = ton("0.005"); // Gas cost for withdraw operation
 
 // Errors
-const ERR_UNAUTHORIZED = 901;
+const ERR_UNAUTHORIZED = 901;  // Generic unauthorized (kept for backward compatibility)
 const ERR_MESSAGE_VALUE_TOO_LOW = 904;  // Message value is too low (less than estimated gas cost)
+
+// Subcontract-specific errors
+const ERR_INVALID_OWNER_SENDER = 926;  // Sender is not the subcontract's owner address
+const ERR_WITHDRAW_AMOUNT_TOO_LOW = 927;  // Withdraw amount is too low (must be > BASIC_STORAGE_TAX)
+const ERR_WITHDRAW_AMOUNT_TOO_HIGH = 928;  // Withdraw amount exceeds available balance
+const ERR_EXCESS_THRESHOLD_TOO_LOW = 929;  // Excess threshold is below minimum allowed value
 
 // Storage
 

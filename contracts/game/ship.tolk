@@ -36,12 +36,12 @@ fun onInternalMessage(in: InMessage) {
     match (msg) {
         MoveEnd => {
             var storage: ShipStorage = lazy ShipStorage.load();
-            assert (storage.gameFields != null) throw ERR_UNAUTHORIZED;
-            assert (storage.movement_in_process) throw ERR_UNAUTHORIZED;
+            assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
+            assert (storage.movement_in_process) throw ERR_MOVEMENT_NOT_IN_PROCESS;
             var gameFields: GameFields = lazy storage.gameFields!.load();
             var msgGameFields: GameFields = msg.gameFields;
 
-            assert (in.senderAddress == calcAddressOfCoordinateCell(storage.gameAddress, msgGameFields.xy.x, msgGameFields.xy.y, storage.coordinateCellCode, contract.getCode())) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == calcAddressOfCoordinateCell(storage.gameAddress, msgGameFields.xy.x, msgGameFields.xy.y, storage.coordinateCellCode, contract.getCode())) throw ERR_INVALID_COORDINATE_CELL_SENDER;
             var totalReward: coins = 0;
             if (msg.result == UniqueResult.SAFE_EXIT) {
                 gameFields.xy.x = 0;
@@ -94,8 +94,8 @@ fun onInternalMessage(in: InMessage) {
         }
         RequestToMove => {
             var storage = ShipStorage.load();
-            assert (in.senderAddress == storage.userAddress) throw ERR_UNAUTHORIZED;
-            assert (!storage.movement_in_process) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
+            assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
             assert (in.valueCoins >= TODO_TOTAL_GAS_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
             // Check we have enough balance for the operation: gas cost + coordinate cell gas
             assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
@@ -129,7 +129,7 @@ fun onInternalMessage(in: InMessage) {
         ShipUpgrade => {
             var storage = ShipStorage.load();
             // Only Game can upgrade ships
-            assert (in.senderAddress == storage.gameAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.gameAddress) throw ERR_INVALID_GAME_SENDER;
             
             if (storage.gameFields == null) {
                 val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;

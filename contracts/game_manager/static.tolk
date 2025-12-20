@@ -9,9 +9,17 @@ const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141556 + buffer
 const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.009"); // 0.0081816 + buffer
 
 // Errors
-const ERR_UNAUTHORIZED = 901;
+const ERR_UNAUTHORIZED = 901;  // Generic unauthorized (kept for backward compatibility)
 const ERR_MESSAGE_VALUE_TOO_LOW = 904;  // Message value is too low (less than estimated gas cost)
 const ERR_MISSING_REQUIRED_DATA = 906;  // Required data (like jettonMinterAddress) is null
+
+// GameManager-specific errors
+const ERR_INVALID_OWNER_SENDER = 920;  // Sender is not the game manager's owner address
+const ERR_INVALID_GAME_SENDER = 921;  // Sender is not a valid game address from games list
+const ERR_JETTON_MINTER_NOT_SET = 922;  // Jetton minter address is not set (null)
+const ERR_JETTON_WALLET_CODE_NOT_SET = 923;  // Jetton wallet code is not set (null)
+const ERR_GAMES_NOT_SET = 924;  // Games list is not set (null)
+const ERR_INVALID_JETTON_WALLET_SENDER = 925;  // Sender is not the expected jetton wallet address
 
 //  Storage
 

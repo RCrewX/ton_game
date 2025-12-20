@@ -45,7 +45,7 @@ fun onInternalMessage(in: InMessage) {
         RequestMint => {
 
             assert (in.valueCoins > BASIC_STORAGE_TAX) throw ERR_NOT_ENOUGH_VALUE_COINS;
-            assert (in.senderAddress == calcAddressOfShip(msg.receiver, contract.getAddress(),  storage.shipCode, storage.coordinateCellCode)) throw ERR_INVALID_SENDER_ADDRESS;
+            assert (in.senderAddress == calcAddressOfShip(msg.receiver, contract.getAddress(),  storage.shipCode, storage.coordinateCellCode)) throw ERR_INVALID_SHIP_SENDER_FOR_MINT;
 
             reserveValue(in.valueCoins);
 
@@ -62,7 +62,7 @@ fun onInternalMessage(in: InMessage) {
         }
         UpgradeShipRequest => {
             // Only GameManager can request ship upgrades
-            assert (in.senderAddress == storage.managerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.managerAddress) throw ERR_INVALID_GAME_MANAGER_SENDER;
             
             reserveValue(in.valueCoins);
             

@@ -16,7 +16,7 @@ fun onInternalMessage(in: InMessage) {
     var storage = lazy GameManagerStorage.load();
     match (msg) {
         SetJettonMinterAddress => {
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             assert (in.valueCoins >= GAS_COST_SET_JETTON_MINTER_ADDRESS) throw ERR_MESSAGE_VALUE_TOO_LOW;
 
             storage.jettonMinterAddress = msg.jettonMinterAddress;
@@ -34,7 +34,7 @@ fun onInternalMessage(in: InMessage) {
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         SetGames => {
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             assert (in.valueCoins >= GAS_COST_SET_GAMES) throw ERR_MESSAGE_VALUE_TOO_LOW;
             storage.games = msg.games;
             storage.save();
@@ -50,7 +50,7 @@ fun onInternalMessage(in: InMessage) {
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         RedirectMessage => {
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             assert (in.valueCoins >= GAS_COST_REDIRECT_MESSAGE) throw ERR_MESSAGE_VALUE_TOO_LOW;
             reserveValue(in.valueCoins);
             val redirectMsg = createMessage({
@@ -62,11 +62,12 @@ fun onInternalMessage(in: InMessage) {
             redirectMsg.send(128);
         }
         ForwardMintRequest => {
-            assert (storage.jettonMinterAddress != null) throw ERR_MISSING_REQUIRED_DATA;
+            assert (storage.jettonMinterAddress != null) throw ERR_JETTON_MINTER_NOT_SET;
 
             // Check if sender is game from games
+            assert (storage.games != null) throw ERR_GAMES_NOT_SET;
             val game = storage.games!.beginParse().loadAddress();
-            assert (in.senderAddress == game) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == game) throw ERR_INVALID_GAME_SENDER;
             // Convert ForwardMintRequest to MintNewJettons format
             // The TransferNotification will be sent to the receiver (user) by the JettonWallet
             // Note: forwardPayload is empty because GameManager doesn't receive TransferNotificationForRecipient
@@ -100,11 +101,11 @@ fun onInternalMessage(in: InMessage) {
         }
         TransferNotificationForRecipient => {
             var storage = lazy GameManagerStorage.load();
-            assert (storage.jettonMinterAddress != null) throw ERR_UNAUTHORIZED;
-            assert (storage.jettonWalletCode != null) throw ERR_UNAUTHORIZED;
+            assert (storage.jettonMinterAddress != null) throw ERR_JETTON_MINTER_NOT_SET;
+            assert (storage.jettonWalletCode != null) throw ERR_JETTON_WALLET_CODE_NOT_SET;
             // Verify sender is GameManager's jetton wallet (native jetton)
             val expectedWalletAddress = calcAddressOfJettonWallet(contract.getAddress(), storage.jettonMinterAddress!, storage.jettonWalletCode!);
-            assert (in.senderAddress == expectedWalletAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == expectedWalletAddress) throw ERR_INVALID_JETTON_WALLET_SENDER;
             
             // Extract ship address from forwardPayload
             // forwardPayload is RemainingBitsAndRefs, which can be a slice or contain a ref
@@ -125,7 +126,7 @@ fun onInternalMessage(in: InMessage) {
             val hpIncrease = random.range(jettonAmountUint) + 1; // 1 to N inclusive
             
             // Get game address from games
-            assert (storage.games != null) throw ERR_UNAUTHORIZED;
+            assert (storage.games != null) throw ERR_GAMES_NOT_SET;
             val game = storage.games!.beginParse().loadAddress();
             
             reserveValue(in.valueCoins);

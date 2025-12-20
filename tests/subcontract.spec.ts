@@ -206,7 +206,7 @@ describe('Subcontract', () => {
             from: unauthorizedAccount.address,
             to: subcontract.address,
             success: false,
-            exitCode: 901, // ERR_UNAUTHORIZED
+            exitCode: 926, // ERR_INVALID_OWNER_SENDER
         });
     });
 
@@ -697,7 +697,7 @@ describe('Subcontract', () => {
             from: unauthorizedAccount.address,
             to: subcontract.address,
             success: false,
-            exitCode: 901, // ERR_UNAUTHORIZED
+            exitCode: 926, // ERR_INVALID_OWNER_SENDER
         });
     });
 
@@ -969,7 +969,7 @@ describe('Subcontract', () => {
             from: SC_System.ownerAccount.address,
             to: subcontract.address,
             success: false,
-            exitCode: 904, // ERR_MESSAGE_VALUE_TOO_LOW
+            exitCode: 929, // ERR_EXCESS_THRESHOLD_TOO_LOW
         });
     });
 
@@ -1000,7 +1000,7 @@ describe('Subcontract', () => {
             from: SC_System.ownerAccount.address,
             to: subcontract.address,
             success: false,
-            exitCode: 904, // ERR_MESSAGE_VALUE_TOO_LOW
+            exitCode: 927, // ERR_WITHDRAW_AMOUNT_TOO_LOW
         });
 
         // Try to withdraw amount more than available - should fail
@@ -1018,7 +1018,7 @@ describe('Subcontract', () => {
             from: SC_System.ownerAccount.address,
             to: subcontract.address,
             success: false,
-            exitCode: 904, // ERR_MESSAGE_VALUE_TOO_LOW
+            exitCode: 928, // ERR_WITHDRAW_AMOUNT_TOO_HIGH
         });
     });
 

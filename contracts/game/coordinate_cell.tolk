@@ -26,7 +26,7 @@ fun onInternalMessage(in: InMessage) {
         Move => {
             var storage = lazy CoordinateCellStorage.load();
             var moveData: MoveData = lazy msg.moveData.load();
-            assert (in.senderAddress == calcAddressOfCoordinateCell(storage.gameAddress, moveData.xy.x, moveData.xy.y, contract.getCode(), storage.shipCode)) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == calcAddressOfCoordinateCell(storage.gameAddress, moveData.xy.x, moveData.xy.y, contract.getCode(), storage.shipCode)) throw ERR_INVALID_COORDINATE_CELL_SENDER_FOR_MOVE;
             val shipAddress: address = calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode());
             var firstTimeOpened = !storage.opened;
             var totalReward: coins;
@@ -46,7 +46,7 @@ fun onInternalMessage(in: InMessage) {
             var result: UniqueResult = UniqueResult.CRASH;
             var ship_hp: uint256 = 0;
             val rewardReceiver: address = msg.mode == MoveMode.EXIT ? shipAddress : msg.user;
-            assert (storage.ccStorage != null) throw ERR_UNAUTHORIZED;
+            assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
             if (firstTimeOpened) {
                 totalReward = ccStorage.jettonAmount
@@ -100,7 +100,7 @@ fun onInternalMessage(in: InMessage) {
         MoveShipToCC => {
             var storage = lazy CoordinateCellStorage.load();
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
-            assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_INVALID_SHIP_SENDER_FOR_MOVE;
             reserveValue(in.valueCoins);
             // Forward enough TON to the new coordinate cell so it can send MoveEnd back
             // Need enough for: initial storage fee (if new cell) + gas for Move + buffer
@@ -122,10 +122,10 @@ fun onInternalMessage(in: InMessage) {
         }
         WithdrawTON => {
             var storage = lazy CoordinateCellStorage.load();
-            assert (storage.ccStorage != null) throw ERR_UNAUTHORIZED;
+            assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
-            assert (ccStorage.firstExplorer != null) throw ERR_UNAUTHORIZED;
-            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_UNAUTHORIZED;
+            assert (ccStorage.firstExplorer != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
             
             val currentBalance = contract.getOriginalBalance();
             val minRequiredBalance = BASIC_STORAGE_TAX;
@@ -143,10 +143,10 @@ fun onInternalMessage(in: InMessage) {
         }
         WithdrawJetton => {
             var storage = lazy CoordinateCellStorage.load();
-            assert (storage.ccStorage != null) throw ERR_UNAUTHORIZED;
+            assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
-            assert (ccStorage.firstExplorer != null) throw ERR_UNAUTHORIZED;
-            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_UNAUTHORIZED;
+            assert (ccStorage.firstExplorer != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
             
             // Send AskToTransfer to CoordinateCell's jetton wallet
             // The wallet will transfer jettons to the recipient

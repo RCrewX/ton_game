@@ -38,7 +38,7 @@ fun onInternalMessage(in: InMessage) {
         Forward => {
             // Auth check
             var storage = SubcontractStorage.load();
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Value check: must cover gas cost + forward amount
             assert (in.valueCoins >= GAS_COST_FORWARD + msg.forwardTonAmount) throw ERR_MESSAGE_VALUE_TOO_LOW;
             // Reserve value, but leave enough for gas + forwardAmount when sending the message
@@ -67,7 +67,7 @@ fun onInternalMessage(in: InMessage) {
         ForwardWithInit => {
             // Auth check
             var storage = SubcontractStorage.load();
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Value check: must cover gas cost + forward amount
             assert (in.valueCoins >= GAS_COST_FORWARD_WITH_INIT + msg.forwardTonAmount) throw ERR_MESSAGE_VALUE_TOO_LOW;
             // Reserve value, but leave enough for gas + forwardAmount when sending the message
@@ -102,15 +102,15 @@ fun onInternalMessage(in: InMessage) {
         Withdraw => {
             // Auth check
             var storage = SubcontractStorage.load();
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Calculate available balance: current balance - BASIC_STORAGE_TAX (for gas safety)
             // getOriginalBalance() returns balance before processing the current message
             // We need to account for the incoming message value
             val balanceBeforeMsg = contract.getOriginalBalance() - in.valueCoins;
             val maxWithdrawable = balanceBeforeMsg - BASIC_STORAGE_TAX;
             // Validate amount: must be more than BASIC_STORAGE_TAX and less than or equal to maxWithdrawable
-            assert (msg.amount > BASIC_STORAGE_TAX) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            assert (msg.amount <= maxWithdrawable) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            assert (msg.amount > BASIC_STORAGE_TAX) throw ERR_WITHDRAW_AMOUNT_TOO_LOW;
+            assert (msg.amount <= maxWithdrawable) throw ERR_WITHDRAW_AMOUNT_TOO_HIGH;
             // Withdraw the specified amount
             val out = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -123,7 +123,7 @@ fun onInternalMessage(in: InMessage) {
         SetRedirectExcess => {
             // Auth check
             var storage = SubcontractStorage.load();
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Load storage (not lazy) to modify it
             var storageToUpdate = SubcontractStorage.load();
             // Update redirect excess flag
@@ -134,9 +134,9 @@ fun onInternalMessage(in: InMessage) {
         SetExcessThreshold => {
             // Auth check
             var storage = SubcontractStorage.load();
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Validate threshold: must be at least MIN_EXCESS_THRESHOLD
-            assert (msg.excessThreshold >= MIN_EXCESS_THRESHOLD) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            assert (msg.excessThreshold >= MIN_EXCESS_THRESHOLD) throw ERR_EXCESS_THRESHOLD_TOO_LOW;
             // Load storage (not lazy) to modify it
             var storageToUpdate = SubcontractStorage.load();
             // Update excess threshold
