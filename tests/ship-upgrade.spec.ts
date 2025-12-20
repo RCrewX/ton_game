@@ -2,8 +2,9 @@ import { beginCell, Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem } from './test_utils';
-import { Opcodes } from '../wrappers/game/types';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
+import { MoveMode } from '../wrappers/game/structs';
 import { JettonMinter } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
@@ -345,6 +346,141 @@ describe('Ship Upgrade', () => {
         const uniqueIncreases = new Set(hpIncreases.map(h => h.toString()));
         // At least some variation (not all the same)
         expect(uniqueIncreases.size).toBeGreaterThan(1);
+    });
+
+    it('should update max_hp when ship is upgraded', async () => {
+        // Set jetton minter address and wallet code in GameManager
+        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SET_JETTON_MINTER_ADDRESS,
+            SC_System.jettonMinter.address,
+            SC_System.jettonWalletCode
+        );
+
+        // Initialize ship by doing a first move (this sets max_hp to BASIC_SHIP_HP)
+        // Use a higher value to ensure it covers TODO_TOTAL_GAS_TO_MOVE
+        const moveValue = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            moveValue,
+            MoveMode.UP
+        );
+        
+        // Wait for move to complete
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_MOVE_END,
+        });
+
+        // Get initial max_hp (should be BASIC_SHIP_HP = 100 after first move)
+        const initialMaxHp = await SC_System.ownerShip.getMaxHp();
+        expect(initialMaxHp).toBe(BASIC_SHIP_HP); // BASIC_SHIP_HP
+
+        // Get user's jetton wallet
+        const userJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.ownerAccount.address);
+        const userJettonWallet = SC_System.blockchain.openContract(
+            JettonWallet.createFromAddress(userJettonWalletAddress)
+        );
+
+        // Transfer jettons to upgrade ship
+        const transferAmount = toNano('50');
+        const forwardPayload = beginCell()
+            .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+
+        SC_System.messageResult = await userJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            transferAmount,
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        // Verify upgrade happened
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.game.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_SHIP_UPGRADE,
+        });
+
+        // Check max_hp increased
+        const finalMaxHp = await SC_System.ownerShip.getMaxHp();
+        const maxHpIncrease = finalMaxHp - initialMaxHp;
+        expect(maxHpIncrease).toBeGreaterThanOrEqual(1n);
+        expect(maxHpIncrease).toBeLessThanOrEqual(transferAmount);
+
+        // Verify max_hp matches current HP after upgrade
+        const gameData = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameData).not.toBeNull();
+        if (gameData) {
+            // After upgrade, HP should be increased, and max_hp should match
+            expect(gameData.hp).toBeGreaterThan(initialMaxHp);
+            // max_hp should be at least as high as current HP
+            expect(finalMaxHp).toBeGreaterThanOrEqual(gameData.hp);
+        }
+    });
+
+    it('should restore HP to max_hp on safe exit', async () => {
+        // Set jetton minter address and wallet code in GameManager
+        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SET_JETTON_MINTER_ADDRESS,
+            SC_System.jettonMinter.address,
+            SC_System.jettonWalletCode
+        );
+
+        // Upgrade ship first to increase max_hp
+        const userJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.ownerAccount.address);
+        const userJettonWallet = SC_System.blockchain.openContract(
+            JettonWallet.createFromAddress(userJettonWalletAddress)
+        );
+
+        const transferAmount = toNano('30');
+        const forwardPayload = beginCell()
+            .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+
+        SC_System.messageResult = await userJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            transferAmount,
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        // Get max_hp after upgrade
+        const maxHpAfterUpgrade = await SC_System.ownerShip.getMaxHp();
+        expect(maxHpAfterUpgrade).toBeGreaterThan(100n);
+
+        // Move ship to trigger safe exit
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            toNano('1'),
+            3 // MoveMode.EXIT
+        );
+
+        // Wait for move to complete
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_MOVE_END,
+        });
+
+        // Check HP was restored to max_hp (not BASIC_SHIP_HP)
+        const gameDataAfterExit = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameDataAfterExit).not.toBeNull();
+        if (gameDataAfterExit) {
+            expect(gameDataAfterExit.hp).toBe(maxHpAfterUpgrade);
+            expect(gameDataAfterExit.hp).toBeGreaterThan(100n); // Should be upgraded max_hp, not BASIC_SHIP_HP
+        }
     });
 });
 

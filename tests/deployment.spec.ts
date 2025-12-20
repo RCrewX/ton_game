@@ -9,7 +9,7 @@ describe('Deployment', () => {
     }, 100000);
 
     it('should deploy CoordinateCell', async () => {
-        const coordinateCell = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
+        const { coordinateCell } = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
         expect(coordinateCell.address).toBeDefined();
     });
 

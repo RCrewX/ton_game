@@ -22,12 +22,22 @@ get fun currentGameData(): GameFields? {
 get fun tonBalance(): coins {
     return contract.getOriginalBalance();
 }
+get fun get_movement_in_process(): bool {
+    var storage: ShipStorage = lazy ShipStorage.load();
+    return storage.movement_in_process;
+}
+get fun get_max_hp(): uint256 {
+    var storage: ShipStorage = lazy ShipStorage.load();
+    return storage.max_hp;
+}
 fun onInternalMessage(in: InMessage) {
     val msg = lazy AllowedMessagesToShip.fromSlice(in.body);
 
     match (msg) {
         MoveEnd => {
             var storage: ShipStorage = lazy ShipStorage.load();
+            assert (storage.gameFields != null) throw ERR_UNAUTHORIZED;
+            assert (storage.movement_in_process) throw ERR_UNAUTHORIZED;
             var gameFields: GameFields = lazy storage.gameFields!.load();
             var msgGameFields: GameFields = msg.gameFields;
 
@@ -56,6 +66,7 @@ fun onInternalMessage(in: InMessage) {
                 gameFields.jettonAmount += msgGameFields.jettonAmount;
             }
             storage.gameFields = gameFields.toCell();
+            storage.movement_in_process = false;
             storage.save();
 
             if (totalReward > 0) {
@@ -84,6 +95,7 @@ fun onInternalMessage(in: InMessage) {
         RequestToMove => {
             var storage = ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_UNAUTHORIZED;
+            assert (!storage.movement_in_process) throw ERR_UNAUTHORIZED;
             assert (in.valueCoins >= TODO_TOTAL_GAS_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
             // Check we have enough balance for the operation: gas cost + coordinate cell gas
             assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
@@ -92,8 +104,11 @@ fun onInternalMessage(in: InMessage) {
                 val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
                 storage.gameFields = gameFields;
                 storage.max_hp = BASIC_SHIP_HP;
+                storage.movement_in_process = false;
                 storage.save();
             }
+            storage.movement_in_process = true;
+            storage.save();
             var gameFields: GameFields = lazy storage.gameFields!.load();
             reserveValue(in.valueCoins);
             // Send enough TON for coordinate cell operations (storage + Move message)
@@ -120,10 +135,12 @@ fun onInternalMessage(in: InMessage) {
                 val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
                 storage.gameFields = gameFields;
                 storage.max_hp = BASIC_SHIP_HP;
+                storage.movement_in_process = false;
                 storage.save();
             }
             var gameFields: GameFields = lazy storage.gameFields!.load();
             gameFields.hp += msg.hpIncrease;
+            storage.max_hp += msg.hpIncrease;
             storage.gameFields = gameFields.toCell();
             storage.save();
             reserveValue(in.valueCoins);

@@ -10,7 +10,14 @@ export type ShipConfig = {
 };
 
 export function shipConfigToCell(config: ShipConfig): Cell {
-    return beginCell().storeAddress(config.userAddress).storeAddress(config.gameAddress).storeUint(0, 256).storeMaybeRef().storeRef(config.coordinateCellCode).endCell();
+    return beginCell()
+        .storeAddress(config.userAddress)
+        .storeAddress(config.gameAddress)
+        .storeUint(0, 256) // max_hp: 0 (will be set when gameFields are initialized)
+        .storeMaybeRef(null) // gameFields: null
+        .storeRef(config.coordinateCellCode)
+        .storeBit(false) // movement_in_process: false
+        .endCell();
 }
 
 
@@ -54,5 +61,13 @@ export class Ship implements Contract {
         return result.stack.readBigNumber();
     }
 
-    
+    async getMovementInProcess(provider: ContractProvider): Promise<boolean> {
+        const result = await provider.get('get_movement_in_process', []);
+        return result.stack.readBoolean();
+    }
+
+    async getMaxHp(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('get_max_hp', []);
+        return result.stack.readBigNumber();
+    }
 }

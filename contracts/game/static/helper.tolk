@@ -57,6 +57,7 @@ fun calcDeployedShip(
         max_hp: 0,
         gameFields: null,
         coordinateCellCode: coordinateCellCode,
+        movement_in_process: false,
     };
 
     return {

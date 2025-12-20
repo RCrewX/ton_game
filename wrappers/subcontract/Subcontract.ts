@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
-import { encodeForward, encodeForwardWithInit, encodeWithdraw, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward, ForwardWithInit, Withdraw } from './types';
+import { encodeForward, encodeForwardWithInit, encodeWithdraw, encodeSetRedirectExcess, encodeSetExcessThreshold, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward, ForwardWithInit, Withdraw, SetRedirectExcess, SetExcessThreshold } from './types';
 
 export type SubcontractConfig = {
     ownerAddress: Address;
@@ -10,6 +10,8 @@ export function subcontractConfigToCell(config: SubcontractConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
         .storeUint(config.id, 256)
+        .storeBit(false) // redirectExcess: false by default
+        .storeCoins(toNano('0.1')) // excessThreshold: 0.1 TON by default
         .endCell();
 }
 
@@ -73,13 +75,42 @@ export class Subcontract implements Contract {
     async sendWithdraw(
         provider: ContractProvider,
         via: Sender,
+        amount: bigint,
         value: bigint = toNano('0.01'),
         queryId: bigint = 0n
     ) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeWithdraw({ queryId }),
+            body: encodeWithdraw({ queryId, amount }),
+        });
+    }
+
+    async sendSetRedirectExcess(
+        provider: ContractProvider,
+        via: Sender,
+        redirectExcess: boolean,
+        value: bigint = toNano('0.01'),
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeSetRedirectExcess({ queryId, redirectExcess }),
+        });
+    }
+
+    async sendSetExcessThreshold(
+        provider: ContractProvider,
+        via: Sender,
+        excessThreshold: bigint,
+        value: bigint = toNano('0.01'),
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeSetExcessThreshold({ queryId, excessThreshold }),
         });
     }
 
@@ -130,6 +161,21 @@ export class Subcontract implements Contract {
             { type: 'int', value: id }
         ]);
         return result.stack.readAddress();
+    }
+
+    async getRedirectExcess(provider: ContractProvider): Promise<boolean> {
+        const result = await provider.get('get_redirect_excess', []);
+        return result.stack.readBoolean();
+    }
+
+    async getExcessThreshold(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('get_excess_threshold', []);
+        return result.stack.readBigNumber();
+    }
+
+    async getTonBalance(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('tonBalance', []);
+        return result.stack.readBigNumber();
     }
 }
 

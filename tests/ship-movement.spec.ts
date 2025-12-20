@@ -420,5 +420,53 @@ describe('Ship Movement', () => {
             expect(gameData.xy.y).toBe(4n);
         }
     });
+
+    it('Test coordinate update after MoveEnd - verify coordinates always update on CONTINUE', async () => {
+        // This test specifically checks that coordinates are updated after MoveEnd
+        // Initial move UP: (0,0) -> (0,1)
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
+        let gameData = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameData).not.toBeNull();
+        if (gameData) {
+            const beforeX = gameData.xy.x;
+            const beforeY = gameData.xy.y;
+            expect(beforeX).toBe(0n);
+            expect(beforeY).toBe(1n);
+            
+            // Move RIGHT: (0,1) -> (1,2) - coordinates MUST change
+            SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.RIGHT);
+            gameData = await SC_System.ownerShip.getCurrentGameData();
+            expect(gameData).not.toBeNull();
+            if (gameData) {
+                // Verify coordinates changed
+                expect(gameData.xy.x).not.toBe(beforeX);
+                expect(gameData.xy.y).not.toBe(beforeY);
+                expect(gameData.xy.x).toBe(1n);
+                expect(gameData.xy.y).toBe(2n);
+            }
+        }
+    });
+
+    it('Test HP update after MoveEnd - verify HP is correctly updated on CONTINUE', async () => {
+        // Initial move UP: (0,0) -> (0,1)
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
+        let gameData = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameData).not.toBeNull();
+        if (gameData) {
+            const initialHp = gameData.hp;
+            expect(initialHp).toBeGreaterThan(0n);
+            
+            // Move again - HP should be updated based on cell HP
+            SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
+            gameData = await SC_System.ownerShip.getCurrentGameData();
+            expect(gameData).not.toBeNull();
+            if (gameData) {
+                // HP should be valid (>= 0) and should reflect the result of the move
+                expect(gameData.hp).toBeGreaterThanOrEqual(0n);
+                // HP should be <= initial HP (can only decrease or stay same on CONTINUE)
+                expect(gameData.hp).toBeLessThanOrEqual(initialHp);
+            }
+        }
+    });
 });
 

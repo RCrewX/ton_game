@@ -5,37 +5,39 @@ type AllowedMessagesToSubcontract =
     | ForwardWithInit
     | Withdraw
     | TransferNotificationForRecipient
+    | ReturnExcessesBack
+    | SetRedirectExcess
+    | SetExcessThreshold
 
 fun onInternalMessage(in: InMessage) {
-    // Check for excess messages first (they have a specific opcode)
-    if (!in.body.isEmpty()) {
-        val opcode = in.body.preloadUint(32);
-        if (opcode == 0xd53276db) {
+    val msg = lazy AllowedMessagesToSubcontract.fromSlice(in.body);
+    match (msg) {
+        ReturnExcessesBack => {
             // Handle excess message
-            val excessMsg = lazy ReturnExcessesBack.fromSlice(in.body);
-            var storage = lazy SubcontractStorage.load();
-            // If excess value is greater than threshold, resend to owner
-            if (in.valueCoins > EXCESS_THRESHOLD) {
+            // Load storage fresh to get current redirectExcess and excessThreshold values
+            var storage = SubcontractStorage.load();
+            // If redirect excess is enabled and message value is greater than or equal to threshold, resend to owner
+            if (storage.redirectExcess && in.valueCoins >= storage.excessThreshold) {
+                // Reserve value first (before sending forward message)
+                // This ensures we have enough balance for the forward
+                reserveValue(in.valueCoins);
                 // Use value 0 with CARRY_ALL_REMAINING_MESSAGE_VALUE to forward all excess after gas
                 val out = createMessage({
                     bounce: BounceMode.NoBounce,
                     dest: storage.ownerAddress,
                     value: 0,
                     body: ReturnExcessesBack {
-                        queryId: excessMsg.queryId
+                        queryId: msg.queryId
                     }
                 });
                 out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            } else {
+                reserveValue(in.valueCoins);
             }
-            return;
         }
-    }
-    
-    val msg = lazy AllowedMessagesToSubcontract.fromSlice(in.body);
-    var storage = lazy SubcontractStorage.load();
-    match (msg) {
         Forward => {
             // Auth check
+            var storage = SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
             // Value check: must cover gas cost + forward amount
             assert (in.valueCoins >= GAS_COST_FORWARD + msg.forwardTonAmount) throw ERR_MESSAGE_VALUE_TOO_LOW;
@@ -64,6 +66,7 @@ fun onInternalMessage(in: InMessage) {
         }
         ForwardWithInit => {
             // Auth check
+            var storage = SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
             // Value check: must cover gas cost + forward amount
             assert (in.valueCoins >= GAS_COST_FORWARD_WITH_INIT + msg.forwardTonAmount) throw ERR_MESSAGE_VALUE_TOO_LOW;
@@ -98,26 +101,53 @@ fun onInternalMessage(in: InMessage) {
         }
         Withdraw => {
             // Auth check
+            var storage = SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
-            // Calculate withdrawable amount: current balance - BASIC_STORAGE_TAX (for gas safety)
+            // Calculate available balance: current balance - BASIC_STORAGE_TAX (for gas safety)
             // getOriginalBalance() returns balance before processing the current message
             // We need to account for the incoming message value
             val balanceBeforeMsg = contract.getOriginalBalance() - in.valueCoins;
-            val withdrawAmount = balanceBeforeMsg - BASIC_STORAGE_TAX;
-            // Only withdraw if we have more than BASIC_STORAGE_TAX
-            if (withdrawAmount > 0) {
-                val out = createMessage({
-                    bounce: BounceMode.NoBounce,
-                    dest: storage.ownerAddress,
-                    value: withdrawAmount,
-                    body: beginCell().endCell() // Empty body for simple transfer
-                });
-                out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
-            }
+            val maxWithdrawable = balanceBeforeMsg - BASIC_STORAGE_TAX;
+            // Validate amount: must be more than BASIC_STORAGE_TAX and less than or equal to maxWithdrawable
+            assert (msg.amount > BASIC_STORAGE_TAX) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            assert (msg.amount <= maxWithdrawable) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            // Withdraw the specified amount
+            val out = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: storage.ownerAddress,
+                value: msg.amount,
+                body: beginCell().endCell() // Empty body for simple transfer
+            });
+            out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        }
+        SetRedirectExcess => {
+            // Auth check
+            var storage = SubcontractStorage.load();
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            // Load storage (not lazy) to modify it
+            var storageToUpdate = SubcontractStorage.load();
+            // Update redirect excess flag
+            storageToUpdate.redirectExcess = msg.redirectExcess;
+            storageToUpdate.save();
+            reserveValue(in.valueCoins);
+        }
+        SetExcessThreshold => {
+            // Auth check
+            var storage = SubcontractStorage.load();
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_UNAUTHORIZED;
+            // Validate threshold: must be at least MIN_EXCESS_THRESHOLD
+            assert (msg.excessThreshold >= MIN_EXCESS_THRESHOLD) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            // Load storage (not lazy) to modify it
+            var storageToUpdate = SubcontractStorage.load();
+            // Update excess threshold
+            storageToUpdate.excessThreshold = msg.excessThreshold;
+            storageToUpdate.save();
+            reserveValue(in.valueCoins);
         }
         TransferNotificationForRecipient => {
             // Accept jetton transfer notifications (from jetton wallet)
             // Just reserve value and do nothing - subcontract can receive these messages
+            // No auth check needed - anyone can send transfer notifications
             reserveValue(in.valueCoins);
         }
         else => {
@@ -142,5 +172,19 @@ get fun get_subcontract_address(id: uint256): address {
 
 get fun get_subcontract_by_id_address(ownerAddress: address, id: uint256): address {
     return calcAddressOfSubcontract(ownerAddress, id, contract.getCode());
+}
+
+get fun get_redirect_excess(): bool {
+    var storage = lazy SubcontractStorage.load();
+    return storage.redirectExcess;
+}
+
+get fun get_excess_threshold(): coins {
+    var storage = lazy SubcontractStorage.load();
+    return storage.excessThreshold;
+}
+
+get fun tonBalance(): coins {
+    return contract.getOriginalBalance();
 }
 

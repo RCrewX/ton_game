@@ -46,6 +46,7 @@ fun onInternalMessage(in: InMessage) {
             var result: UniqueResult = UniqueResult.CRASH;
             var ship_hp: uint256 = 0;
             val rewardReceiver: address = msg.mode == MoveMode.EXIT ? shipAddress : msg.user;
+            assert (storage.ccStorage != null) throw ERR_UNAUTHORIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
             if (firstTimeOpened) {
                 totalReward = ccStorage.jettonAmount

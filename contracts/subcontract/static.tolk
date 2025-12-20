@@ -1,6 +1,7 @@
 // Constants
 const BASIC_STORAGE_TAX = ton("0.01");
-const EXCESS_THRESHOLD = ton("0.5"); // Minimum excess amount to forward to owner
+const DEFAULT_EXCESS_THRESHOLD = ton("0.1"); // Default excess threshold
+const MIN_EXCESS_THRESHOLD = ton("0.01"); // Minimum allowed excess threshold
 
 // Gas costs from gas consumption tests (in TON)
 // These are maximum expected costs for each operation
@@ -17,6 +18,8 @@ const ERR_MESSAGE_VALUE_TOO_LOW = 904;  // Message value is too low (less than e
 struct SubcontractStorage {
     ownerAddress: address
     id: uint256
+    redirectExcess: bool
+    excessThreshold: coins
 }
 
 fun SubcontractStorage.load() {
@@ -49,9 +52,22 @@ struct (0x4c5d6e7f) ForwardWithInit {
     messageBody: cell
 }
 
-// Withdraw message - owner can withdraw all funds (leaving BASIC_STORAGE_TAX for gas safety)
+// Withdraw message - owner can withdraw specified amount (leaving BASIC_STORAGE_TAX for gas safety)
 struct (0x5d6e7f8a) Withdraw {
     queryId: uint64
+    amount: coins
+}
+
+// Set redirect excess flag message
+struct (0x6e7f8a9b) SetRedirectExcess {
+    queryId: uint64
+    redirectExcess: bool
+}
+
+// Set excess threshold message
+struct (0x7f8a9bac) SetExcessThreshold {
+    queryId: uint64
+    excessThreshold: coins
 }
 
 // Excess message (from jetton transfers or other operations)
@@ -91,6 +107,8 @@ fun calcDeployedSubcontract(
     val initStorage: SubcontractStorage = {
         ownerAddress,
         id,
+        redirectExcess: false,
+        excessThreshold: DEFAULT_EXCESS_THRESHOLD,
     };
     return {
         stateInit: {

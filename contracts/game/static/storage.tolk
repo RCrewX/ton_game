@@ -28,6 +28,7 @@ struct ShipStorage {
     max_hp: uint256
     gameFields: Cell<GameFields>?
     coordinateCellCode: cell
+    movement_in_process: bool
 }
 
 

@@ -11,6 +11,8 @@ export const Opcodes = {
     OP_FORWARD_WITH_INIT: 0x4c5d6e7f,
     OP_WITHDRAW: 0x5d6e7f8a,
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
+    OP_SET_REDIRECT_EXCESS: 0x6e7f8a9b,
+    OP_SET_EXCESS_THRESHOLD: 0x7f8a9bac,
 } as const;
 
 // Message types
@@ -34,6 +36,17 @@ export type ForwardWithInit = {
 
 export type Withdraw = {
     queryId: bigint;
+    amount: bigint;
+};
+
+export type SetRedirectExcess = {
+    queryId: bigint;
+    redirectExcess: boolean;
+};
+
+export type SetExcessThreshold = {
+    queryId: bigint;
+    excessThreshold: bigint;
 };
 
 export type ReturnExcessesBack = {
@@ -69,6 +82,23 @@ export function encodeWithdraw(msg: Withdraw): Cell {
     return beginCell()
         .storeUint(Opcodes.OP_WITHDRAW, 32)
         .storeUint(msg.queryId, 64)
+        .storeCoins(msg.amount)
+        .endCell();
+}
+
+export function encodeSetRedirectExcess(msg: SetRedirectExcess): Cell {
+    return beginCell()
+        .storeUint(Opcodes.OP_SET_REDIRECT_EXCESS, 32)
+        .storeUint(msg.queryId, 64)
+        .storeBit(msg.redirectExcess)
+        .endCell();
+}
+
+export function encodeSetExcessThreshold(msg: SetExcessThreshold): Cell {
+    return beginCell()
+        .storeUint(Opcodes.OP_SET_EXCESS_THRESHOLD, 32)
+        .storeUint(msg.queryId, 64)
+        .storeCoins(msg.excessThreshold)
         .endCell();
 }
 

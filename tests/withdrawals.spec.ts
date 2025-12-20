@@ -23,7 +23,7 @@ describe('Withdrawals', () => {
 
     describe('TON Withdrawal', () => {
         it('should allow firstExplorer to withdraw TON', async () => {
-            const coordinateCell = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
+            const { coordinateCell } = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
 
             // Send TON to CoordinateCell
             const sendAmount = toNano('1');
@@ -65,7 +65,7 @@ describe('Withdrawals', () => {
         });
 
         it('should not allow withdrawal that would leave less than 0.1 TON', async () => {
-            const coordinateCell = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
+            const { coordinateCell } = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
 
             // Send TON to CoordinateCell
             const sendAmount = toNano('0.5');
@@ -95,7 +95,7 @@ describe('Withdrawals', () => {
         });
 
         it('should not allow non-firstExplorer to withdraw TON', async () => {
-            const coordinateCell = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
+            const { coordinateCell } = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
 
             // Send TON to CoordinateCell
             await SC_System.ownerAccount.send({
@@ -123,7 +123,7 @@ describe('Withdrawals', () => {
 
     describe('Jetton Withdrawal', () => {
         it('should allow firstExplorer to withdraw jettons', async () => {
-            const coordinateCell = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
+            const { coordinateCell } = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
 
             // Deploy jetton minter
             const jettonContent = jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' });
@@ -189,7 +189,7 @@ describe('Withdrawals', () => {
         });
 
         it('should not allow non-firstExplorer to withdraw jettons', async () => {
-            const coordinateCell = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
+            const { coordinateCell } = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });
 
             // Deploy jetton minter
             const jettonContent = jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' });
