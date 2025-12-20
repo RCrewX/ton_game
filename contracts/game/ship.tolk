@@ -84,7 +84,7 @@ fun onInternalMessage(in: InMessage) {
         RequestToMove => {
             var storage = ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_UNAUTHORIZED;
-            assert (in.valueCoins >= GAS_COST_REQUEST_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            assert (in.valueCoins >= TODO_TOTAL_GAS_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
             // Check we have enough balance for the operation: gas cost + coordinate cell gas
             assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
 

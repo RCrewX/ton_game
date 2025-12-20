@@ -4,6 +4,7 @@ type AllowedMessagesToSubcontract =
     | Forward
     | ForwardWithInit
     | Withdraw
+    | TransferNotificationForRecipient
 
 fun onInternalMessage(in: InMessage) {
     // Check for excess messages first (they have a specific opcode)
@@ -113,6 +114,11 @@ fun onInternalMessage(in: InMessage) {
                 });
                 out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
             }
+        }
+        TransferNotificationForRecipient => {
+            // Accept jetton transfer notifications (from jetton wallet)
+            // Just reserve value and do nothing - subcontract can receive these messages
+            reserveValue(in.valueCoins);
         }
         else => {
             assert (in.body.isEmpty()) throw 0xFFFF

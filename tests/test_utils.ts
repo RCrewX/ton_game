@@ -9,7 +9,7 @@ import { MoveMode } from "../wrappers/game/structs";
 import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
 import { JettonWallet } from "../wrappers/jetton/JettonWallet";
 import { Opcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from "../wrappers/game_manager/types";
-import { GAS_COST_REQUEST_TO_MOVE } from "../wrappers/game/types";
+import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from "../wrappers/game/types";
 
 export type ContractSystem = {
     blockchain: Blockchain;
@@ -197,7 +197,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
 export async function setupCoordinateCellWithFirstExplorer(
     SC_System: ContractSystem,
     xy: { x: bigint; y: bigint }
-): Promise<SandboxContract<CoordinateCell>> {
+): Promise<{ coordinateCell: SandboxContract<CoordinateCell>; firstExplorerShip: SandboxContract<Ship> }> {
     // Create a ship for the first explorer
     const firstExplorerShip = SC_System.blockchain.openContract(Ship.createFromConfig({
         userAddress: SC_System.ownerAccount.address,
@@ -206,6 +206,17 @@ export async function setupCoordinateCellWithFirstExplorer(
     }, SC_System.shipCode));
 
     await firstExplorerShip.sendDeploy(SC_System.ownerAccount.getSender(), toNano('5'));
+
+    // Ensure ship has enough balance for the move
+    const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + toNano('0.1');
+    const currentBalance = await firstExplorerShip.getTonBalance();
+    if (currentBalance < minRequiredBalance) {
+        await SC_System.ownerAccount.send({
+            to: firstExplorerShip.address,
+            value: minRequiredBalance - currentBalance + toNano('0.1'),
+            body: beginCell().endCell(),
+        });
+    }
 
     // Create the CoordinateCell
     const coordinateCell = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({
@@ -218,11 +229,13 @@ export async function setupCoordinateCellWithFirstExplorer(
     await coordinateCell.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.05'));
 
     // Open the cell by moving to it (this sets firstExplorer)
+    // Ship requires TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX
+    const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
     SC_System.messageResult = await firstExplorerShip.sendMove(
         SC_System.ownerAccount.getSender(),
-        GAS_COST_REQUEST_TO_MOVE,
+        TODO_TOTAL_GAS_TO_MOVE,
         MoveMode.UP
     );
 
-    return coordinateCell;
+    return { coordinateCell, firstExplorerShip };
 }

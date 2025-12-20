@@ -59,6 +59,17 @@ struct (0xd53276db) ReturnExcessesBack {
     queryId: uint64
 }
 
+// Jetton transfer notification (from jetton wallet)
+// ForwardPayloadRemainder is RemainingBitsAndRefs
+type ForwardPayloadRemainder = RemainingBitsAndRefs
+
+struct (0x7362d09c) TransferNotificationForRecipient {
+    queryId: uint64
+    jettonAmount: coins
+    transferInitiator: address?
+    forwardPayload: ForwardPayloadRemainder
+}
+
 fun reserveValue(msgValue: coins, delta: coins = 0) {
     val base = (contract.getOriginalBalance() - msgValue) + BASIC_STORAGE_TAX;
     val reserveAmount = base + delta;

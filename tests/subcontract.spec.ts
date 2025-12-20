@@ -812,5 +812,56 @@ describe('Subcontract', () => {
         );
         expect(excessForwardTx).toBeUndefined();
     });
+
+    it('Test Subcontract can receive TransferNotificationForRecipient', async () => {
+        const subcontractId = 200n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Manually send TransferNotificationForRecipient message to subcontract
+        // This tests that subcontract can receive and process this message type
+        const jettonAmount = toNano('100');
+        
+        // Create TransferNotificationForRecipient message body
+        // struct (0x7362d09c) TransferNotificationForRecipient {
+        //     queryId: uint64
+        //     jettonAmount: coins (VarUInteger 16)
+        //     transferInitiator: address? (Maybe address, 2 bits + 267 bits if present)
+        //     forwardPayload: ForwardPayloadRemainder (RemainingBitsAndRefs - remaining bits/refs)
+        // }
+        // For empty forwardPayload, RemainingBitsAndRefs is just empty (0 bits, 0 refs)
+        const notificationBody = beginCell()
+            .storeUint(0x7362d09c, 32) // opcode
+            .storeUint(0, 64) // queryId
+            .storeCoins(jettonAmount) // jettonAmount (VarUInteger)
+            .storeMaybeRef(null) // transferInitiator (null = 0 bit, then nothing)
+            // forwardPayload: RemainingBitsAndRefs - empty (no additional bits/refs)
+            .endCell();
+
+        // Send the message directly to subcontract
+        SC_System.messageResult = await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('0.1'),
+            body: notificationBody,
+        });
+
+        // Verify subcontract received and processed the message successfully
+        // The subcontract contract now accepts TransferNotificationForRecipient messages
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+        });
+        
+        // Verify subcontract is still active by checking owner address getter
+        // If the message was rejected, the contract might have crashed
+        const ownerAddress = await subcontract.getOwnerAddress();
+        expect(ownerAddress).toEqualAddress(SC_System.ownerAccount.address);
+    });
 });
 
