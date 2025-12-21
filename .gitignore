@@ -1,6 +1,7 @@
 node_modules
 temp
 build
+build_info
 dist
 .DS_Store
 package.ts
