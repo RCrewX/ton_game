@@ -20,6 +20,3 @@ COPY . .
 RUN pnpm build
 
 
-# Default command (can be overridden)
-RUN pnpm blueprint run deploySystem --testnet --mnemonic
-
