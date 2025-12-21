@@ -79,7 +79,7 @@ function saveBuildFile(data: DeploymentData, filePath: string) {
 function getBuildFilePath(network: 'testnet' | 'mainnet'): string {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `deployment-${network}-${timestamp}.json`;
-    const buildDir = join(process.cwd(), 'build');
+    const buildDir = join(process.cwd(), 'build_info');
     if (!existsSync(buildDir)) {
         mkdirSync(buildDir, { recursive: true });
     }
