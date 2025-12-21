@@ -19,6 +19,7 @@ COPY . .
 # Build the contracts
 RUN pnpm build
 
+
 # Default command (can be overridden)
-CMD ["pnpm", "blueprint", "run", "deploySystem", "--testnet", "--mnemonic"]
+RUN pnpm blueprint run deploySystem --testnet --mnemonic
 
