@@ -20,5 +20,5 @@ COPY . .
 RUN pnpm build
 
 # Default command (can be overridden)
-CMD ["pnpm", "test"]
+CMD ["pnpm", "blueprint", "run", "deploySystem", "--testnet", "--mnemonic"]
 
