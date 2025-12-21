@@ -111,10 +111,10 @@ fun onInternalMessage(in: InMessage) {
             // Validate amount: must be more than BASIC_STORAGE_TAX and less than or equal to maxWithdrawable
             assert (msg.amount > BASIC_STORAGE_TAX) throw ERR_WITHDRAW_AMOUNT_TOO_LOW;
             assert (msg.amount <= maxWithdrawable) throw ERR_WITHDRAW_AMOUNT_TOO_HIGH;
-            // Withdraw the specified amount
+            // Withdraw the specified amount to msg.receiver
             val out = createMessage({
                 bounce: BounceMode.NoBounce,
-                dest: storage.ownerAddress,
+                dest: msg.receiver,
                 value: msg.amount,
                 body: beginCell().endCell() // Empty body for simple transfer
             });
@@ -130,6 +130,13 @@ fun onInternalMessage(in: InMessage) {
             storageToUpdate.redirectExcess = msg.redirectExcess;
             storageToUpdate.save();
             reserveValue(in.valueCoins);
+            val cashbackMessage = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: storage.ownerAddress,
+                value: 0,
+                body: beginCell().endCell() // Empty body for simple transfer
+            });
+            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
         SetExcessThreshold => {
             // Auth check
@@ -143,6 +150,13 @@ fun onInternalMessage(in: InMessage) {
             storageToUpdate.excessThreshold = msg.excessThreshold;
             storageToUpdate.save();
             reserveValue(in.valueCoins);
+            val cashbackMessage = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: storage.ownerAddress,
+                value: 0,
+                body: beginCell().endCell() // Empty body for simple transfer
+            });
+            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
         TransferNotificationForRecipient => {
             // Accept jetton transfer notifications (from jetton wallet)

@@ -637,6 +637,7 @@ describe('Subcontract', () => {
         SC_System.messageResult = await subcontract.sendWithdraw(
             SC_System.ownerAccount.getSender(),
             withdrawAmount,
+            SC_System.ownerAccount.address,
             toNano('0.01')
         );
 
@@ -690,6 +691,7 @@ describe('Subcontract', () => {
         SC_System.messageResult = await subcontract.sendWithdraw(
             unauthorizedAccount.getSender(),
             toNano('0.5'),
+            unauthorizedAccount.address,
             toNano('0.01')
         );
 
@@ -993,6 +995,7 @@ describe('Subcontract', () => {
         SC_System.messageResult = await subcontract.sendWithdraw(
             SC_System.ownerAccount.getSender(),
             toNano('0.005'), // Less than BASIC_STORAGE_TAX
+            SC_System.ownerAccount.address,
             toNano('0.01')
         );
 
@@ -1011,6 +1014,7 @@ describe('Subcontract', () => {
         SC_System.messageResult = await subcontract.sendWithdraw(
             SC_System.ownerAccount.getSender(),
             maxWithdrawable + toNano('0.1'), // More than available
+            SC_System.ownerAccount.address,
             toNano('0.01')
         );
 
@@ -1045,6 +1049,7 @@ describe('Subcontract', () => {
         SC_System.messageResult = await subcontract.sendWithdraw(
             SC_System.ownerAccount.getSender(),
             withdrawAmount,
+            SC_System.ownerAccount.address,
             toNano('0.01')
         );
 
@@ -1067,6 +1072,57 @@ describe('Subcontract', () => {
             expect(withdrawnAmount).toBeGreaterThanOrEqual(withdrawAmount);
             expect(withdrawnAmount).toBeLessThanOrEqual(withdrawAmount + toNano('0.01')); // Allow small variance
         }
+    });
+
+    it('Test Subcontract withdraw - can withdraw to different receiver address', async () => {
+        const subcontractId = 205n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('2'),
+        });
+
+        // Create a different receiver
+        const receiver = await SC_System.blockchain.treasury('receiver');
+        const initialReceiverBalance = await receiver.getBalance();
+
+        // Withdraw to receiver (not owner)
+        const withdrawAmount = toNano('0.5');
+        SC_System.messageResult = await subcontract.sendWithdraw(
+            SC_System.ownerAccount.getSender(),
+            withdrawAmount,
+            receiver.address,
+            toNano('0.01')
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+        });
+
+        // Verify funds were sent to receiver (not owner)
+        const withdrawTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.inMessage?.info.src?.equals(subcontract.address) === true &&
+            tx.inMessage?.info.dest?.equals(receiver.address) === true
+        );
+        expect(withdrawTx).toBeDefined();
+        if (withdrawTx?.inMessage?.info.value) {
+            const withdrawnAmount = withdrawTx.inMessage.info.value.coins;
+            expect(withdrawnAmount).toBeGreaterThanOrEqual(withdrawAmount);
+        }
+
+        // Verify receiver balance increased
+        const finalReceiverBalance = await receiver.getBalance();
+        expect(finalReceiverBalance).toBeGreaterThan(initialReceiverBalance);
     });
 });
 

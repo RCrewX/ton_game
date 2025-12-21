@@ -76,13 +76,14 @@ export class Subcontract implements Contract {
         provider: ContractProvider,
         via: Sender,
         amount: bigint,
+        receiver: Address,
         value: bigint = toNano('0.01'),
         queryId: bigint = 0n
     ) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeWithdraw({ queryId, amount }),
+            body: encodeWithdraw({ queryId, amount, receiver }),
         });
     }
 

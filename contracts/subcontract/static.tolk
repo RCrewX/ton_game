@@ -62,6 +62,7 @@ struct (0x4c5d6e7f) ForwardWithInit {
 struct (0x5d6e7f8a) Withdraw {
     queryId: uint64
     amount: coins
+    receiver: address
 }
 
 // Set redirect excess flag message

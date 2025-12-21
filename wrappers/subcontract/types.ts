@@ -37,6 +37,7 @@ export type ForwardWithInit = {
 export type Withdraw = {
     queryId: bigint;
     amount: bigint;
+    receiver: Address;
 };
 
 export type SetRedirectExcess = {
@@ -83,6 +84,7 @@ export function encodeWithdraw(msg: Withdraw): Cell {
         .storeUint(Opcodes.OP_WITHDRAW, 32)
         .storeUint(msg.queryId, 64)
         .storeCoins(msg.amount)
+        .storeAddress(msg.receiver)
         .endCell();
 }
 
