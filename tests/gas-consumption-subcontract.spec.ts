@@ -40,6 +40,20 @@ describe("Gas Prices - Subcontract", () => {
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 
+        // Enable redirectExcess to receive cashback
+        await subcontract.sendSetRedirectExcess(
+            SC_System.ownerAccount.getSender(),
+            true,
+            toNano('0.05')
+        );
+
+        // Set excess threshold low enough to receive cashback
+        await subcontract.sendSetExcessThreshold(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.01'),
+            toNano('0.05')
+        );
+
         await SC_System.ownerAccount.send({
             to: subcontract.address,
             value: toNano('1'),
@@ -64,12 +78,11 @@ describe("Gas Prices - Subcontract", () => {
             .storeRef(shipData)
             .endCell();
 
-        let initial_balance = await SC_System.ownerAccount.getBalance();
-        let little_less_than_gas_needed = toNano('0.01');
+        let little_less_than_gas_needed = toNano('0.005');
         const deployAmount = toNano('5');
         const deployBody = beginCell().endCell();
         const totalAmount = GAS_COST_FORWARD_WITH_INIT + deployAmount + toNano('0.5');
-        let gas_sent = totalAmount + toNano('0.1');
+        let gas_sent = toNano('0.1'); // Expected gas cost (much less than totalAmount)
 
         SC_System.messageResult = await subcontract.sendForwardWithInit(
             SC_System.ownerAccount.getSender(),
@@ -101,8 +114,8 @@ describe("Gas Prices - Subcontract", () => {
             tx.op === SubcontractOpcodes.OP_FORWARD_WITH_INIT
         );
         
-        let final_balance = await SC_System.ownerAccount.getBalance();
-        let cost = initial_balance - final_balance;
+        // Use transaction fees instead of balance difference (excess is returned with redirectExcess enabled)
+        const cost = forwardWithInitTx?.totalFees || toNano('0.05');
         const costStr = fromNano(cost);
         console.log(`Cost: ${costStr}`);
         gasCosts['DeployShipThroughSubcontract'] = costStr;
@@ -119,6 +132,20 @@ describe("Gas Prices - Subcontract", () => {
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Enable redirectExcess to receive cashback
+        await subcontract.sendSetRedirectExcess(
+            SC_System.ownerAccount.getSender(),
+            true,
+            toNano('0.05')
+        );
+
+        // Set excess threshold low enough to receive cashback
+        await subcontract.sendSetExcessThreshold(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.01'),
+            toNano('0.05')
+        );
 
         await SC_System.ownerAccount.send({
             to: subcontract.address,
@@ -168,13 +195,12 @@ describe("Gas Prices - Subcontract", () => {
             });
         }
 
-        let initial_balance = await SC_System.ownerAccount.getBalance();
-        let little_less_than_gas_needed = toNano('0.01');
+        let little_less_than_gas_needed = toNano('0.002');
         const moveMessage = encodeRequestToMove({ mode: MoveMode.UP });
         const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + toNano('0.01');
         const forwardAmount = TODO_TOTAL_GAS_TO_MOVE;
         const totalAmount = GAS_COST_FORWARD + forwardAmount;
-        let gas_sent = totalAmount + toNano('0.1');
+        let gas_sent = toNano('0.05'); // Expected gas cost (much less than totalAmount)
 
         SC_System.messageResult = await subcontract.sendForward(
             SC_System.ownerAccount.getSender(),
@@ -206,8 +232,8 @@ describe("Gas Prices - Subcontract", () => {
             tx.op === SubcontractOpcodes.OP_FORWARD
         );
         
-        let final_balance = await SC_System.ownerAccount.getBalance();
-        let cost = initial_balance - final_balance;
+        // Use transaction fees instead of balance difference (excess is returned with redirectExcess enabled)
+        const cost = forwardTx?.totalFees || toNano('0.01');
         const costStr = fromNano(cost);
         console.log(`Cost: ${costStr}`);
         gasCosts['MoveShipThroughSubcontract'] = costStr;

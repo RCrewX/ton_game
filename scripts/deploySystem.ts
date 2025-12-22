@@ -13,6 +13,7 @@ import { keyPairFromSecretKey } from '@ton/crypto';
 import { WalletIdV5R1 } from '@ton/ton/dist/wallets/WalletContractV5R1';
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { createHash } from 'crypto';
 
 // Load environment variables
 dotenv.config();
@@ -53,6 +54,43 @@ interface DeploymentData {
         nonBounceable: string;
     };
     ownerJettonBalance?: string;
+    contractCodes?: {
+        gameManager: {
+            hex: string;
+            hash: string;
+            hashBase64: string;
+        };
+        game: {
+            hex: string;
+            hash: string;
+            hashBase64: string;
+        };
+        ship: {
+            hex: string;
+            hash: string;
+            hashBase64: string;
+        };
+        coordinateCell: {
+            hex: string;
+            hash: string;
+            hashBase64: string;
+        };
+        jettonWallet: {
+            hex: string;
+            hash: string;
+            hashBase64: string;
+        };
+        jettonMinter: {
+            hex: string;
+            hash: string;
+            hashBase64: string;
+        };
+        subcontract: {
+            hex: string;
+            hash: string;
+            hashBase64: string;
+        };
+    };
     status: 'in_progress' | 'completed' | 'failed';
     error?: string;
 }
@@ -76,6 +114,14 @@ function saveBuildFile(data: DeploymentData, filePath: string) {
     writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
+function getContractCodeData(code: Cell): { hex: string; hash: string; hashBase64: string } {
+    const boc = code.toBoc();
+    const hex = boc.toString('hex');
+    const hash = createHash('sha256').update(boc).digest('hex');
+    const hashBase64 = createHash('sha256').update(boc).digest('base64');
+    return { hex, hash, hashBase64 };
+}
+
 function getBuildFilePath(network: 'testnet' | 'mainnet'): string {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `deployment-${network}-${timestamp}.json`;
@@ -84,6 +130,14 @@ function getBuildFilePath(network: 'testnet' | 'mainnet'): string {
         mkdirSync(buildDir, { recursive: true });
     }
     return join(buildDir, filename);
+}
+
+function getDefaultBuildFilePath(): string {
+    const buildDir = join(process.cwd(), 'build_info');
+    if (!existsSync(buildDir)) {
+        mkdirSync(buildDir, { recursive: true });
+    }
+    return join(buildDir, 'deployment.json');
 }
 
 function getNetworkFromProvider(provider: NetworkProvider): 'testnet' | 'mainnet' {
@@ -264,6 +318,19 @@ export async function run(provider: NetworkProvider) {
         const jettonMinterCode = await compile('JettonMinter');
         const subcontractCode = await compile('Subcontract');
         console.log('Contracts compiled successfully');
+
+        // Store contract codes with full data (hex, hash, hashBase64)
+        deploymentData.contractCodes = {
+            gameManager: getContractCodeData(gameManagerCode),
+            game: getContractCodeData(gameCode),
+            ship: getContractCodeData(shipCode),
+            coordinateCell: getContractCodeData(coordinateCellCode),
+            jettonWallet: getContractCodeData(jettonWalletCode),
+            jettonMinter: getContractCodeData(jettonMinterCode),
+            subcontract: getContractCodeData(subcontractCode),
+        };
+        saveBuildFile(deploymentData, buildFilePath);
+        console.log('Contract codes saved to deployment data');
 
         // Deploy GameManager first
         const gameManager = provider.open(
@@ -559,7 +626,9 @@ export async function run(provider: NetworkProvider) {
 
         deploymentData.status = 'completed';
         saveBuildFile(deploymentData, buildFilePath);
-
+        saveBuildFile(deploymentData, getDefaultBuildFilePath());
+        
+        
         console.log('\n=== Deployment Summary ===');
         console.log('Network:', network);
         console.log('Owner address (bounceable):', deploymentData.ownerAddress.bounceable);
@@ -579,13 +648,18 @@ export async function run(provider: NetworkProvider) {
         console.log('Owner jetton balance:', deploymentData.ownerJettonBalance);
         console.log(`\nBuild file saved to: ${buildFilePath}`);
         console.log('========================\n');
+        console.error(`Default build file saved to: ${getDefaultBuildFilePath()}`);
+        console.error('========================\n');
     } catch (error: any) {
         deploymentData.status = 'failed';
         deploymentData.error = error.message || String(error);
         saveBuildFile(deploymentData, buildFilePath);
+        saveBuildFile(deploymentData, getDefaultBuildFilePath());
         console.error('\n=== Deployment Failed ===');
         console.error('Error:', error.message || error);
         console.error(`Build file saved to: ${buildFilePath}`);
+        console.error(`Default build file saved to: ${getDefaultBuildFilePath()}`);
+        console.error('========================\n');
         throw error;
     }
 }
