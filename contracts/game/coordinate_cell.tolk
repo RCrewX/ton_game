@@ -11,6 +11,7 @@ type AllowedMessagesToCoordinateCell =
     | MoveShipToCC 
     | WithdrawTON
     | WithdrawJetton
+    | WithdrawNFT
     | AnyMessage
 
 fun onBouncedMessage(in: InMessageBounced) {
@@ -95,7 +96,8 @@ fun onInternalMessage(in: InMessage) {
                     }
                 }
             });
-            moveEndMsg.send(128);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            moveEndMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         MoveShipToCC => {
             var storage = lazy CoordinateCellStorage.load();
@@ -118,9 +120,11 @@ fun onInternalMessage(in: InMessage) {
                     }.toCell()
                 }
             });
-            moveEndMsg.send(128);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            moveEndMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         WithdrawTON => {
+            
             var storage = lazy CoordinateCellStorage.load();
             assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
@@ -128,9 +132,12 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
             
             val currentBalance = contract.getOriginalBalance();
-            val minRequiredBalance = BASIC_STORAGE_TAX;
+            
+            val minRequiredBalance = BASIC_STORAGE_TAX * WITHDRAW_TON_MIN_BALANCE_MULTIPLIER;
             assert (currentBalance - in.valueCoins >= minRequiredBalance + msg.amount) throw ERR_NOT_ENOUGH_BALANCE;
             
+            // Reserve value before sending withdrawal
+            reserveValue(in.valueCoins);
             val withdrawMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: msg.recipient,
@@ -139,7 +146,8 @@ fun onInternalMessage(in: InMessage) {
                     queryId: msg.queryId
                 }
             });
-            withdrawMsg.send(0);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            withdrawMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         WithdrawJetton => {
             var storage = lazy CoordinateCellStorage.load();
@@ -151,12 +159,12 @@ fun onInternalMessage(in: InMessage) {
             // Send AskToTransfer to CoordinateCell's jetton wallet
             // The wallet will transfer jettons to the recipient
             val coordinateCellAddress = contract.getAddress();
-            val forwardPayload = beginCell().storeUint(1, 128).toSlice();
+            val forwardPayload = beginCell().storeUint(FORWARD_PAYLOAD_MARKER, 128).toSlice();
             reserveValue(in.valueCoins);
             val askToTransferMsg = createMessage({
                 bounce: BounceMode.Only256BitsOfBody,
                 dest: msg.jettonWalletAddress,
-                value: msg.forwardTonAmount + ton("0.05"), // forward amount + gas for wallet operations
+                value: msg.forwardTonAmount + GAS_COST_WITHDRAW_JETTON, // forward amount + gas for wallet operations
                 body: AskToTransfer {
                     queryId: msg.queryId,
                     jettonAmount: msg.amount,
@@ -167,12 +175,42 @@ fun onInternalMessage(in: InMessage) {
                     forwardPayload: forwardPayload
                 }
             });
-            askToTransferMsg.send(128);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            askToTransferMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+        }
+        WithdrawNFT => {
+            var storage = lazy CoordinateCellStorage.load();
+            assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            var ccStorage: CCStorage = lazy storage.ccStorage!.load();
+            assert (ccStorage.firstExplorer != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
+            
+            // Send Transfer message to NFT contract (TEP-62 standard)
+            // Use helper function to encode TEP-62 format correctly (MsgAddress encoding for optional addresses)
+            reserveValue(in.valueCoins);
+            val emptyForwardPayload: RemainingBitsAndRefs = beginCell().endCell().beginParse();
+            val nftTransferBody = encodeNFTTransfer(
+                msg.queryId,
+                msg.recipient,
+                msg.responseDestination,
+                msg.customPayload,
+                msg.forwardTonAmount,
+                emptyForwardPayload
+            );
+            
+            val nftTransferMsg = createMessage({
+                bounce: BounceMode.Only256BitsOfBody,
+                dest: msg.nftAddress,
+                value: msg.forwardTonAmount + GAS_COST_WITHDRAW_NFT, // forward amount + gas for NFT operations
+                body: nftTransferBody
+            });
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            nftTransferMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}
         else => {
-            assert (in.body.isEmpty()) throw 0xFFFF
+            assert (in.body.isEmpty()) throw ERR_UNKNOWN_MESSAGE
         }
     }
 }

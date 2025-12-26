@@ -20,6 +20,21 @@ const GAS_COST_FORWARD_MINT_REQUEST: coins = ton("0.06"); // Game -> GameManager
 const GAS_COST_UPGRADE_SHIP_REQUEST: coins = ton("0.06"); // GameManager -> Game (UpgradeShipRequest) - just gas (estimated)
 const GAS_COST_SHIP_UPGRADE: coins = ton("0.06"); // Game -> Ship (ShipUpgrade) - just gas (estimated)
 const GAS_COST_TRANSFER_NOTIFICATION: coins = ton("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - just gas (estimated)
+const GAS_COST_WITHDRAW_JETTON: coins = ton("0.05"); // Gas for jetton wallet operations during withdrawal
+const GAS_COST_WITHDRAW_NFT: coins = ton("0.05"); // Gas for NFT operations during withdrawal
+
+// Note: SEND_MODE constants from stdlib:
+// SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE = 64 (carry remaining message value)
+// SEND_MODE_CARRY_ALL_REMAINING_BALANCE = 128 (carry all remaining balance)
+// SEND_MODE_IGNORE_ERRORS = 2
+// Use send_mode=128 (CARRY_ALL_REMAINING_BALANCE) where we want to forward all excess balance
+const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
+
+// WithdrawTON constants
+const WITHDRAW_TON_MIN_BALANCE_MULTIPLIER: uint8 = 10; // minRequiredBalance = BASIC_STORAGE_TAX * 10
+
+// Forward payload marker for jetton transfers
+const FORWARD_PAYLOAD_MARKER: uint128 = 1;
 
 const var_mutableVar: int = 10;
 const val_immutableVal: int = 20;

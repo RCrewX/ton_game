@@ -1,7 +1,7 @@
 import { toNano } from '@ton/core';
 import { Game } from '../wrappers/game/Game';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../wrappers/game/types';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
 
@@ -10,6 +10,11 @@ describe('Address Requests', () => {
     beforeEach(async () => {
         SC_System = await initContractSystem();
     }, 100000);
+
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+    });
 
     it('Test Game sendRequestShipAddress - verify response message', async () => {
         SC_System.messageResult = await SC_System.game.sendRequestShipAddress(

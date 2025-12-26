@@ -21,6 +21,7 @@ const ERR_JETTON_WALLET_CODE_NOT_SET = 923;  // Jetton wallet code is not set (n
 const ERR_GAMES_NOT_SET = 924;  // Games list is not set (null)
 const ERR_INVALID_JETTON_WALLET_SENDER = 925;  // Sender is not the expected jetton wallet address
 
+const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
 //  Storage
 
 struct GameManagerStorage {

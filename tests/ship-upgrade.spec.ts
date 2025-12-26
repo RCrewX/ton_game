@@ -1,7 +1,7 @@
 import { beginCell, Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import { MoveMode } from '../wrappers/game/structs';
@@ -46,6 +46,13 @@ describe('Ship Upgrade', () => {
         });
 
     }, 100000);
+
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+        otherUser = null as any;
+        anotherUser = null as any;
+    });
 
     it('should upgrade ship HP when jettons are transferred to GameManager', async () => {
         // Set jetton minter address and wallet code in GameManager

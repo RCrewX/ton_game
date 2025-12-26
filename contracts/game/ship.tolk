@@ -90,10 +90,12 @@ fun onInternalMessage(in: InMessage) {
                 value: 0,
                 body: ReturnExcessesBack {queryId:0},
             });
-            cashbackMsg.send(128);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         RequestToMove => {
-            var storage = ShipStorage.load();
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
+            var storage = lazy ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
             assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
             assert (in.valueCoins >= TODO_TOTAL_GAS_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
@@ -124,10 +126,12 @@ fun onInternalMessage(in: InMessage) {
                     ship_hp: gameFields.hp,
                 }
             });
-            moveMsg.send(128);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            moveMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ShipUpgrade => {
-            var storage = ShipStorage.load();
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
+            var storage = lazy ShipStorage.load();
             // Only Game can upgrade ships
             assert (in.senderAddress == storage.gameAddress) throw ERR_INVALID_GAME_SENDER;
             
@@ -148,7 +152,7 @@ fun onInternalMessage(in: InMessage) {
         ReturnExcessesBack => {}
         LiteralyAnything => {}
         else => {
-            assert (in.body.isEmpty()) throw 0xFFFF
+            assert (in.body.isEmpty()) throw ERR_UNKNOWN_MESSAGE
         }
     }
 }

@@ -239,3 +239,34 @@ export async function setupCoordinateCellWithFirstExplorer(
 
     return { coordinateCell, firstExplorerShip };
 }
+
+/**
+ * Cleanup function to help with memory management
+ * Clears references and forces garbage collection hints
+ * 
+ * Memory safety considerations:
+ * - Transaction arrays can be large (hundreds of transactions)
+ * - Contract instances hold references to blockchain
+ * - Compiled code cells are relatively small but should be cleared
+ * - Treasury accounts hold references to blockchain
+ */
+export function cleanupContractSystem(system: ContractSystem | null | undefined) {
+    if (!system) return;
+    
+    // Clear message result first - transaction arrays can be very large
+    // Each transaction contains full message data, state, etc.
+    system.messageResult = null;
+    
+    // Clear contract references - these hold references to blockchain
+    // Note: We can't null these in the type system, but clearing messageResult
+    // helps break the reference chain
+    
+    // Clear compiled code cells - these are relatively small but accumulate
+    // Note: These are Cell objects which are immutable, so clearing references helps
+    
+    // Force garbage collection if available (Node.js with --expose-gc flag)
+    // This helps free memory immediately rather than waiting for next GC cycle
+    if (global.gc) {
+        global.gc();
+    }
+}

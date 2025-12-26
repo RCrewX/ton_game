@@ -15,7 +15,7 @@ fun onInternalMessage(in: InMessage) {
         ReturnExcessesBack => {
             // Handle excess message
             // Load storage fresh to get current redirectExcess and excessThreshold values
-            var storage = SubcontractStorage.load();
+            var storage = lazy SubcontractStorage.load();
             // If redirect excess is enabled and message value is greater than or equal to threshold, resend to owner
             if (storage.redirectExcess && in.valueCoins >= storage.excessThreshold) {
                 // Reserve value first (before sending forward message)
@@ -36,8 +36,8 @@ fun onInternalMessage(in: InMessage) {
             }
         }
         Forward => {
-            // Auth check
-            var storage = SubcontractStorage.load();
+            // Auth check - using lazy since we only read ownerAddress (read-only access)
+            var storage = lazy SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Value check: must cover gas cost + forward amount
             assert (in.valueCoins >= GAS_COST_FORWARD + msg.forwardTonAmount) throw ERR_MESSAGE_VALUE_TOO_LOW;
@@ -65,8 +65,8 @@ fun onInternalMessage(in: InMessage) {
             out.send(msg.sendMode);
         }
         ForwardWithInit => {
-            // Auth check
-            var storage = SubcontractStorage.load();
+            // Auth check - using lazy since we only read ownerAddress (read-only access)
+            var storage = lazy SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Value check: must cover gas cost + forward amount
             assert (in.valueCoins >= GAS_COST_FORWARD_WITH_INIT + msg.forwardTonAmount) throw ERR_MESSAGE_VALUE_TOO_LOW;
@@ -100,8 +100,8 @@ fun onInternalMessage(in: InMessage) {
             out.send(msg.sendMode);
         }
         Withdraw => {
-            // Auth check
-            var storage = SubcontractStorage.load();
+            // Auth check - using lazy since we only read ownerAddress (read-only access)
+            var storage = lazy SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Calculate available balance: current balance - BASIC_STORAGE_TAX (for gas safety)
             // getOriginalBalance() returns balance before processing the current message
@@ -121,14 +121,12 @@ fun onInternalMessage(in: InMessage) {
             out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
         SetRedirectExcess => {
-            // Auth check
-            var storage = SubcontractStorage.load();
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
+            var storage = lazy SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
-            // Load storage (not lazy) to modify it
-            var storageToUpdate = SubcontractStorage.load();
-            // Update redirect excess flag
-            storageToUpdate.redirectExcess = msg.redirectExcess;
-            storageToUpdate.save();
+            // Update redirect excess flag - lazy allows partial updates via toCell()
+            storage.redirectExcess = msg.redirectExcess;
+            storage.save();
             reserveValue(in.valueCoins);
             val cashbackMessage = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -139,16 +137,14 @@ fun onInternalMessage(in: InMessage) {
             cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
         SetExcessThreshold => {
-            // Auth check
-            var storage = SubcontractStorage.load();
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
+            var storage = lazy SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             // Validate threshold: must be at least MIN_EXCESS_THRESHOLD
             assert (msg.excessThreshold >= MIN_EXCESS_THRESHOLD) throw ERR_EXCESS_THRESHOLD_TOO_LOW;
-            // Load storage (not lazy) to modify it
-            var storageToUpdate = SubcontractStorage.load();
-            // Update excess threshold
-            storageToUpdate.excessThreshold = msg.excessThreshold;
-            storageToUpdate.save();
+            // Update excess threshold - lazy allows partial updates via toCell()
+            storage.excessThreshold = msg.excessThreshold;
+            storage.save();
             reserveValue(in.valueCoins);
             val cashbackMessage = createMessage({
                 bounce: BounceMode.NoBounce,

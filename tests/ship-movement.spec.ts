@@ -3,7 +3,7 @@ import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Game } from '../wrappers/game/Game';
 import '@ton/test-utils';
 import { Ship } from '../wrappers/game/Ship';
-import { ContractSystem, initContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { MoveMode } from '../wrappers/game/structs';
 import { Opcodes, GAS_COST_SEND_MOVE, GAS_COST_ANY_MESSAGE } from '../wrappers/game/types';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
@@ -13,6 +13,11 @@ describe('Ship Movement', () => {
     beforeEach(async () => {
         SC_System = await initContractSystem();
     }, 100000);
+
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+    });
 
     it('Get Ship, pop-up ship, move UP', async () => {
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);

@@ -1,7 +1,7 @@
 import { beginCell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 
 describe('GameManager', () => {
@@ -9,6 +9,11 @@ describe('GameManager', () => {
     beforeEach(async () => {
         SC_System = await initContractSystem();
     }, 100000);
+
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+    });
 
     it('Test GameManager message redirection - owner can redirect messages to any address', async () => {
         const recipient = await SC_System.blockchain.treasury('redirectRecipient');

@@ -39,3 +39,4 @@ const ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED = 916  // Coordinate cell stor
 const ERR_NOT_FIRST_EXPLORER = 917  // Sender is not the first explorer of this coordinate cell
 const ERR_INVALID_COORDINATE_CELL_SENDER_FOR_MOVE = 918  // Sender is not the expected coordinate cell for Move message
 const ERR_INVALID_SHIP_SENDER_FOR_MOVE = 919  // Sender is not the expected ship for MoveShipToCC message
+const ERR_UNKNOWN_MESSAGE = 0xFFFF  // Unknown message type (body not empty but doesn't match any known message)

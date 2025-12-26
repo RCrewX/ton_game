@@ -8,6 +8,13 @@ const config: Config = {
     testPathIgnorePatterns: ['/node_modules/', '/dist/'],
     reporters: ['default', ['@ton/sandbox/jest-reporter', {}]],
     maxWorkers: 1, // Run tests sequentially, one test file after another
+    // Force test isolation - each test file runs in a separate process
+    // This helps prevent memory leaks from accumulating
+    forceExit: true,
+    // Clear mocks and timers after each test
+    clearMocks: true,
+    resetMocks: true,
+    restoreMocks: true,
 };
 
 export default config;

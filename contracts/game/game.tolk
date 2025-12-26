@@ -27,6 +27,7 @@ fun onInternalMessage(in: InMessage) {
                     requestedAddress: calcAddressOfShip(msg.userAddress, contract.getAddress(), storage.shipCode, storage.coordinateCellCode),
                 }
             });
+            // Use SEND_MODE_IGNORE_ERRORS + 128 for response messages (ignore errors + carry all remaining balance)
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         RequestCoordinateCellAddress => {
@@ -40,6 +41,7 @@ fun onInternalMessage(in: InMessage) {
                     requestedAddress: calcAddressOfCoordinateCell(contract.getAddress(), msg.xy.x, msg.xy.y,  storage.coordinateCellCode, storage.shipCode),
                 }
             });
+            // Use SEND_MODE_IGNORE_ERRORS + 128 for response messages (ignore errors + carry all remaining balance)
             responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
         }
         RequestMint => {
@@ -58,7 +60,8 @@ fun onInternalMessage(in: InMessage) {
                     amount: msg.amount,
                 }
             });
-            forwardMsg.send(128);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            forwardMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         UpgradeShipRequest => {
             // Only GameManager can request ship upgrades
@@ -75,12 +78,13 @@ fun onInternalMessage(in: InMessage) {
                     hpIncrease: msg.hpIncrease,
                 }
             });
-            upgradeMsg.send(128);
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            upgradeMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}
         else => {
-            assert (in.body.isEmpty()) throw 0xFFFF
+            assert (in.body.isEmpty()) throw ERR_UNKNOWN_MESSAGE
         }
     }
 }

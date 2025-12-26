@@ -1,5 +1,5 @@
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer } from './test_utils';
+import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from './test_utils';
 
 describe('Deployment', () => {
     let SC_System: ContractSystem;
@@ -7,6 +7,11 @@ describe('Deployment', () => {
     beforeEach(async () => {
         SC_System = await initContractSystem();
     }, 100000);
+
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+    });
 
     it('should deploy CoordinateCell', async () => {
         const { coordinateCell } = await setupCoordinateCellWithFirstExplorer(SC_System, { x: 0n, y: 1n });

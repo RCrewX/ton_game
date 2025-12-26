@@ -17,6 +17,7 @@ fun onInternalMessage(in: InMessage) {
 
     match (msg) {
         BurnNotificationForMinter => {
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy MinterStorage.load();
             assert (in.senderAddress == calcAddressOfJettonWallet(msg.burnInitiator, contract.getAddress(), storage.jettonWalletCode)) throw ERR_UNAUTHORIZED_BURN;
 
@@ -65,6 +66,7 @@ fun onInternalMessage(in: InMessage) {
         }
 
         MintNewJettons => {
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy MinterStorage.load();
             assert (in.senderAddress == storage.adminAddress) throw ERR_NOT_FROM_ADMIN;
 
@@ -82,6 +84,7 @@ fun onInternalMessage(in: InMessage) {
         }
 
         ChangeMinterAdmin => {
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy MinterStorage.load();
             assert (in.senderAddress == storage.adminAddress) throw ERR_NOT_FROM_ADMIN;
             storage.adminAddress = msg.newAdminAddress;
@@ -89,6 +92,7 @@ fun onInternalMessage(in: InMessage) {
         }
 
         ChangeMinterContent => {
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy MinterStorage.load();
             assert (in.senderAddress == storage.adminAddress) throw ERR_NOT_FROM_ADMIN;
             storage.content = msg.newContent;

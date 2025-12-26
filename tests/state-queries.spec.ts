@@ -1,6 +1,6 @@
 import { toNano } from '@ton/core';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { MoveMode } from '../wrappers/game/structs';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
 import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE, BASIC_SHIP_HP, Opcodes } from '../wrappers/game/types';
@@ -10,6 +10,11 @@ describe('State Queries', () => {
     beforeEach(async () => {
         SC_System = await initContractSystem();
     }, 100000);
+
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+    });
 
     it('Test Ship getCurrentGameData - verify initial state', async () => {
         const gameData = await SC_System.ownerShip.getCurrentGameData();

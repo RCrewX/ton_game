@@ -16,6 +16,17 @@ struct (0x0f8a7ea5) AskToTransfer {
     forwardPayload: ForwardPayloadRemainder
 }
 
+// NFT Transfer message (TEP-62 standard)
+// opcode: 0x5fcc3d14
+struct (0x5fcc3d14) NFTTransfer {
+    queryId: uint64
+    newOwner: address
+    responseDestination: address?
+    customPayload: cell?
+    forwardAmount: coins
+    forwardPayload: RemainingBitsAndRefs
+}
+
 struct (0xd53276db) ReturnExcessesBack {
     queryId: uint64
 }
@@ -52,6 +63,15 @@ struct (0x0c1d2e3f) WithdrawJetton {
     recipient: address
     amount: coins
     forwardTonAmount: coins
+}
+
+struct (0x1d2e3f4a) WithdrawNFT {
+    queryId: uint64
+    nftAddress: address
+    recipient: address
+    forwardTonAmount: coins
+    responseDestination: address?
+    customPayload: cell?
 }
 
 

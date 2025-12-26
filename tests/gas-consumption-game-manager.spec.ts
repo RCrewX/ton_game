@@ -1,6 +1,6 @@
 import { beginCell, fromNano, toNano } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import { JettonMinter } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
@@ -16,6 +16,11 @@ describe("Gas Prices - GameManager", () => {
         SC_System = await initContractSystem();
     }, 100000);
 
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+    });
+
     afterAll(() => {
         const timestamp = new Date().toISOString();
         const buildData = { timestamp, gasCosts };
@@ -27,6 +32,8 @@ describe("Gas Prices - GameManager", () => {
         const filepath = path.join(buildDir, filename);
         fs.writeFileSync(filepath, JSON.stringify(buildData, null, 2));
         console.log(`\n✅ Gas costs written to ${filepath}`);
+        // Clear gasCosts to free memory
+        Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });
 
     it("SetJettonMinterAddress", async () => {

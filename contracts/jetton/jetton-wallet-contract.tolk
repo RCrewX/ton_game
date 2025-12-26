@@ -21,6 +21,7 @@ fun onBouncedMessage(in: InMessageBounced) {
         BurnNotificationForMinter => msg.jettonAmount,  // it's in the beginning of a message
     };
 
+    // Using lazy for partial update - compiler handles efficient write-back via toCell()
     var storage = lazy WalletStorage.load();
     storage.jettonBalance += restoreAmount;
     storage.save();
@@ -31,6 +32,7 @@ fun onInternalMessage(in: InMessage) {
 
     match (msg) {
         InternalTransferStep => {
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy WalletStorage.load();
             if (in.senderAddress != storage.minterAddress) {
                 assert (in.senderAddress == calcAddressOfJettonWallet(msg.transferInitiator!, storage.minterAddress, contract.getCode())) throw ERR_INVALID_WALLET;
@@ -77,6 +79,7 @@ fun onInternalMessage(in: InMessage) {
             assert (msg.forwardPayload.remainingBitsCount()) throw ERR_INVALID_PAYLOAD;
             assert (msg.transferRecipient.getWorkchain() == BASECHAIN) throw ERR_WRONG_WORKCHAIN;
 
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy WalletStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_NOT_FROM_OWNER;
             assert (storage.jettonBalance >= msg.jettonAmount) throw ERR_NOT_ENOUGH_BALANCE;
@@ -109,6 +112,7 @@ fun onInternalMessage(in: InMessage) {
         }
 
         AskToBurn => {
+            // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy WalletStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_NOT_FROM_OWNER;
             assert (storage.jettonBalance >= msg.jettonAmount) throw ERR_NOT_ENOUGH_BALANCE;

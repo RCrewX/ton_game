@@ -1,6 +1,6 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
 import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Opcodes as SubcontractOpcodes } from '../wrappers/subcontract/types';
 import { encodeRequestToMove } from '../wrappers/game/types';
@@ -18,6 +18,11 @@ describe("Gas Prices - Subcontract", () => {
         SC_System = await initContractSystem();
     }, 100000);
 
+    afterEach(() => {
+        cleanupContractSystem(SC_System);
+        SC_System = null as any;
+    });
+
     afterAll(() => {
         const timestamp = new Date().toISOString();
         const buildData = { timestamp, gasCosts };
@@ -29,6 +34,8 @@ describe("Gas Prices - Subcontract", () => {
         const filepath = path.join(buildDir, filename);
         fs.writeFileSync(filepath, JSON.stringify(buildData, null, 2));
         console.log(`\n✅ Gas costs written to ${filepath}`);
+        // Clear gasCosts to free memory
+        Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });
 
     it("DeployShipThroughSubcontract", async () => {

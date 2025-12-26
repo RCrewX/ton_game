@@ -54,6 +54,7 @@ export const Opcodes = {
     OP_MOVE: 0x2a3b4c5d,
     OP_WITHDRAW_TON: 0x9b0c1d2e,
     OP_WITHDRAW_JETTON: 0x0c1d2e3f,
+    OP_WITHDRAW_NFT: 0x1d2e3f4a,
 
     OP_MOVE_END: 0x3a4b5c6d,
     OP_REQUEST_TO_MOVE: 0x4a5b6c7d,
@@ -144,6 +145,15 @@ export type WithdrawJetton = {
     forwardTonAmount: bigint; // coins
 };
 
+export type WithdrawNFT = {
+    queryId: bigint; // uint64
+    nftAddress: Address;
+    recipient: Address;
+    forwardTonAmount: bigint; // coins
+    responseDestination: Address | null; // optional
+    customPayload: Cell | null; // optional
+};
+
 // To Ship
 
 export type MoveEnd = {
@@ -191,6 +201,7 @@ export type AnyMessage =
     | ({ $$type: 'Move' } & Move)
     | ({ $$type: 'WithdrawTON' } & WithdrawTON)
     | ({ $$type: 'WithdrawJetton' } & WithdrawJetton)
+    | ({ $$type: 'WithdrawNFT' } & WithdrawNFT)
     | ({ $$type: 'MoveEnd' } & MoveEnd)
     | ({ $$type: 'RequestToMove' } & RequestToMove)
     | ({ $$type: 'RequestMint' } & RequestMint)
@@ -260,6 +271,18 @@ export function encodeWithdrawJetton(msg: WithdrawJetton): Cell {
     b.storeAddress(msg.recipient);
     b.storeCoins(msg.amount);
     b.storeCoins(msg.forwardTonAmount);
+    return b.endCell();
+}
+
+export function encodeWithdrawNFT(msg: WithdrawNFT): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_WITHDRAW_NFT, 32);
+    b.storeUint(msg.queryId, 64);
+    b.storeAddress(msg.nftAddress);
+    b.storeAddress(msg.recipient);
+    b.storeCoins(msg.forwardTonAmount);
+    b.storeAddress(msg.responseDestination);
+    b.storeMaybeRef(msg.customPayload);
     return b.endCell();
 }
 
@@ -344,6 +367,8 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeWithdrawTON(msg);
         case 'WithdrawJetton':
             return encodeWithdrawJetton(msg);
+        case 'WithdrawNFT':
+            return encodeWithdrawNFT(msg);
         case 'MoveEnd':
             return encodeMoveEnd(msg);
         case 'RequestToMove':

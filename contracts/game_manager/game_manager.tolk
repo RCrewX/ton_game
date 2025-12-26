@@ -59,7 +59,7 @@ fun onInternalMessage(in: InMessage) {
                 value: msg.forwardTonAmount,
                 body: msg.messageBody
             });
-            redirectMsg.send(128);
+            redirectMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ForwardMintRequest => {
             assert (storage.jettonMinterAddress != null) throw ERR_JETTON_MINTER_NOT_SET;
@@ -97,7 +97,7 @@ fun onInternalMessage(in: InMessage) {
                 value: 0,
                 body: mintNewJettons
             });
-            forwardMsg.send(128);
+            forwardMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         TransferNotificationForRecipient => {
             var storage = lazy GameManagerStorage.load();
@@ -141,7 +141,7 @@ fun onInternalMessage(in: InMessage) {
                     hpIncrease: hpIncrease,
                 }
             });
-            upgradeRequestMsg.send(128);
+            upgradeRequestMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ReturnExcessesBack => {
             reserveValue(in.valueCoins);

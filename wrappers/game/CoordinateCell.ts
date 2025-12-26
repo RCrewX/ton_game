@@ -1,6 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
 import { XY, MoveMode, MoveData, storeMoveData } from './structs';
-import { encodeMove, encodeMoveShipToCC, encodeWithdrawTON, encodeWithdrawJetton } from './types';
+import { encodeMove, encodeMoveShipToCC, encodeWithdrawTON, encodeWithdrawJetton, encodeWithdrawNFT } from './types';
 
 export type CoordinateCellConfig = {
     gameAddress: Address,
@@ -90,6 +90,31 @@ export class CoordinateCell implements Contract {
                 recipient,
                 amount,
                 forwardTonAmount,
+            }),
+        });
+    }
+
+    async sendWithdrawNFT(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        nftAddress: Address,
+        recipient: Address,
+        forwardTonAmount: bigint = toNano('0.1'),
+        responseDestination: Address | null = null,
+        customPayload: Cell | null = null,
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeWithdrawNFT({
+                queryId,
+                nftAddress,
+                recipient,
+                forwardTonAmount,
+                responseDestination,
+                customPayload,
             }),
         });
     }
