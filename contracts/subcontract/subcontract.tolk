@@ -30,7 +30,7 @@ fun onInternalMessage(in: InMessage) {
                         queryId: msg.queryId
                     }
                 });
-                out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                out.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
             } else {
                 reserveValue(in.valueCoins);
             }
@@ -134,7 +134,7 @@ fun onInternalMessage(in: InMessage) {
                 value: 0,
                 body: beginCell().endCell() // Empty body for simple transfer
             });
-            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         SetExcessThreshold => {
             // Using lazy for partial update - compiler handles efficient write-back via toCell()
@@ -152,7 +152,7 @@ fun onInternalMessage(in: InMessage) {
                 value: 0,
                 body: beginCell().endCell() // Empty body for simple transfer
             });
-            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         TransferNotificationForRecipient => {
             // Accept jetton transfer notifications (from jetton wallet)

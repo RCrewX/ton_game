@@ -19,6 +19,7 @@ const ERR_WITHDRAW_AMOUNT_TOO_LOW = 927;  // Withdraw amount is too low (must be
 const ERR_WITHDRAW_AMOUNT_TOO_HIGH = 928;  // Withdraw amount exceeds available balance
 const ERR_EXCESS_THRESHOLD_TOO_LOW = 929;  // Excess threshold is below minimum allowed value
 
+const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
 // Storage
 
 struct SubcontractStorage {

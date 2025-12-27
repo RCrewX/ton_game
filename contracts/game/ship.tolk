@@ -47,6 +47,7 @@ fun onInternalMessage(in: InMessage) {
                 gameFields.xy.x = 0;
                 gameFields.xy.y = 0;
                 gameFields.hp = storage.max_hp;
+                gameFields.jettonAmount += msgGameFields.jettonAmount;
                 totalReward = gameFields.jettonAmount;
                 gameFields.jettonAmount = 0;
             }
