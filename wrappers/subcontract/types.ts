@@ -7,12 +7,12 @@ export const GAS_COST_FORWARD_WITH_INIT = toNano("0.01"); // Higher cost for dep
 
 // Opcodes
 export const Opcodes = {
-    OP_FORWARD: 0x3b4c5d6e,
-    OP_FORWARD_WITH_INIT: 0x4c5d6e7f,
-    OP_WITHDRAW: 0x5d6e7f8a,
+    OP_FORWARD: 0xf1c65e14,
+    OP_FORWARD_WITH_INIT: 0x621c7833,
+    OP_WITHDRAW: 0x164546a9,
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
-    OP_SET_REDIRECT_EXCESS: 0x6e7f8a9b,
-    OP_SET_EXCESS_THRESHOLD: 0x7f8a9bac,
+    OP_SET_REDIRECT_EXCESS: 0x50245bad,
+    OP_SET_EXCESS_THRESHOLD: 0xc64d98a7,
 } as const;
 
 // Message types

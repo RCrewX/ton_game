@@ -8,13 +8,13 @@ export const GAS_COST_REDIRECT_MESSAGE = toNano("0.009"); // 0.0081816 + buffer
 
 // Opcodes
 export const Opcodes = {
-    OP_SET_JETTON_MINTER_ADDRESS: 0x1a2b3c4d,
-    OP_SET_GAMES: 0x2a3b4c5d,
-    OP_REDIRECT_MESSAGE: 0x3b4c5d6e,
+    OP_SET_JETTON_MINTER_ADDRESS: 0x40ee785c,
+    OP_SET_GAMES: 0x6ed804ea,
+    OP_REDIRECT_MESSAGE: 0x83449946,
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
     OP_LITERALY_ANYTHING: 0x0a1b2c3d,
     OP_TRANSFER_NOTIFICATION_FOR_RECIPIENT: 0x7362d09c,
-    OP_UPGRADE_SHIP_REQUEST: 0x8b9cad0e,
+    OP_JETTON_USED: 0xd7610922,
 } as const;
 
 // Message types
@@ -23,9 +23,9 @@ export type SetJettonMinterAddress = {
     jettonWalletCode: Cell;
 };
 
-export type UpgradeShipRequest = {
-    shipAddress: Address;
-    hpIncrease: bigint;
+export type JettonUsed = {
+    jettonAmount: bigint; // coins
+    data: Cell; // cell containing ship address
 };
 
 export type SetGames = {
@@ -62,6 +62,14 @@ export function encodeRedirectMessage(msg: RedirectMessage): Cell {
         .storeAddress(msg.destination)
         .storeRef(msg.messageBody)
         .storeCoins(msg.forwardTonAmount)
+        .endCell();
+}
+
+export function encodeJettonUsed(msg: JettonUsed): Cell {
+    return beginCell()
+        .storeUint(Opcodes.OP_JETTON_USED, 32)
+        .storeCoins(msg.jettonAmount)
+        .storeRef(msg.data)
         .endCell();
 }
 

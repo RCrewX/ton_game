@@ -3,7 +3,7 @@ import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
 import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Opcodes as SubcontractOpcodes } from '../wrappers/subcontract/types';
-import { encodeRequestToMove } from '../wrappers/game/types';
+import { encodeRequestToMove, Opcodes } from '../wrappers/game/types';
 import { Ship, shipConfigToCell } from '../wrappers/game/Ship';
 import { MoveMode } from '../wrappers/game/structs';
 import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_MOVE_SHIP_TO_CC, BASIC_STORAGE_TAX } from '../wrappers/game/types';
@@ -230,7 +230,7 @@ describe("Gas Prices - Subcontract", () => {
             from: subcontract.address,
             to: shipForSubcontract.address,
             success: true,
-            op: 0x4a5b6c7d, // OP_REQUEST_TO_MOVE
+            op: Opcodes.OP_REQUEST_TO_MOVE,
         });
 
         const forwardTx = SC_System.messageResult.transactions.find((tx: any) => 

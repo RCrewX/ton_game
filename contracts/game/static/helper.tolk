@@ -160,7 +160,7 @@ fun generateSpecialType(): SpecialType {
     }
 }
 
-fun generateSpecialRandomUint(base: uint256): uint256 {
+fun generateSpecialRandomUint(base: uint256, k: uint16 = 10): uint256 {
     // Generate random type (4 types: empty, low, high, extra)
     // Based on type generate random uint
     // EMPTY: 0
@@ -175,7 +175,7 @@ fun generateSpecialRandomUint(base: uint256): uint256 {
         SpecialType.EMPTY => {return 0}
         SpecialType.LOW => {return random.range(base/2)}
         SpecialType.HIGH => {return random.range(base/2) + base/2}
-        SpecialType.EXTRA => {return (random.range(10) + 1) * base}
+        SpecialType.EXTRA => {return (random.range(k) + 1) * base}
     }
 
 }

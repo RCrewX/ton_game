@@ -39,25 +39,25 @@ struct (0x0a1b2c3d) LiteralyAnything {
 // To Coordinate Cell
 
 
-struct (0x1a2b3c4d) MoveShipToCC {
+struct (0xeafb35a2) MoveShipToCC {
     user: address
     ship_hp: uint256
     mode: MoveMode
 }
 
-struct (0x2a3b4c5d) Move {
+struct (0x6ecc3df6) Move {
     user: address
     mode: MoveMode
     moveData: Cell<MoveData>
 }
 
-struct (0x9b0c1d2e) WithdrawTON {
+struct (0xe06f1de3) WithdrawTON {
     queryId: uint64
     recipient: address
     amount: coins
 }
 
-struct (0x0c1d2e3f) WithdrawJetton {
+struct (0xb3cff37d) WithdrawJetton {
     queryId: uint64
     jettonWalletAddress: address
     recipient: address
@@ -65,7 +65,7 @@ struct (0x0c1d2e3f) WithdrawJetton {
     forwardTonAmount: coins
 }
 
-struct (0x1d2e3f4a) WithdrawNFT {
+struct (0x09e971a8) WithdrawNFT {
     queryId: uint64
     nftAddress: address
     recipient: address
@@ -77,47 +77,47 @@ struct (0x1d2e3f4a) WithdrawNFT {
 
 //  To Ship
 
-struct (0x3a4b5c6d) MoveEnd {
+struct (0xb2a06139) MoveEnd {
     result: UniqueResult
     gameFields: GameFields
 }
 
-struct (0x4a5b6c7d) RequestToMove {
+struct (0xf2a70b07) RequestToMove {
     mode: MoveMode
 }
 
-struct (0x9a8b9cad) ShipUpgrade {
+struct (0x7d37523d) ShipUpgrade {
     hpIncrease: uint256
 }
 
 // To Game
 
-struct (0x5a6b7c8d) RequestMint {
+struct (0xf5cc90ff) RequestMint {
     receiver: address
     amount: coins
 }
 
 
-struct (0x6a7b8c9d) RequestShipAddress {
+struct (0xf0469aee) RequestShipAddress {
     userAddress: address
 }
 
-struct (0x7a8b9cad) RequestCoordinateCellAddress {
+struct (0x213f6f8a) RequestCoordinateCellAddress {
     xy: XY
 }
 
-struct (0x8a9bacbd) ResponseAddress {
+struct (0x33226fce) ResponseAddress {
     requestedAddress: address 
 }
 
 // To GameManager
-struct (0x6b7c8d9e) ForwardMintRequest {
+struct (0xf62ed009) ForwardMintRequest {
     receiver: address
     amount: coins
 }
 
-// From GameManager to Game
-struct (0x8b9cad0e) UpgradeShipRequest {
-    shipAddress: address
-    hpIncrease: uint256
+// From GameManager to any Game
+struct(0xd7610922) JettonUsed {
+    jettonAmount: coins
+    data: cell
 }

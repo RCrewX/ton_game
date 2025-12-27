@@ -20,6 +20,7 @@ const ERR_JETTON_MINTER_NOT_SET = 922;  // Jetton minter address is not set (nul
 const ERR_JETTON_WALLET_CODE_NOT_SET = 923;  // Jetton wallet code is not set (null)
 const ERR_GAMES_NOT_SET = 924;  // Games list is not set (null)
 const ERR_INVALID_JETTON_WALLET_SENDER = 925;  // Sender is not the expected jetton wallet address
+const ERR_INVALID_GAME_ADDRESS = 926;  // Game address is null or invalid
 
 const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
 //  Storage
@@ -43,16 +44,16 @@ fun GameManagerStorage.save(self) {
 // Messages
 
 
-struct (0x1a2b3c4d) SetJettonMinterAddress {
+struct (0x40ee785c) SetJettonMinterAddress {
     jettonMinterAddress: address
     jettonWalletCode: cell
 }
 
-struct (0x2a3b4c5d) SetGames {
+struct (0x6ed804ea) SetGames {
     games: cell
 }
 
-struct (0x3b4c5d6e) RedirectMessage {
+struct (0x83449946) RedirectMessage {
     queryId: uint64
     destination: address
     messageBody: cell
@@ -60,7 +61,7 @@ struct (0x3b4c5d6e) RedirectMessage {
 }
 
 // Forwarded from Game
-struct (0x6b7c8d9e) ForwardMintRequest {
+struct (0xf62ed009) ForwardMintRequest {
     receiver: address
     amount: coins
 }
@@ -73,10 +74,11 @@ struct (0x7362d09c) TransferNotificationForRecipient {
     forwardPayload: ForwardPayloadRemainder
 }
 
-// From GameManager to Game
-struct (0x8b9cad0e) UpgradeShipRequest {
-    shipAddress: address
-    hpIncrease: uint256
+
+// From GameManager to any Game
+struct(0xd7610922) JettonUsed {
+    jettonAmount: coins
+    data: cell
 }
 
 // Jetton message structures (from jetton project, redefined here for forwarding)

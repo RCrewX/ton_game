@@ -10,6 +10,8 @@ struct MinterStorage {
     adminAddress: address
     content: cell
     jettonWalletCode: cell
+    displayNumerator: uint256  // TEP-526: numerator for display multiplier (VarUInteger 32 in messages)
+    displayDenominator: uint256  // TEP-526: denominator for display multiplier (VarUInteger 32 in messages)
 }
 
 

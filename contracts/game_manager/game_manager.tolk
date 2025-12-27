@@ -107,59 +107,67 @@ fun onInternalMessage(in: InMessage) {
             val expectedWalletAddress = calcAddressOfJettonWallet(contract.getAddress(), storage.jettonMinterAddress!, storage.jettonWalletCode!);
             assert (in.senderAddress == expectedWalletAddress) throw ERR_INVALID_JETTON_WALLET_SENDER;
             
-            // Extract ship address from forwardPayload
-            // forwardPayload is RemainingBitsAndRefs, which can be a slice or contain a ref
-            // If it's stored as a Cell in the test, it will be in a ref
+            // Extract game address and data from forwardPayload
+            // forwardPayload is RemainingBitsAndRefs (a slice)
+            // When a cell with refs is passed, it's stored as a ref in the slice
+            // So we need to: load the cell ref, then access its refs
             var forwardPayloadSlice: slice = msg.forwardPayload;
-            var shipAddress: address;
-            if (forwardPayloadSlice.remainingRefsCount() > 0) {
-                // Address is stored in a ref (Cell)
-                val payloadCell = forwardPayloadSlice.loadRef();
-                shipAddress = payloadCell.beginParse().loadAddress();
-            } else {
-                // Address is stored directly in the slice
-                shipAddress = forwardPayloadSlice.loadAddress();
+
+            // Check if we have at least one ref (the cell containing our data)
+            if (forwardPayloadSlice.remainingRefsCount() < 1) {
+                reserveValue(in.valueCoins);
+                return;
             }
-            // Calculate HP increase using random by time (1 to N, where N is jettonAmount)
-            random.initialize();
-            val jettonAmountUint = msg.jettonAmount as uint256;
-            val hpIncrease = random.range(jettonAmountUint) + 1; // 1 to N inclusive
+            
+            // Load the cell that contains our refs
+            val payloadCell = forwardPayloadSlice.loadRef();
+            var payloadSlice = payloadCell.beginParse();
+            
+            // Check if the payload cell has at least 2 refs
+            if (payloadSlice.remainingRefsCount() < 2) {
+                reserveValue(in.valueCoins);
+                return;
+            }
+            
+            // Load the first ref (game address cell)
+            val gameAddressCell = payloadSlice.loadRef();
+            val gameAddress = gameAddressCell.beginParse().loadAddress();
+
+            assert (gameAddress != null) throw ERR_INVALID_GAME_ADDRESS;
+            
+            // Load the second ref (data cell with ship address)
+            val dataCell = payloadSlice.loadRef();
+            
             
             // Get game address from games
-            assert (storage.games != null) throw ERR_GAMES_NOT_SET;
-            val game = storage.games!.beginParse().loadAddress();
+            // val game = storage.games!.beginParse().loadAddress();
             
             reserveValue(in.valueCoins);
             
             // Send upgrade request to Game
             val upgradeRequestMsg = createMessage({
                 bounce: BounceMode.NoBounce,
-                dest: game,
+                dest: gameAddress,
                 value: 0,
-                body: UpgradeShipRequest {
-                    shipAddress: shipAddress,
-                    hpIncrease: hpIncrease,
+                body: JettonUsed {
+                    jettonAmount: msg.jettonAmount,
+                    data: dataCell,
                 }
             });
             upgradeRequestMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ReturnExcessesBack => {
             reserveValue(in.valueCoins);
-            val responseMsg = createMessage({
+            val cashbackMessage = createMessage({
                 bounce: BounceMode.NoBounce,
-                dest: in.senderAddress,
+                dest: storage.ownerAddress,
                 value: 0,
-                body: msg
+                body: beginCell().endCell() // Empty body for simple transfer
             });
+            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         LiteralyAnything => {
             reserveValue(in.valueCoins);
-            val responseMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: in.senderAddress,
-                value: 0,
-                body: msg
-            });
         }
         else => {
             assert (in.body.isEmpty()) throw 0xFFFF

@@ -40,7 +40,7 @@ fun SubcontractStorage.save(self) {
 // Messages
 
 // Forward message without stateInit (no deploy)
-struct (0x3b4c5d6e) Forward {
+struct (0xf1c65e14) Forward {
     queryId: uint64
     destination: address
     forwardTonAmount: coins
@@ -50,7 +50,7 @@ struct (0x3b4c5d6e) Forward {
 }
 
 // Forward message with stateInit (for deploy)
-struct (0x4c5d6e7f) ForwardWithInit {
+struct (0x621c7833) ForwardWithInit {
     queryId: uint64
     destination: address
     forwardTonAmount: coins
@@ -60,20 +60,20 @@ struct (0x4c5d6e7f) ForwardWithInit {
 }
 
 // Withdraw message - owner can withdraw specified amount (leaving BASIC_STORAGE_TAX for gas safety)
-struct (0x5d6e7f8a) Withdraw {
+struct (0x164546a9) Withdraw {
     queryId: uint64
     amount: coins
     receiver: address
 }
 
 // Set redirect excess flag message
-struct (0x6e7f8a9b) SetRedirectExcess {
+struct (0x50245bad) SetRedirectExcess {
     queryId: uint64
     redirectExcess: bool
 }
 
 // Set excess threshold message
-struct (0x7f8a9bac) SetExcessThreshold {
+struct (0xc64d98a7) SetExcessThreshold {
     queryId: uint64
     excessThreshold: coins
 }

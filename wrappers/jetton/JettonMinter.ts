@@ -7,14 +7,19 @@ export type JettonMinterContent = {
     uri:string
 };
 
-export type JettonMinterConfig = {admin: Address; content: Cell; wallet_code: Cell};
+export type JettonMinterConfig = {admin: Address; content: Cell; wallet_code: Cell; displayNumerator?: bigint; displayDenominator?: bigint};
 
 export function jettonMinterConfigToCell(config: JettonMinterConfig): Cell {
+    // Default to 1:1 multiplier if not specified (TEP-526 compatible)
+    const numerator = config.displayNumerator ?? 1n;
+    const denominator = config.displayDenominator ?? 1n;
     return beginCell()
                       .storeCoins(0)
                       .storeAddress(config.admin)
                       .storeRef(config.content)
                       .storeRef(config.wallet_code)
+                      .storeUint(numerator, 256) // uint256 in Tolk (TEP-526)
+                      .storeUint(denominator, 256) // uint256 in Tolk (TEP-526)
            .endCell();
 }
 
@@ -163,5 +168,32 @@ export class JettonMinter implements Contract {
     async getContent(provider: ContractProvider) {
         let res = await this.getJettonData(provider);
         return res.content;
+    }
+
+    async getDisplayMultiplier(provider: ContractProvider): Promise<{numerator: bigint; denominator: bigint}> {
+        let res = await provider.get('get_display_multiplier', []);
+        let numerator = res.stack.readBigNumber();
+        let denominator = res.stack.readBigNumber();
+        return { numerator, denominator };
+    }
+
+    static changeDisplayMultiplierMessage(numerator: bigint, denominator: bigint, comment?: string) {
+        const commentCell = comment ? beginCell().storeStringTail(comment).endCell() : null;
+        return beginCell().storeUint(0x00000005, 32).storeUint(0, 64) // op, queryId
+                          .storeUint(numerator, 256)  // uint256 in Tolk
+                          .storeUint(denominator, 256)  // uint256 in Tolk
+                          .storeMaybeRef(commentCell)
+               .endCell();
+    }
+
+    async sendChangeDisplayMultiplier(provider: ContractProvider, via: Sender, numerator: bigint, denominator: bigint, comment?: string) {
+        if (numerator === 0n || denominator === 0n) {
+            throw new Error("Numerator and denominator must not be zero");
+        }
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: JettonMinter.changeDisplayMultiplierMessage(numerator, denominator, comment),
+            value: toNano("0.05"),
+        });
     }
 }

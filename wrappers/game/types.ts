@@ -7,8 +7,8 @@ export const MINT_TON_AMOUNT: bigint = toNano("0.2");
 
 // Gas costs from gas consumption tests (in TON)
 // These match the constants in contracts/game/static/constants.tolk
-export const GAS_COST_REQUEST_SHIP_ADDRESS = toNano("0.014"); // 0.013948 + buffer
-export const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS = toNano("0.015"); // 0.0144428 + buffer
+export const GAS_COST_REQUEST_SHIP_ADDRESS = toNano("0.015"); // From gas consumption test
+export const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS = toNano("0.015"); // From gas consumption test
 export const GAS_COST_REQUEST_TO_MOVE = toNano("0.06"); // 0.0589864 + buffer
 export const GAS_COST_ANY_MESSAGE = toNano("1");
 const var_mutableVar: bigint = 10n;
@@ -22,7 +22,7 @@ export const GAS_COST_MOVE = toNano("0.12"); // CoordinateCell -> CoordinateCell
 export const GAS_COST_MOVE_END = toNano("0.06"); // CoordinateCell -> Ship (MoveEnd) - estimated
 export const GAS_COST_REQUEST_MINT = toNano("0.22"); // Ship -> Game (RequestMint) - includes MINT_TON_AMOUNT (0.2) + gas
 export const GAS_COST_FORWARD_MINT_REQUEST = toNano("0.06"); // Game -> GameManager (ForwardMintRequest) - estimated
-export const GAS_COST_UPGRADE_SHIP_REQUEST = toNano("0.06"); // GameManager -> Game (UpgradeShipRequest) - estimated
+export const GAS_COST_JETTON_USED = toNano("0.06"); // GameManager -> Game (JettonUsed) - estimated
 export const GAS_COST_SHIP_UPGRADE = toNano("0.06"); // Game -> Ship (ShipUpgrade) - estimated
 export const GAS_COST_TRANSFER_NOTIFICATION = toNano("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - estimated
 
@@ -50,22 +50,22 @@ export const Opcodes = {
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
     OP_LITERALY_ANYTHING: 0x0a1b2c3d,
 
-    OP_MOVE_SHIP_TO_CC: 0x1a2b3c4d,
-    OP_MOVE: 0x2a3b4c5d,
-    OP_WITHDRAW_TON: 0x9b0c1d2e,
-    OP_WITHDRAW_JETTON: 0x0c1d2e3f,
-    OP_WITHDRAW_NFT: 0x1d2e3f4a,
+    OP_MOVE_SHIP_TO_CC: 0xeafb35a2,
+    OP_MOVE: 0x6ecc3df6,
+    OP_WITHDRAW_TON: 0xe06f1de3,
+    OP_WITHDRAW_JETTON: 0xb3cff37d,
+    OP_WITHDRAW_NFT: 0x09e971a8,
 
-    OP_MOVE_END: 0x3a4b5c6d,
-    OP_REQUEST_TO_MOVE: 0x4a5b6c7d,
+    OP_MOVE_END: 0xb2a06139,
+    OP_REQUEST_TO_MOVE: 0xf2a70b07,
 
-    OP_REQUEST_MINT: 0x5a6b7c8d,
-    OP_REQUEST_SHIP_ADDRESS: 0x6a7b8c9d,
-    OP_REQUEST_COORDINATE_CELL_ADDRESS: 0x7a8b9cad,
-    OP_RESPONSE_ADDRESS: 0x8a9bacbd,
-    OP_FORWARD_MINT_REQUEST: 0x6b7c8d9e,
-    OP_UPGRADE_SHIP_REQUEST: 0x8b9cad0e,
-    OP_SHIP_UPGRADE: 0x9a8b9cad,
+    OP_REQUEST_MINT: 0xf5cc90ff,
+    OP_REQUEST_SHIP_ADDRESS: 0xf0469aee,
+    OP_REQUEST_COORDINATE_CELL_ADDRESS: 0x213f6f8a,
+    OP_RESPONSE_ADDRESS: 0x33226fce,
+    OP_FORWARD_MINT_REQUEST: 0xf62ed009,
+    OP_JETTON_USED: 0xd7610922,
+    OP_SHIP_UPGRADE: 0x7d37523d,
 } as const;
 
 export function loadGameFieldsOpt(stack: TupleReader): GameFields | null {
@@ -184,9 +184,9 @@ export type ResponseAddress = {
     requestedAddress: Address;
 };
 
-export type UpgradeShipRequest = {
-    shipAddress: Address;
-    hpIncrease: bigint; // uint256
+export type JettonUsed = {
+    jettonAmount: bigint; // coins
+    data: Cell; // cell containing ship address
 };
 
 export type ShipUpgrade = {
@@ -208,7 +208,7 @@ export type AnyMessage =
     | ({ $$type: 'RequestShipAddress' } & RequestShipAddress)
     | ({ $$type: 'RequestCoordinateCellAddress' } & RequestCoordinateCellAddress)
     | ({ $$type: 'ResponseAddress' } & ResponseAddress)
-    | ({ $$type: 'UpgradeShipRequest' } & UpgradeShipRequest)
+    | ({ $$type: 'JettonUsed' } & JettonUsed)
     | ({ $$type: 'ShipUpgrade' } & ShipUpgrade);
 
 // -------------------------
@@ -334,11 +334,11 @@ export function encodeResponseAddress(msg: ResponseAddress): Cell {
     return b.endCell();
 }
 
-export function encodeUpgradeShipRequest(msg: UpgradeShipRequest): Cell {
+export function encodeJettonUsed(msg: JettonUsed): Cell {
     const b = beginCell();
-    b.storeUint(Opcodes.OP_UPGRADE_SHIP_REQUEST, 32);
-    b.storeAddress(msg.shipAddress);
-    b.storeUint(msg.hpIncrease, 256);
+    b.storeUint(Opcodes.OP_JETTON_USED, 32);
+    b.storeCoins(msg.jettonAmount);
+    b.storeRef(msg.data);
     return b.endCell();
 }
 
@@ -381,8 +381,8 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeRequestCoordinateCellAddress(msg);
         case 'ResponseAddress':
             return encodeResponseAddress(msg);
-        case 'UpgradeShipRequest':
-            return encodeUpgradeShipRequest(msg);
+        case 'JettonUsed':
+            return encodeJettonUsed(msg);
         case 'ShipUpgrade':
             return encodeShipUpgrade(msg);
         default:

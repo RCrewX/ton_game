@@ -135,7 +135,9 @@ fun onInternalMessage(in: InMessage) {
             var storage = lazy ShipStorage.load();
             // Only Game can upgrade ships
             assert (in.senderAddress == storage.gameAddress) throw ERR_INVALID_GAME_SENDER;
-            
+            assert (storage.movement_in_process == false) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
+
+
             if (storage.gameFields == null) {
                 val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
                 storage.gameFields = gameFields;

@@ -73,3 +73,17 @@ struct (0x00000004) ChangeMinterContent {
     queryId: uint64
     newContent: cell
 }
+
+struct (0x00000005) ChangeDisplayMultiplier {
+    queryId: uint64
+    numerator: uint256  // TEP-526: numerator for display multiplier (VarUInteger 32 in external message)
+    denominator: uint256  // TEP-526: denominator for display multiplier (VarUInteger 32 in external message)
+    comment: cell?  // Optional comment (SnakeString format - stored as cell with string data)
+}
+
+
+struct (0xac392598) DisplayMultiplierChanged {
+    numerator: varuint32    // TL-B VarUInteger 32 (len + bytes) via STVARUINT32
+    denominator: varuint32
+    comment: cell?            // Maybe ^Cell (SnakeString root cell is OK)
+}

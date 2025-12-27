@@ -9,7 +9,7 @@ type AllowedMessagesToGame =
     | RequestMint 
     | RequestShipAddress 
     | RequestCoordinateCellAddress 
-    | UpgradeShipRequest
+    | JettonUsed
     | AnyMessage
 
 fun onInternalMessage(in: InMessage) {
@@ -63,19 +63,27 @@ fun onInternalMessage(in: InMessage) {
             // Use send_mode=128 to carry all remaining balance (excesses)
             forwardMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
-        UpgradeShipRequest => {
+        JettonUsed => {
             // Only GameManager can request ship upgrades
             assert (in.senderAddress == storage.managerAddress) throw ERR_INVALID_GAME_MANAGER_SENDER;
             
+            random.initialize();
+            val hpIncrease = generateSpecialRandomUint(msg.jettonAmount as uint256, 3);
+            
+            
+            val dataCell = msg.data;
+            val shipAddress = dataCell.beginParse().loadAddress();
+            assert (shipAddress != null) throw ERR_INVALID_SHIP_ADDRESS;
+
             reserveValue(in.valueCoins);
             
             // Send upgrade message to Ship
             val upgradeMsg = createMessage({
                 bounce: BounceMode.NoBounce,
-                dest: msg.shipAddress,
+                dest: shipAddress,
                 value: 0,
                 body: ShipUpgrade {
-                    hpIncrease: msg.hpIncrease,
+                    hpIncrease: hpIncrease,
                 }
             });
             // Use send_mode=128 to carry all remaining balance (excesses)

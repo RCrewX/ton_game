@@ -1,7 +1,7 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes, GAS_COST_UPGRADE_SHIP_REQUEST, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION } from '../wrappers/game/types';
+import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes } from '../wrappers/game_manager/types';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import * as fs from 'fs';
@@ -35,15 +35,22 @@ describe("Gas Prices - Game Upgrade", () => {
         Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });
 
-    it("UpgradeShipRequest", async () => {
+    it("JettonUsed", async () => {
         const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
         const transferAmount = toNano('100');
-        const forwardPayload = beginCell()
+        const dataCell = beginCell()
             .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+        const gameAddressCell = beginCell()
+            .storeAddress(SC_System.game.address)
+            .endCell();
+        const forwardPayload = beginCell()
+            .storeRef(gameAddressCell)
+            .storeRef(dataCell)
             .endCell();
 
         let little_less_than_gas_needed = toNano('0.01');
-        let gas_sent = GAS_COST_UPGRADE_SHIP_REQUEST;
+        let gas_sent = GAS_COST_JETTON_USED;
 
         SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
             SC_System.ownerAccount.getSender(),
@@ -60,19 +67,19 @@ describe("Gas Prices - Game Upgrade", () => {
             from: SC_System.gameManager.address,
             to: SC_System.game.address,
             success: true,
-            op: Opcodes.OP_UPGRADE_SHIP_REQUEST,
+            op: Opcodes.OP_JETTON_USED,
         });
 
-        const upgradeRequestTx = SC_System.messageResult.transactions.find((tx: any) => 
+        const jettonUsedTx = SC_System.messageResult.transactions.find((tx: any) => 
             tx.from === SC_System.gameManager.address && 
             tx.to === SC_System.game.address &&
-            tx.op === Opcodes.OP_UPGRADE_SHIP_REQUEST
+            tx.op === Opcodes.OP_JETTON_USED
         );
         
-        const cost = upgradeRequestTx?.totalFees || toNano('0.05');
+        const cost = jettonUsedTx?.totalFees || toNano('0.05');
         const costStr = fromNano(cost);
         console.log(`Cost: ${costStr}`);
-        gasCosts['UpgradeShipRequest'] = costStr;
+        gasCosts['JettonUsed'] = costStr;
 
         expect(cost).toBeLessThanOrEqual(gas_sent);
         expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
@@ -81,8 +88,15 @@ describe("Gas Prices - Game Upgrade", () => {
     it("ShipUpgrade", async () => {
         const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
         const transferAmount = toNano('100');
-        const forwardPayload = beginCell()
+        const dataCell = beginCell()
             .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+        const gameAddressCell = beginCell()
+            .storeAddress(SC_System.game.address)
+            .endCell();
+        const forwardPayload = beginCell()
+            .storeRef(gameAddressCell)
+            .storeRef(dataCell)
             .endCell();
 
         let little_less_than_gas_needed = toNano('0.01');
@@ -124,8 +138,15 @@ describe("Gas Prices - Game Upgrade", () => {
     it("TransferNotificationForRecipient", async () => {
         const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
         const transferAmount = toNano('100');
-        const forwardPayload = beginCell()
+        const dataCell = beginCell()
             .storeAddress(SC_System.ownerShip.address)
+            .endCell();
+        const gameAddressCell = beginCell()
+            .storeAddress(SC_System.game.address)
+            .endCell();
+        const forwardPayload = beginCell()
+            .storeRef(gameAddressCell)
+            .storeRef(dataCell)
             .endCell();
 
         let little_less_than_gas_needed = toNano('0.01');

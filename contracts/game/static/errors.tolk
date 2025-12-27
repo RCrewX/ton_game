@@ -33,6 +33,7 @@ const ERR_INVALID_GAME_SENDER = 913  // Sender is not the ship's game address
 // Game-specific errors
 const ERR_INVALID_GAME_MANAGER_SENDER = 914  // Sender is not the game's manager address
 const ERR_INVALID_SHIP_SENDER_FOR_MINT = 915  // Sender is not the expected ship address for mint request
+const ERR_INVALID_SHIP_ADDRESS = 927  // Ship address is null or invalid
 
 // CoordinateCell-specific errors
 const ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED = 916  // Coordinate cell storage (ccStorage) is null
