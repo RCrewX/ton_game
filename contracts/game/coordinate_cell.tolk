@@ -33,12 +33,13 @@ fun onInternalMessage(in: InMessage) {
             var totalReward: coins;
             if (firstTimeOpened && storage.ccStorage == null) {
                 var ccStorage: CCStorage = {hp: 0, jettonAmount: 0, firstExplorer: msg.user};
-                random.initialize();
-                val range = storage.xy.y;
-                val my_random_indicator = random.range(range);
-                ccStorage.hp = my_random_indicator;
-                ccStorage.jettonAmount = my_random_indicator as coins;
+
+
+                val randomResult: RandomResult = generateRandomResult(storage.xy.y);
                 
+                ccStorage.hp = randomResult.hp;
+                ccStorage.jettonAmount = randomResult.jettonAmount;
+
                 ccStorage.firstExplorer = msg.user;
                 storage.opened = true;
                 storage.ccStorage = ccStorage.toCell();
@@ -46,7 +47,6 @@ fun onInternalMessage(in: InMessage) {
             }
             var result: UniqueResult = UniqueResult.CRASH;
             var ship_hp: uint256 = 0;
-            val rewardReceiver: address = msg.mode == MoveMode.EXIT ? shipAddress : msg.user;
             assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
             if (firstTimeOpened) {
@@ -66,20 +66,11 @@ fun onInternalMessage(in: InMessage) {
                 totalReward = 0;
             }
 
-            // if (totalReward > 0) {
-            //     val requestMintMsg = createMessage({
-            //         bounce: BounceMode.NoBounce,
-            //         dest: storage.gameAddress,
-            //         value: MINT_TON_AMOUNT,
-            //         body: RequestMint {
-            //             receiver: rewardReceiver,
-            //             amount: totalReward,
-            //         }
-            //     });
-            //     requestMintMsg.send(0);
-            // }
+
+            
             // For new cells, don't reserve at all - just leave enough for MoveEnd
             // For existing cells, use normal reserve
+            // TODO: why?
             if (!firstTimeOpened) {
                 reserveValue(in.valueCoins);
             }

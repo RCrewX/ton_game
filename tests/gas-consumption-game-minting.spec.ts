@@ -34,7 +34,7 @@ describe("Gas Prices - Game Minting", () => {
         Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });
 
-    it("RequestMint", async () => {
+    it("RequestMint (may Fail)", async () => {
         await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
         await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);
         await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_REQUEST_TO_MOVE, MoveMode.UP);

@@ -10,7 +10,7 @@ export function subcontractConfigToCell(config: SubcontractConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
         .storeUint(config.id, 256)
-        .storeBit(false) // redirectExcess: false by default
+        .storeBit(true) // redirectExcess: true by default
         .storeCoins(toNano('0.1')) // excessThreshold: 0.1 TON by default
         .endCell();
 }

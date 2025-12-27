@@ -1,6 +1,7 @@
 import "storage"
 import "structs"
 import "constants"
+import "errors"
 import "@stdlib/gas-payments"
 
 fun empty_cell() : cell {
@@ -138,4 +139,55 @@ fun encodeNFTTransfer(
     // In our case, forwardPayload is empty, so we just end the cell
     
     return builder.endCell();
+}
+
+fun generateSpecialType(): SpecialType {
+    // This should generate random type (4 types: empty, low, high, extra)
+    // 0: EMPTY | 5%
+    // 1: LOW | 45%
+    // 2: HIGH | 45%
+    // 3: EXTRA | 5%
+    
+    val randomValue: uint8 = random.range(100);
+    if (randomValue < 5) {
+        return SpecialType.EMPTY;
+    } else if (randomValue < 50) {
+        return SpecialType.LOW;
+    } else if (randomValue < 95) {
+        return SpecialType.HIGH;
+    } else {
+        return SpecialType.EXTRA;
+    }
+}
+
+fun generateSpecialRandomUint(base: uint256): uint256 {
+    // Generate random type (4 types: empty, low, high, extra)
+    // Based on type generate random uint
+    // EMPTY: 0
+    // LOW: [0, base/2]
+    // HIGH: [base/2, base]
+    // EXTRA: k*base, where k is random uint between 1 and 10
+    assert (base > 0) throw ERR_INVALID_BASE;
+
+    val specialType: SpecialType = generateSpecialType();
+
+    match (specialType) {
+        SpecialType.EMPTY => {return 0}
+        SpecialType.LOW => {return random.range(base/2)}
+        SpecialType.HIGH => {return random.range(base/2) + base/2}
+        SpecialType.EXTRA => {return (random.range(10) + 1) * base}
+    }
+
+}
+
+fun generateRandomResult(base: uint256): RandomResult {
+    random.initialize();
+
+    val randomResult: RandomResult = {
+        hp: generateSpecialRandomUint(base),
+        jettonAmount: generateSpecialRandomUint(base) as coins,
+    };
+
+    return randomResult;
+
 }

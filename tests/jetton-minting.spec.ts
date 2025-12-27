@@ -19,7 +19,7 @@ describe('Jetton Minting', () => {
         SC_System = null as any;
     });
 
-    it('Test complete minting flow - moves, safe exit, and jetton minting', async () => {
+    it('Test complete minting flow - moves, safe exit, and jetton minting (may Fail)', async () => {
         // // Deploy and set up jetton minter
         // const jettonContent = jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' });
         // const jettonMinter = SC_System.blockchain.openContract(JettonMinter.createFromConfig({
@@ -170,7 +170,7 @@ describe('Jetton Minting', () => {
         });
     });
 
-    it('Test mint flow - verify jettons go to user wallet and excesses to receiver', async () => {
+    it('Test mint flow - verify jettons go to user wallet and excesses to receiver (may Fail)', async () => {
         // Do a few moves to accumulate some rewards
         const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);

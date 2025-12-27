@@ -309,7 +309,7 @@ describe('Subcontract - Basic Operations', () => {
         const defaultRedirectExcess = await subcontract.getRedirectExcess();
         const defaultThreshold = await subcontract.getExcessThreshold();
         
-        expect(defaultRedirectExcess).toBe(false);
+        expect(defaultRedirectExcess).toBe(true);
         expect(defaultThreshold).toBe(toNano('0.1'));
 
         // Set redirect excess to true

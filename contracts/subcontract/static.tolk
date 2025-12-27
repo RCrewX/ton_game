@@ -114,7 +114,7 @@ fun calcDeployedSubcontract(
     val initStorage: SubcontractStorage = {
         ownerAddress,
         id,
-        redirectExcess: false,
+        redirectExcess: true,
         excessThreshold: DEFAULT_EXCESS_THRESHOLD,
     };
     return {

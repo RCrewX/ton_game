@@ -452,7 +452,7 @@ describe('Ship Movement', () => {
         }
     });
 
-    it('Test HP update after MoveEnd - verify HP is correctly updated on CONTINUE', async () => {
+    it('Test HP update after MoveEnd - verify HP is correctly updated on CONTINUE (may Fail)', async () => {
         // Initial move UP: (0,0) -> (0,1)
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
         let gameData = await SC_System.ownerShip.getCurrentGameData();

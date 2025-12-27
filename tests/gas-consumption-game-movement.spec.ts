@@ -246,7 +246,7 @@ describe("Gas Prices - Game Movement", () => {
         expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
     });
 
-    it("MoveEnd with jettons minting", async () => {
+    it("MoveEnd with jettons minting (may Fail)", async () => {
         const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + MINT_TON_AMOUNT + toNano('0.2');
         const currentBalance = await SC_System.ownerShip.getTonBalance();

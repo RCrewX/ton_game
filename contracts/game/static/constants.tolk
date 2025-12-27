@@ -51,3 +51,10 @@ enum MoveMode: uint8 {
     RIGHT
     EXIT
 }
+
+enum SpecialType: uint8 {
+    EMPTY
+    LOW
+    HIGH
+    EXTRA
+}

@@ -112,7 +112,10 @@ describe('Subcontract - Excess Handling', () => {
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 
-        // Redirect excess is disabled by default, so excess should not be forwarded
+        // Explicitly disable redirect excess (default is now true)
+        await subcontract.sendSetRedirectExcess(SC_System.ownerAccount.getSender(), false, toNano('0.1'));
+
+        // Excess should not be forwarded when redirect is disabled
         const excessAmount = toNano('0.2');
         const excessMessage = beginCell()
             .storeUint(0xd53276db, 32) // ReturnExcessesBack opcode
@@ -318,7 +321,8 @@ describe('Subcontract - Excess Handling', () => {
             value: toNano('2'),
         });
 
-        // Do NOT enable redirect excess (default is false)
+        // Explicitly disable redirect excess (default is now true)
+        await subcontract.sendSetRedirectExcess(userAccount.getSender(), false, toNano('0.1'));
         const redirectExcess = await subcontract.getRedirectExcess();
         expect(redirectExcess).toBe(false);
 

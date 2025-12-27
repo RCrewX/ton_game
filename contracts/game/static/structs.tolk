@@ -1,3 +1,7 @@
+// TODO Use special types for HP and X and Y Coordinates (example: RemainingBitsAndRefs)
+
+
+
 struct XY {
     x: int256
     y: uint256
@@ -16,4 +20,9 @@ struct GameFields {
 struct MoveData {
     ship_hp: uint256
     xy: XY
+}
+
+struct RandomResult {
+    hp: uint256
+    jettonAmount: coins
 }
