@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
-import { encodeSetJettonMinterAddress, encodeSetGames, encodeRedirectMessage } from './types';
+import { encodeSetJettonMinterAddress, encodeSetGames, encodeRedirectMessage, encodeSetAllowBurn, encodeRequestBurn } from './types';
 
 export type GameManagerConfig = {
     ownerAddress: Address;
@@ -11,6 +11,7 @@ export function gameManagerConfigToCell(config: GameManagerConfig): Cell {
         .storeAddress(null) // jettonMinterAddress: address?
         .storeMaybeRef(null) // jettonWalletCode: cell?
         .storeMaybeRef(null) // games: cell?
+        .storeBit(false) // allow_burn: bool (default false)
         .endCell();
 }
 
@@ -80,6 +81,35 @@ export class GameManager implements Contract {
     async getGames(provider: ContractProvider): Promise<Cell | null> {
         const result = await provider.get('get_games', []);
         return result.stack.readCellOpt();
+    }
+
+    async sendSetAllowBurn(provider: ContractProvider, via: Sender, value: bigint, allow_burn: boolean) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeSetAllowBurn({ allow_burn }),
+        });
+    }
+
+    async sendRequestBurn(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        jettonAmount: bigint,
+        sendExcessesTo: Address | null = null,
+        customPayload: Cell | null = null,
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeRequestBurn({ queryId, jettonAmount, sendExcessesTo, customPayload }),
+        });
+    }
+
+    async getAllowBurn(provider: ContractProvider): Promise<boolean> {
+        const result = await provider.get('get_allow_burn', []);
+        return result.stack.readBoolean();
     }
 }
 

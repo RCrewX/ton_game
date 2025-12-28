@@ -1,7 +1,7 @@
 import { beginCell, fromNano, toNano } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
+import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN } from '../wrappers/game_manager/types';
 import { JettonMinter } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
@@ -171,6 +171,124 @@ describe("Gas Prices - GameManager", () => {
         gasCosts['Transfer'] = costStr;
 
         expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("SetAllowBurn", async () => {
+        let initial_balance = await SC_System.ownerAccount.getBalance();
+        let little_less_than_gas_needed = toNano('0.01');
+        let gas_sent = GAS_COST_SET_ALLOW_BURN;
+
+        SC_System.messageResult = await SC_System.gameManager.sendSetAllowBurn(
+            SC_System.ownerAccount.getSender(),
+            gas_sent,
+            true
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.gameManager.address,
+            success: true,
+            op: GameManagerOpcodes.OP_SET_ALLOW_BURN,
+        });
+
+        let final_balance = await SC_System.ownerAccount.getBalance();
+        let cost = initial_balance - final_balance;
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['SetAllowBurn'] = costStr;
+
+        expect(cost).toBeLessThanOrEqual(gas_sent);
+        expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("RequestBurn", async () => {
+        // First enable burn
+        await SC_System.gameManager.sendSetAllowBurn(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SET_ALLOW_BURN,
+            true
+        );
+
+        // Initialize GameManager's jetton wallet by minting jettons
+        const mintAmount = toNano('1000');
+        const forwardAmount = toNano('0.1');
+        const redirectMessage = JettonMinter.mintMessage(
+            SC_System.jettonMinter.address,
+            SC_System.gameManager.address,
+            mintAmount,
+            toNano('0.1'),
+            toNano('0.2')
+        );
+        
+        await SC_System.gameManager.sendRedirectMessage(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REDIRECT_MESSAGE + forwardAmount,
+            SC_System.jettonMinter.address,
+            redirectMessage,
+            forwardAmount
+        );
+
+        // Get GameManager's jetton wallet address
+        const gameManagerWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
+        const gameManagerWallet = SC_System.blockchain.openContract(
+            JettonWallet.createFromAddress(gameManagerWalletAddress)
+        );
+
+        // Verify wallet has balance
+        const walletBalance = await gameManagerWallet.getJettonBalance();
+        expect(walletBalance).toBeGreaterThanOrEqual(mintAmount);
+
+        // Send TON to wallet for gas (needed to process burn and send notification to minter)
+        await SC_System.ownerAccount.send({
+            to: gameManagerWalletAddress,
+            value: toNano('0.3'),
+            body: beginCell().endCell(),
+        });
+
+        // Test RequestBurn
+        const anyUser = await SC_System.blockchain.treasury('anyUser');
+        const burnAmount = toNano('100');
+        let initial_balance = await anyUser.getBalance();
+        let little_less_than_gas_needed = toNano('0.01');
+        // Send RequestBurn with enough TON for gas + wallet processing
+        // Need extra buffer for wallet to process burn and send notification to minter
+        // Actual cost includes gas_sent + ~0.002 TON in additional fees (message forwarding, etc.)
+        // We set a safe limit that accounts for the full flow including wallet operations
+        // The cost will be gas_sent + additional fees, so we add a buffer to gas_sent
+        let gas_sent = GAS_COST_REQUEST_BURN + toNano('0.52') + toNano('0.005');
+
+        SC_System.messageResult = await SC_System.gameManager.sendRequestBurn(
+            anyUser.getSender(),
+            gas_sent,
+            burnAmount
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: anyUser.address,
+            to: SC_System.gameManager.address,
+            success: true,
+            op: GameManagerOpcodes.OP_REQUEST_BURN,
+        });
+
+        // Verify AskToBurn message was sent to wallet
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.gameManager.address,
+            to: gameManagerWalletAddress,
+            success: true,
+            op: GameManagerOpcodes.OP_ASK_TO_BURN,
+        });
+
+        let final_balance = await anyUser.getBalance();
+        let cost = initial_balance - final_balance;
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['RequestBurn'] = costStr;
+
+        // Cost includes gas_sent + additional fees (~0.002 TON for message forwarding, etc.)
+        // So we allow a small buffer for these additional fees
+        const additionalFeesBuffer = toNano('0.003');
+        expect(cost).toBeLessThanOrEqual(gas_sent + additionalFeesBuffer);
         expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
     });
 });

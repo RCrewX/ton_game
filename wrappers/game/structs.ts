@@ -19,8 +19,8 @@ export enum MoveMode {
 }
 
 // XY {
-//   x: int256
-//   y: uint256
+//   x: X_TYPE
+//   y: Y_TYPE
 // }
 export type XY = {
     x: bigint;
@@ -28,7 +28,7 @@ export type XY = {
 };
 
 // MoveData {
-//   ship_hp: uint256
+//   ship_hp: HP_TYPE
 //   xy: XY
 // }
 export type MoveData = {
@@ -38,7 +38,7 @@ export type MoveData = {
 
 // GameFields {
 //   xy: XY
-//   hp: uint256
+//   hp: HP_TYPE
 //   jettonAmount: coins
 // }
 export type GameFields = {
@@ -59,7 +59,7 @@ export function storeXY(builder: Builder, src: XY) {
 }
 
 // MoveData {
-//   ship_hp: uint256
+//   ship_hp: HP_TYPE
 //   xy: XY
 // }
 export function storeMoveData(builder: Builder, src: MoveData) {
@@ -69,7 +69,7 @@ export function storeMoveData(builder: Builder, src: MoveData) {
 
 // GameFields {
 //   xy: XY
-//   hp: uint256
+//   hp: HP_TYPE
 //   jettonAmount: coins
 // }
 export function storeGameFields(builder: Builder, src: GameFields) {

@@ -1,11 +1,12 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION } from '../wrappers/game/types';
+import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, BASIC_STORAGE_TAX, GAS_COST_REQUEST_MINT, GAS_COST_REQUEST_TO_MOVE } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes } from '../wrappers/game_manager/types';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import * as fs from 'fs';
 import * as path from 'path';
+import { MoveMode } from "../wrappers/game/structs";
 
 describe("Gas Prices - Game Upgrade", () => {
     let SC_System: ContractSystem;
@@ -87,6 +88,21 @@ describe("Gas Prices - Game Upgrade", () => {
 
     it("ShipUpgrade", async () => {
         const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
+        // Initialize ship by doing a first move (this sets max_hp to BASIC_SHIP_HP)
+        // Use a higher value to ensure it covers TODO_TOTAL_GAS_TO_MOVE
+        const moveValue = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            moveValue,
+            MoveMode.UP
+        );
+
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            moveValue,
+            MoveMode.EXIT
+        );
+        
         const transferAmount = toNano('100');
         const dataCell = beginCell()
             .storeAddress(SC_System.ownerShip.address)

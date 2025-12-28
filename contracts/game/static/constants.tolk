@@ -1,8 +1,8 @@
-
+import "structs"
 
 const BASIC_STORAGE_TAX = ton("0.01");
 
-const BASIC_SHIP_HP: uint256 = 100;
+const BASIC_SHIP_HP: HP_TYPE = 100;
 const MINT_TON_AMOUNT: coins = ton("0.2");
 
 // Gas costs from gas consumption tests (in TON)

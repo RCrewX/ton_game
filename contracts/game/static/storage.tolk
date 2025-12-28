@@ -9,7 +9,7 @@ struct GameV1Storage {
 }
 
 struct CCStorage {
-    hp: uint256
+    hp: HP_TYPE
     jettonAmount: coins
     firstExplorer: address?
 }
@@ -25,7 +25,7 @@ struct CoordinateCellStorage {
 struct ShipStorage {
     userAddress: address
     gameAddress: address
-    max_hp: uint256
+    max_hp: HP_TYPE
     gameFields: Cell<GameFields>?
     coordinateCellCode: cell
     movement_in_process: bool

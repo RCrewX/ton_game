@@ -10,8 +10,8 @@ fun empty_cell() : cell {
 
 fun calcDeployedCoordinateCell(
     gameAddress: address,
-    coordinate_x: int256,
-    coordinate_y: uint256,
+    coordinate_x: X_TYPE,
+    coordinate_y: Y_TYPE,
     coordinateCellCode: cell,
     shipCode: cell,
     ): AutoDeployAddress {
@@ -33,8 +33,8 @@ fun calcDeployedCoordinateCell(
 
 fun calcAddressOfCoordinateCell(
     gameAddress: address,
-    coordinate_x: int256,
-    coordinate_y: uint256,
+    coordinate_x: X_TYPE,
+    coordinate_y: Y_TYPE,
     coordinateCellCode: cell,
     shipCode: cell,
     ): address {
@@ -85,7 +85,7 @@ fun reserveValue(msgValue: coins, delta: coins = 0) {
 }
 
 
-fun coordinate_plus_mode(x: int256, mode: MoveMode):int {
+fun coordinate_plus_mode(x: X_TYPE, mode: MoveMode):X_TYPE {
     match (mode) {
         MoveMode.LEFT => {return x-1}
         MoveMode.RIGHT => {return x+1}
@@ -170,7 +170,8 @@ fun generateSpecialRandomUint(base: uint256, k: uint16 = 10): uint256 {
     assert (base > 0) throw ERR_INVALID_BASE;
 
     val specialType: SpecialType = generateSpecialType();
-
+    debug.printString("specialType");
+    debug.print<uint8>(specialType as uint8);
     match (specialType) {
         SpecialType.EMPTY => {return 0}
         SpecialType.LOW => {return random.range(base/2)}
@@ -184,7 +185,7 @@ fun generateRandomResult(base: uint256): RandomResult {
     random.initialize();
 
     val randomResult: RandomResult = {
-        hp: generateSpecialRandomUint(base),
+        hp: generateSpecialRandomUint(base) as HP_TYPE,
         jettonAmount: generateSpecialRandomUint(base) as coins,
     };
 

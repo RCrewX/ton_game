@@ -46,7 +46,7 @@ fun onInternalMessage(in: InMessage) {
                 storage.save();
             }
             var result: UniqueResult = UniqueResult.CRASH;
-            var ship_hp: uint256 = 0;
+            var ship_hp: HP_TYPE = 0;
             assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
             if (firstTimeOpened) {

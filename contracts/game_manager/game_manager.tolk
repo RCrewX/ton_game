@@ -6,6 +6,8 @@ type AllowedMessagesToGameManager =
     | RedirectMessage
     | ForwardMintRequest
     | TransferNotificationForRecipient
+    | SetAllowBurn
+    | RequestBurn
     | AnyMessage
 
 
@@ -118,6 +120,11 @@ fun onInternalMessage(in: InMessage) {
                 reserveValue(in.valueCoins);
                 return;
             }
+
+            if (msg.jettonAmount < MIN_JETTON_USAGE_AMOUNT) {
+                reserveValue(in.valueCoins);
+                return;
+            }
             
             // Load the cell that contains our refs
             val payloadCell = forwardPayloadSlice.loadRef();
@@ -156,6 +163,48 @@ fun onInternalMessage(in: InMessage) {
             });
             upgradeRequestMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
+        SetAllowBurn => {
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
+            assert (in.valueCoins >= GAS_COST_SET_ALLOW_BURN) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            storage.allow_burn = msg.allow_burn;
+            storage.save();
+            reserveValue(in.valueCoins);
+            val responseMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: in.senderAddress,
+                value: 0,
+                body: ReturnExcessesBack {
+                    queryId: 0
+                }
+            });
+            responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
+        }
+        RequestBurn => {
+            assert (storage.allow_burn) throw ERR_BURN_NOT_ALLOWED;
+            assert (storage.jettonMinterAddress != null) throw ERR_JETTON_MINTER_NOT_SET;
+            assert (storage.jettonWalletCode != null) throw ERR_JETTON_WALLET_CODE_NOT_SET;
+            assert (in.valueCoins >= GAS_COST_REQUEST_BURN) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            
+            // Calculate GameManager's native jetton wallet address
+            val gameManagerWalletAddress = calcAddressOfJettonWallet(contract.getAddress(), storage.jettonMinterAddress!, storage.jettonWalletCode!);
+            
+            // Create AskToBurn message
+            val askToBurn = AskToBurn {
+                queryId: msg.queryId,
+                jettonAmount: msg.jettonAmount,
+                sendExcessesTo: msg.sendExcessesTo,
+                customPayload: msg.customPayload,
+            };
+            
+            reserveValue(in.valueCoins);
+            val burnMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: gameManagerWalletAddress,
+                value: 0,
+                body: askToBurn
+            });
+            burnMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+        }
         ReturnExcessesBack => {
             reserveValue(in.valueCoins);
             val cashbackMessage = createMessage({
@@ -188,5 +237,10 @@ get fun get_jetton_minter_address(): address? {
 get fun get_games(): cell? {
     var storage = lazy GameManagerStorage.load();
     return storage.games;
+}
+
+get fun get_allow_burn(): bool {
+    var storage = lazy GameManagerStorage.load();
+    return storage.allow_burn;
 }
 

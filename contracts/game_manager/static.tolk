@@ -7,6 +7,8 @@ const MINT_TON_AMOUNT: coins = ton("0.1");
 const GAS_COST_SET_JETTON_MINTER_ADDRESS: coins = ton("0.019"); // 0.0184204 + buffer
 const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141556 + buffer
 const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.009"); // 0.0081816 + buffer
+const GAS_COST_SET_ALLOW_BURN: coins = ton("0.015"); // Estimated gas cost for SetAllowBurn
+const GAS_COST_REQUEST_BURN: coins = ton("0.015"); // Estimated gas cost for RequestBurn
 
 // Errors
 const ERR_UNAUTHORIZED = 901;  // Generic unauthorized (kept for backward compatibility)
@@ -21,8 +23,12 @@ const ERR_JETTON_WALLET_CODE_NOT_SET = 923;  // Jetton wallet code is not set (n
 const ERR_GAMES_NOT_SET = 924;  // Games list is not set (null)
 const ERR_INVALID_JETTON_WALLET_SENDER = 925;  // Sender is not the expected jetton wallet address
 const ERR_INVALID_GAME_ADDRESS = 926;  // Game address is null or invalid
+const ERR_BURN_NOT_ALLOWED = 927;  // Burn is not allowed (allow_burn is false)
 
 const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
+
+const MIN_JETTON_USAGE_AMOUNT: coins = 5 as coins;
+
 //  Storage
 
 struct GameManagerStorage {
@@ -30,6 +36,7 @@ struct GameManagerStorage {
     jettonMinterAddress: address? // jetton minter address
     jettonWalletCode: cell? // jetton wallet code for address calculation
     games: cell? // Addresses of games, maybe stored differently
+    allow_burn: bool // Allow burn operations (default false)
 }
 
 
@@ -110,6 +117,25 @@ struct (0x0a1b2c3d) LiteralyAnything {
     queryId: uint64
 }
 
+struct (0x7a8b9c0d) SetAllowBurn {
+    allow_burn: bool
+}
+
+struct (0x8b9c0d1e) RequestBurn {
+    queryId: uint64
+    jettonAmount: coins
+    sendExcessesTo: address?
+    customPayload: cell?
+}
+
+// Jetton burn message (from jetton project, redefined here for forwarding)
+struct (0x595f07bc) AskToBurn {
+    queryId: uint64
+    jettonAmount: coins
+    sendExcessesTo: address?
+    customPayload: cell?
+}
+
 fun empty_cell() : cell {
     return beginCell().endCell();
 }
@@ -128,6 +154,7 @@ fun calcDeployedGameManager(
         jettonMinterAddress: null,
         jettonWalletCode: null,
         games: null,
+        allow_burn: false,
     };
     return {
         stateInit: {

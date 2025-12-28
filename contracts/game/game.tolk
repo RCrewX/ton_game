@@ -68,9 +68,12 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == storage.managerAddress) throw ERR_INVALID_GAME_MANAGER_SENDER;
             
             random.initialize();
-            val hpIncrease = generateSpecialRandomUint(msg.jettonAmount as uint256, 3);
+            var hpIncrease = generateSpecialRandomUint(msg.jettonAmount as uint256, 3) as HP_TYPE;
             
-            
+            // Minimum HP increase is 1 (Minimum jetton amount is MIN_JETTON_USAGE_AMOUNT)
+            if (hpIncrease < 1) {
+                hpIncrease = 1;
+            }
             val dataCell = msg.data;
             val shipAddress = dataCell.beginParse().loadAddress();
             assert (shipAddress != null) throw ERR_INVALID_SHIP_ADDRESS;

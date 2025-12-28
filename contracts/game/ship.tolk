@@ -26,7 +26,7 @@ get fun get_movement_in_process(): bool {
     var storage: ShipStorage = lazy ShipStorage.load();
     return storage.movement_in_process;
 }
-get fun get_max_hp(): uint256 {
+get fun get_max_hp(): HP_TYPE {
     var storage: ShipStorage = lazy ShipStorage.load();
     return storage.max_hp;
 }
@@ -136,15 +136,9 @@ fun onInternalMessage(in: InMessage) {
             // Only Game can upgrade ships
             assert (in.senderAddress == storage.gameAddress) throw ERR_INVALID_GAME_SENDER;
             assert (storage.movement_in_process == false) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
+            assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
 
-
-            if (storage.gameFields == null) {
-                val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
-                storage.gameFields = gameFields;
-                storage.max_hp = BASIC_SHIP_HP;
-                storage.movement_in_process = false;
-                storage.save();
-            }
+            
             var gameFields: GameFields = lazy storage.gameFields!.load();
             gameFields.hp += msg.hpIncrease;
             storage.max_hp += msg.hpIncrease;

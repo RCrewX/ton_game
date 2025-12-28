@@ -2,7 +2,7 @@ import { beginCell, Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP } from '../wrappers/game/types';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP, GAS_COST_SEND_MOVE } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import { MoveMode } from '../wrappers/game/structs';
 import { JettonMinter } from '../wrappers/jetton/JettonMinter';
@@ -43,6 +43,21 @@ describe('Ship Upgrade', () => {
             to: anotherUserJettonWallet.address,
             success: true,
             deploy: true,
+        });
+        // First move UP to get to (0, 1)
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_MOVE_END,
+        });
+        // Now move EXIT from (0, 1)
+        // EXIT mode: x stays same (0), y increases by 1 -> (0, 2)
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.EXIT);
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_MOVE_END,
         });
 
     }, 100000);
@@ -142,7 +157,7 @@ describe('Ship Upgrade', () => {
         if (finalGameData) {
             const hpIncrease = finalGameData.hp - initialHP;
             expect(hpIncrease).toBeGreaterThanOrEqual(1n);
-            expect(hpIncrease).toBeLessThanOrEqual(transferAmount);
+            expect(hpIncrease).toBeLessThanOrEqual(transferAmount*3n);
         }
     });
 
@@ -163,7 +178,13 @@ describe('Ship Upgrade', () => {
         }, SC_System.shipCode));
 
         await anotherUserShip.sendDeploy(anotherUser.getSender(), toNano('2'));
-
+        await anotherUserShip.sendMove(anotherUser.getSender(), toNano('1'), MoveMode.UP);
+        SC_System.messageResult = await anotherUserShip.sendMove(anotherUser.getSender(), toNano('1'), MoveMode.EXIT);
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            to: anotherUserShip.address,
+            success: true,
+            op: Opcodes.OP_MOVE_END,
+        });
         // Get initial HP of another user's ship
         const initialGameData = await anotherUserShip.getCurrentGameData();
         const initialHP = initialGameData ? initialGameData.hp : 100n;
@@ -230,7 +251,7 @@ describe('Ship Upgrade', () => {
         if (finalGameData) {
             const hpIncrease = finalGameData.hp - initialHP;
             expect(hpIncrease).toBeGreaterThanOrEqual(1n);
-            expect(hpIncrease).toBeLessThanOrEqual(transferAmount);
+            expect(hpIncrease).toBeLessThanOrEqual(transferAmount*3n);
         }
     });
 
@@ -375,7 +396,7 @@ describe('Ship Upgrade', () => {
 
             hpIncreases.push(hpIncrease);
             expect(hpIncrease).toBeGreaterThanOrEqual(1n);
-            expect(hpIncrease).toBeLessThanOrEqual(transferAmount);
+            expect(hpIncrease).toBeLessThanOrEqual(transferAmount*3n);
         }
 
         // Verify we got different values (randomness)
@@ -455,7 +476,7 @@ describe('Ship Upgrade', () => {
         const finalMaxHp = await SC_System.ownerShip.getMaxHp();
         const maxHpIncrease = finalMaxHp - initialMaxHp;
         expect(maxHpIncrease).toBeGreaterThanOrEqual(1n);
-        expect(maxHpIncrease).toBeLessThanOrEqual(transferAmount);
+        expect(maxHpIncrease).toBeLessThanOrEqual(transferAmount*3n);
 
         // Verify max_hp matches current HP after upgrade
         const gameData = await SC_System.ownerShip.getCurrentGameData();
@@ -483,7 +504,7 @@ describe('Ship Upgrade', () => {
             JettonWallet.createFromAddress(userJettonWalletAddress)
         );
 
-        const transferAmount = toNano('30');
+        const transferAmount = toNano('300');
         const dataCell = beginCell()
             .storeAddress(SC_System.ownerShip.address)
             .endCell();

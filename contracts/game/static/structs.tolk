@@ -1,10 +1,11 @@
 // TODO Use special types for HP and X and Y Coordinates (example: RemainingBitsAndRefs)
-
-
+type Y_TYPE = uint256
+type X_TYPE = int256
+type HP_TYPE = Y_TYPE
 
 struct XY {
-    x: int256
-    y: uint256
+    x: X_TYPE
+    y: Y_TYPE
 }
 
 fun XY.toSlice(self): slice {
@@ -13,16 +14,16 @@ fun XY.toSlice(self): slice {
 
 struct GameFields {
     xy: XY
-    hp: uint256
+    hp: HP_TYPE
     jettonAmount: coins 
 }
 
 struct MoveData {
-    ship_hp: uint256
+    ship_hp: HP_TYPE
     xy: XY
 }
 
 struct RandomResult {
-    hp: uint256
+    hp: HP_TYPE
     jettonAmount: coins
 }
