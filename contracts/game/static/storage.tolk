@@ -27,6 +27,7 @@ struct ShipStorage {
     gameAddress: address
     max_hp: HP_TYPE
     gameFields: Cell<GameFields>?
+    fastTravelInfo: Cell<FastTravelInfo>?
     coordinateCellCode: cell
     movement_in_process: bool
 }

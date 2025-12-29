@@ -19,6 +19,7 @@ const GAS_COST_REQUEST_MINT: coins = ton("0.22"); // Ship -> Game (RequestMint) 
 const GAS_COST_FORWARD_MINT_REQUEST: coins = ton("0.06"); // Game -> GameManager (ForwardMintRequest) - just gas (estimated)
 const GAS_COST_JETTON_USED: coins = ton("0.06"); // GameManager -> Game (JettonUsed) - just gas (estimated)
 const GAS_COST_SHIP_UPGRADE: coins = ton("0.06"); // Game -> Ship (ShipUpgrade) - just gas (estimated)
+const GAS_COST_RESET_SHIP: coins = ton("0.05"); // ResetShip handler gas buffer
 const GAS_COST_TRANSFER_NOTIFICATION: coins = ton("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - just gas (estimated)
 const GAS_COST_WITHDRAW_JETTON: coins = ton("0.05"); // Gas for jetton wallet operations during withdrawal
 const GAS_COST_WITHDRAW_NFT: coins = ton("0.05"); // Gas for NFT operations during withdrawal
@@ -57,4 +58,9 @@ enum SpecialType: uint8 {
     LOW
     HIGH
     EXTRA
+}
+
+enum JettonUsageMode: uint8 {
+    SHIP_UPGRADE
+    FAST_TRAVEL_UPGRADE
 }

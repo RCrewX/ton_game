@@ -118,4 +118,9 @@ export class CoordinateCell implements Contract {
             }),
         });
     }
+
+    async getOpened(provider: ContractProvider): Promise<boolean> {
+        const result = await provider.get('get_opened', []);
+        return result.stack.readBoolean();
+    }
 }

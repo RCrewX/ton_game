@@ -33,7 +33,6 @@ const ERR_INVALID_GAME_SENDER = 913  // Sender is not the ship's game address
 // Game-specific errors
 const ERR_INVALID_GAME_MANAGER_SENDER = 914  // Sender is not the game's manager address
 const ERR_INVALID_SHIP_SENDER_FOR_MINT = 915  // Sender is not the expected ship address for mint request
-const ERR_INVALID_SHIP_ADDRESS = 927  // Ship address is null or invalid
 
 // CoordinateCell-specific errors
 const ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED = 916  // Coordinate cell storage (ccStorage) is null
@@ -41,7 +40,12 @@ const ERR_NOT_FIRST_EXPLORER = 917  // Sender is not the first explorer of this 
 const ERR_INVALID_COORDINATE_CELL_SENDER_FOR_MOVE = 918  // Sender is not the expected coordinate cell for Move message
 const ERR_INVALID_SHIP_SENDER_FOR_MOVE = 919  // Sender is not the expected ship for MoveShipToCC message
 const ERR_INVALID_BASE = 920  // Base is invalid (must be > 0)
-
+const ERR_WRONG_XY = 921  // Provided coordinates do not satisfy required constraints
+const ERR_START_WRONG_XY = 922  // Fast travel allowed only from start (0,0)
+const ERR_FAST_TRAVEL_INFO_NOT_INITIALIZED = 923  // Fast travel info not set up yet
+const ERR_NOT_ENOUGH_FUEL_FOR_TRAVEL = 924  // Not enough enriched fuel to cover travel cost
+const ERR_INVALID_JETTON_USAGE_MODE = 925  // Jetton usage mode is invalid
+const ERR_INVALID_DESTINATION = 926  // Destination is invalid
+const ERR_FAST_TRAVEL_NOT_ALLOWED_TO_CLOSED_CELLS = 927  // Fast travel not allowed to closed cells
 const ERR_UNKNOWN_MESSAGE = 0xFFFF  // Unknown message type (body not empty but doesn't match any known message)
-
 // Helper-specific errors

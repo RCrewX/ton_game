@@ -37,7 +37,11 @@ struct (0x0a1b2c3d) LiteralyAnything {
 
 
 // To Coordinate Cell
-
+struct (0x4b13d2f0) TravelToCC {
+    user: address
+    moveData: Cell<MoveData>  // same error
+    // moveData: cell
+}
 
 struct (0xeafb35a2) MoveShipToCC {
     user: address
@@ -86,10 +90,19 @@ struct (0xf2a70b07) RequestToMove {
     mode: MoveMode
 }
 
+struct (0x8d2f1ca4) RequestToFastTravel {
+    xy: XY
+}
+
 struct (0x7d37523d) ShipUpgrade {
     hpIncrease: uint256
 }
 
+struct (0x5a1f0b21) FastTravelUpgrade {
+    jettonAmount: coins
+}
+
+struct (0x6a3b8fdd) ResetShip {}
 // To Game
 
 struct (0xf5cc90ff) RequestMint {

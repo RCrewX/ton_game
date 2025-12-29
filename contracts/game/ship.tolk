@@ -9,7 +9,10 @@ type AllowedMessagesToShip =
     | MoveEnd 
     | RequestToMove 
     | ShipUpgrade
+    | RequestToFastTravel
     | AnyMessage
+    | ResetShip
+    | FastTravelUpgrade
 
 get fun currentGameData(): GameFields? {
     var storage: ShipStorage = lazy ShipStorage.load();
@@ -104,7 +107,7 @@ fun onInternalMessage(in: InMessage) {
             assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
 
             if (storage.gameFields == null) {
-                val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(BASIC_SHIP_HP, 256).storeCoins(0).endCell() as Cell<GameFields>;
+                var gameFields = buildGameFields(BASIC_SHIP_HP);
                 storage.gameFields = gameFields;
                 storage.max_hp = BASIC_SHIP_HP;
                 storage.movement_in_process = false;
@@ -130,6 +133,75 @@ fun onInternalMessage(in: InMessage) {
             // Use send_mode=128 to carry all remaining balance (excesses)
             moveMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
+        RequestToFastTravel => {
+
+            var storage = lazy ShipStorage.load();
+            assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
+            assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
+            assert (in.valueCoins >= TODO_TOTAL_GAS_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            // Check we have enough balance for the operation: gas cost + coordinate cell gas
+            assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
+
+            
+            assert (msg.xy.y >= (msg.xy.x > (x_zero) ? msg.xy.x as Y_TYPE : -msg.xy.x as Y_TYPE)) throw ERR_WRONG_XY;
+            assert (msg.xy.y > 2) throw ERR_WRONG_XY;
+            
+            assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
+            var gameFields: GameFields = lazy storage.gameFields!.load();
+
+            assert (gameFields.xy.x == x_zero && gameFields.xy.y == y_zero) throw ERR_START_WRONG_XY;
+
+            assert (storage.fastTravelInfo != null) throw ERR_FAST_TRAVEL_INFO_NOT_INITIALIZED;
+            var fastTravelInfo: FastTravelInfo = lazy storage.fastTravelInfo!.load();
+            
+            // TODO: Calculate travel cost correctly (make it more effective than move?)
+            assert (msg.xy.x >= x_zero && msg.xy.y >= y_zero) throw ERR_WRONG_XY;
+            var travelCost = msg.xy.y * (msg.xy.y - 1) / 2 as coins;
+
+            assert (fastTravelInfo.enrichedFuelAmount >= travelCost) throw ERR_NOT_ENOUGH_FUEL_FOR_TRAVEL;
+            fastTravelInfo.enrichedFuelAmount -= travelCost;
+
+            
+            storage.fastTravelInfo = fastTravelInfo.toCell();
+            storage.movement_in_process = true;
+            storage.save();
+            
+            reserveValue(in.valueCoins);
+
+            val xy = msg.xy;
+            val moveDataCell = MoveData {
+                ship_hp: gameFields.hp,
+                xy: xy,
+            }.toCell();
+
+
+            val bodyCell = TravelToCC {
+                user: in.senderAddress,
+                moveData: moveDataCell,
+            }.toCell();
+
+
+            // The dirtiest hack you ever seen
+            // It works because of the way the compiler optimizes the code
+            // DO NOT REMOVE THIS HACK
+            val x_z = msg.xy.x - msg.xy.x;
+            val y_z = msg.xy.y - msg.xy.y;
+
+            val calcDest = calcDeployedCoordinateCell(
+                storage.gameAddress,
+                (x_z),
+                (y_z),
+                storage.coordinateCellCode,
+                contract.getCode(),
+            );
+            val travelMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: calcDest,
+                value: 0,
+                body: bodyCell,
+            });
+            travelMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+        }
         ShipUpgrade => {
             // Using lazy for partial update - compiler handles efficient write-back via toCell()
             var storage = lazy ShipStorage.load();
@@ -146,6 +218,39 @@ fun onInternalMessage(in: InMessage) {
             storage.save();
             reserveValue(in.valueCoins);
         }
+        FastTravelUpgrade => {
+            var storage = lazy ShipStorage.load();
+            assert (in.senderAddress == storage.gameAddress) throw ERR_INVALID_USER_SENDER;
+            assert (storage.movement_in_process == false) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
+            assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
+
+            if (storage.fastTravelInfo == null) {
+                var fastTravelInfo = FastTravelInfo {
+                    enrichedFuelAmount: msg.jettonAmount,
+                };
+                storage.fastTravelInfo = fastTravelInfo.toCell();
+            } else {
+                var fastTravelInfo: FastTravelInfo = lazy storage.fastTravelInfo!.load();
+                fastTravelInfo.enrichedFuelAmount += msg.jettonAmount;
+                storage.fastTravelInfo = fastTravelInfo.toCell();
+            }
+            storage.save();
+
+        },
+        ResetShip => {
+            var storage = lazy ShipStorage.load();
+            assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
+            assert (in.valueCoins >= GAS_COST_RESET_SHIP) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            var gameFields = buildGameFields(BASIC_SHIP_HP);
+            var fastTravelInfo = FastTravelInfo {
+                enrichedFuelAmount: 0,
+            };
+
+            // storage.gameFields = gameFields.toCell();
+            storage.fastTravelInfo = fastTravelInfo.toCell();
+            storage.movement_in_process = false;
+            storage.save();
+        },
         ReturnExcessesBack => {}
         LiteralyAnything => {}
         else => {

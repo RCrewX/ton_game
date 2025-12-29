@@ -1,5 +1,5 @@
 import { compile } from "@ton/blueprint";
-import { beginCell, Cell, toNano } from "@ton/core";
+import { Address, beginCell, Cell, toNano } from "@ton/core";
 import { Blockchain, SandboxContract, TreasuryContract } from "@ton/sandbox";
 import { Game } from "../wrappers/game/Game";
 import { Ship } from "../wrappers/game/Ship";
@@ -9,7 +9,7 @@ import { MoveMode } from "../wrappers/game/structs";
 import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
 import { JettonWallet } from "../wrappers/jetton/JettonWallet";
 import { Opcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from "../wrappers/game_manager/types";
-import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from "../wrappers/game/types";
+import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, JettonUsageMode, GAS_COST_SEND_MOVE, Opcodes as GameOpcodes } from "../wrappers/game/types";
 
 export type ContractSystem = {
     blockchain: Blockchain;
@@ -175,6 +175,16 @@ export async function initContractSystem(): Promise<ContractSystem> {
         success: true,
     });
 
+    // move EXIT from (0, 1)
+    messageResult = await ownerShip.sendMove(ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.EXIT);
+    expect(messageResult.transactions).toHaveTransaction({
+        to: ownerShip.address,
+        success: true,
+        op: GameOpcodes.OP_MOVE_END,
+    });
+    expect(await ownerShip.getMovementInProcess()).toBe(false);
+
+
     return {
         blockchain,
         ownerAccount,
@@ -238,6 +248,20 @@ export async function setupCoordinateCellWithFirstExplorer(
     );
 
     return { coordinateCell, firstExplorerShip };
+}
+
+export function buildJettonUsageForwardPayload(gameAddress: Address, shipAddress: Address, usageMode: JettonUsageMode) {
+    const dataCell = beginCell()
+        .storeUint(usageMode, 8)
+        .storeAddress(shipAddress)
+        .endCell();
+    const gameAddressCell = beginCell()
+        .storeAddress(gameAddress)
+        .endCell();
+    return beginCell()
+        .storeRef(gameAddressCell)
+        .storeRef(dataCell)
+        .endCell();
 }
 
 /**

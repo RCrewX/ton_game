@@ -15,20 +15,19 @@ fun calcDeployedCoordinateCell(
     coordinateCellCode: cell,
     shipCode: cell,
     ): AutoDeployAddress {
+    val xy: XY = XY {x: coordinate_x, y: coordinate_y};
     val initStorage: CoordinateCellStorage = {
         gameAddress,
-        xy: XY {x: coordinate_x, y: coordinate_y},
+        xy: xy,
         opened: false,
         ccStorage: null,
         shipCode: shipCode,
     };
 
-    return {
-        stateInit: {
-            code: coordinateCellCode,
-            data: initStorage.toCell()
-        }
-    }
+    val dataCell: cell = initStorage.toCell();
+    val st = ContractState { code: coordinateCellCode, data: dataCell };
+    val deployed: AutoDeployAddress = { stateInit: st };
+    return deployed;
 }
 
 fun calcAddressOfCoordinateCell(
@@ -39,7 +38,7 @@ fun calcAddressOfCoordinateCell(
     shipCode: cell,
     ): address {
     val ccDeployed = calcDeployedCoordinateCell(gameAddress, coordinate_x, coordinate_y, coordinateCellCode, shipCode);
-    return ccDeployed.calculateAddress()
+    return ccDeployed.calculateAddress();
 }
 
 
@@ -57,16 +56,15 @@ fun calcDeployedShip(
         gameAddress,
         max_hp: 0,
         gameFields: null,
+        fastTravelInfo: null,
         coordinateCellCode: coordinateCellCode,
         movement_in_process: false,
     };
 
-    return {
-        stateInit: {
-            code: shipCode,
-            data: initStorage.toCell()
-        }
-    }
+    val dataCell: cell = initStorage.toCell();
+    val st = ContractState { code: shipCode, data: dataCell };
+    val deployed: AutoDeployAddress = { stateInit: st };
+    return deployed;  
 }
 
 fun calcAddressOfShip(
@@ -170,8 +168,6 @@ fun generateSpecialRandomUint(base: uint256, k: uint16 = 10): uint256 {
     assert (base > 0) throw ERR_INVALID_BASE;
 
     val specialType: SpecialType = generateSpecialType();
-    debug.printString("specialType");
-    debug.print<uint8>(specialType as uint8);
     match (specialType) {
         SpecialType.EMPTY => {return 0}
         SpecialType.LOW => {return random.range(base/2)}
@@ -191,4 +187,20 @@ fun generateRandomResult(base: uint256): RandomResult {
 
     return randomResult;
 
+}
+
+fun buildGameFields(max_hp: HP_TYPE): Cell<GameFields> {
+    val gameFields: Cell<GameFields> = beginCell().storeInt(0, 257).storeUint(0, 256).storeUint(max_hp, 256).storeCoins(0).endCell() as Cell<GameFields>;
+    return gameFields;
+}
+
+fun buildXY(x: X_TYPE, y: Y_TYPE): Cell<XY> {
+    val xy: Cell<XY> = beginCell().storeUint(0, 256).storeUint(y, 256).endCell() as Cell<XY>;
+    return xy;
+}
+
+@inline_ref
+fun buildMoveData(ship_hp: HP_TYPE, xy: XY): Cell<MoveData> {
+    val moveData: Cell<MoveData> = beginCell().storeUint(ship_hp, 256).storeInt(xy.x, 257).storeUint(xy.y, 256).endCell() as Cell<MoveData>;
+    return moveData;
 }

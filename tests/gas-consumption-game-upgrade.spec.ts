@@ -1,7 +1,7 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, BASIC_STORAGE_TAX, GAS_COST_REQUEST_MINT, GAS_COST_REQUEST_TO_MOVE } from '../wrappers/game/types';
+import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from './test_utils';
+import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, BASIC_STORAGE_TAX, GAS_COST_REQUEST_MINT, GAS_COST_REQUEST_TO_MOVE, JettonUsageMode } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes } from '../wrappers/game_manager/types';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import * as fs from 'fs';
@@ -39,16 +39,11 @@ describe("Gas Prices - Game Upgrade", () => {
     it("JettonUsed", async () => {
         const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
         const transferAmount = toNano('100');
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         let little_less_than_gas_needed = toNano('0.01');
         let gas_sent = GAS_COST_JETTON_USED;
@@ -104,16 +99,11 @@ describe("Gas Prices - Game Upgrade", () => {
         );
         
         const transferAmount = toNano('100');
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         let little_less_than_gas_needed = toNano('0.01');
         let gas_sent = GAS_COST_SHIP_UPGRADE;
@@ -154,16 +144,11 @@ describe("Gas Prices - Game Upgrade", () => {
     it("TransferNotificationForRecipient", async () => {
         const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
         const transferAmount = toNano('100');
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         let little_less_than_gas_needed = toNano('0.01');
         let gas_sent = GAS_COST_TRANSFER_NOTIFICATION;

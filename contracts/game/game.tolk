@@ -67,30 +67,45 @@ fun onInternalMessage(in: InMessage) {
             // Only GameManager can request ship upgrades
             assert (in.senderAddress == storage.managerAddress) throw ERR_INVALID_GAME_MANAGER_SENDER;
             
-            random.initialize();
-            var hpIncrease = generateSpecialRandomUint(msg.jettonAmount as uint256, 3) as HP_TYPE;
-            
-            // Minimum HP increase is 1 (Minimum jetton amount is MIN_JETTON_USAGE_AMOUNT)
-            if (hpIncrease < 1) {
-                hpIncrease = 1;
-            }
-            val dataCell = msg.data;
-            val shipAddress = dataCell.beginParse().loadAddress();
-            assert (shipAddress != null) throw ERR_INVALID_SHIP_ADDRESS;
-
+            var dataSlice = msg.data.beginParse();
+            val jettonUsageModeRaw = dataSlice.loadUint(8);
+            val shipAddress = dataSlice.loadAddress();
             reserveValue(in.valueCoins);
-            
-            // Send upgrade message to Ship
-            val upgradeMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: shipAddress,
-                value: 0,
-                body: ShipUpgrade {
-                    hpIncrease: hpIncrease,
-                }
-            });
-            // Use send_mode=128 to carry all remaining balance (excesses)
-            upgradeMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+
+
+            if (jettonUsageModeRaw == (JettonUsageMode.SHIP_UPGRADE as uint8)) {
+                    random.initialize();
+                    var hpIncrease = generateSpecialRandomUint(msg.jettonAmount as uint256, 3) as HP_TYPE;
+                    
+                    // Minimum HP increase is 1 (Minimum jetton amount is MIN_JETTON_USAGE_AMOUNT)
+                    if (hpIncrease < 1) {
+                        hpIncrease = 1;
+                    }
+                    // Send upgrade message to Ship
+                    val upgradeMsg = createMessage({
+                        bounce: BounceMode.NoBounce,
+                        dest: shipAddress,
+                        value: 0,
+                        body: ShipUpgrade {
+                            hpIncrease: hpIncrease,
+                        }
+                    });
+                    // Use send_mode=128 to carry all remaining balance (excesses)
+                    upgradeMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+            } else if (jettonUsageModeRaw == (JettonUsageMode.FAST_TRAVEL_UPGRADE as uint8)) {
+                    // Send fast travel message to Ship
+                    val fastTravelMsg = createMessage({
+                        bounce: BounceMode.NoBounce,
+                        dest: shipAddress,
+                        value: 0,
+                        body: FastTravelUpgrade {
+                            jettonAmount: msg.jettonAmount,
+                        }
+                    });
+                    fastTravelMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+            } else {
+                assert (false) throw ERR_INVALID_JETTON_USAGE_MODE;
+            }
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}

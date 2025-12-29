@@ -9,6 +9,7 @@ import "@stdlib/gas-payments"
 type AllowedMessagesToCoordinateCell = 
     | Move 
     | MoveShipToCC 
+    | TravelToCC
     | WithdrawTON
     | WithdrawJetton
     | WithdrawNFT
@@ -19,6 +20,10 @@ fun onBouncedMessage(in: InMessageBounced) {
 }
 get fun tonBalance(): coins {
     return contract.getOriginalBalance();
+}
+get fun get_opened(): bool {
+    var storage: CoordinateCellStorage = lazy CoordinateCellStorage.load();
+    return storage.opened;
 }
 fun onInternalMessage(in: InMessage) {
     val msg = lazy AllowedMessagesToCoordinateCell.fromSlice(in.body);
@@ -31,7 +36,14 @@ fun onInternalMessage(in: InMessage) {
             val shipAddress: address = calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode());
             var firstTimeOpened = !storage.opened;
             var totalReward: coins;
+
             if (firstTimeOpened && storage.ccStorage == null) {
+                // If user came from y=0 and going not to y=1 - this is fast travel
+                if (moveData.xy.y == y_zero && storage.xy.y > 1) {
+                    // FastTravel not allowed to closed cells
+                    assert (false) throw ERR_FAST_TRAVEL_NOT_ALLOWED_TO_CLOSED_CELLS;
+                }
+
                 var ccStorage: CCStorage = {hp: 0, jettonAmount: 0, firstExplorer: msg.user};
 
 
@@ -92,22 +104,46 @@ fun onInternalMessage(in: InMessage) {
         }
         MoveShipToCC => {
             var storage = lazy CoordinateCellStorage.load();
-            var ccStorage: CCStorage = lazy storage.ccStorage!.load();
+
             assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_INVALID_SHIP_SENDER_FOR_MOVE;
             reserveValue(in.valueCoins);
             // Forward enough TON to the new coordinate cell so it can send MoveEnd back
             // Need enough for: initial storage fee (if new cell) + gas for Move + buffer
-            val coordinateCellGas = GAS_COST_MOVE;
             val moveEndMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: calcDeployedCoordinateCell(storage.gameAddress, coordinate_plus_mode(storage.xy.x, msg.mode), storage.xy.y+1, contract.getCode(), storage.shipCode),
-                value: coordinateCellGas,
+                value: GAS_COST_MOVE,
                 body: Move {
                     user: msg.user,
                     mode: msg.mode,
                     moveData: MoveData {
                         xy: storage.xy,
                         ship_hp: msg.ship_hp,
+                    }.toCell()
+                }
+            });
+            // Use send_mode=128 to carry all remaining balance (excesses)
+            moveEndMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+        }
+        TravelToCC => {
+            var storage = lazy CoordinateCellStorage.load();
+            assert (storage.xy.x == 0 && storage.xy.y == 0) throw ERR_START_WRONG_XY;
+            assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_INVALID_SHIP_SENDER_FOR_MOVE;
+            reserveValue(in.valueCoins);
+            
+            var moveData: MoveData = lazy msg.moveData.load();
+
+            var targetXY: XY = moveData.xy;
+            val moveEndMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: calcDeployedCoordinateCell(storage.gameAddress, targetXY.x, targetXY.y, contract.getCode(), storage.shipCode),
+                value: GAS_COST_MOVE,
+                body: Move {
+                    user: msg.user,
+                    mode: MoveMode.UP,
+                    moveData: MoveData {
+                        xy: storage.xy,
+                        ship_hp: moveData.ship_hp,
                     }.toCell()
                 }
             });

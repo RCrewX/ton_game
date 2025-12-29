@@ -24,6 +24,7 @@ export const GAS_COST_REQUEST_MINT = toNano("0.22"); // Ship -> Game (RequestMin
 export const GAS_COST_FORWARD_MINT_REQUEST = toNano("0.06"); // Game -> GameManager (ForwardMintRequest) - estimated
 export const GAS_COST_JETTON_USED = toNano("0.06"); // GameManager -> Game (JettonUsed) - estimated
 export const GAS_COST_SHIP_UPGRADE = toNano("0.06"); // Game -> Ship (ShipUpgrade) - estimated
+export const GAS_COST_RESET_SHIP = toNano("0.05"); // Ship reset
 export const GAS_COST_TRANSFER_NOTIFICATION = toNano("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - estimated
 
 // messages.ts
@@ -41,6 +42,11 @@ import {
     XY,
     storeXY,
 } from './structs';
+
+export enum JettonUsageMode {
+    SHIP_UPGRADE = 0,
+    FAST_TRAVEL_UPGRADE = 1,
+}
 
 // -------------------------
 // Opcodes (из Tolk-struct’ов)
@@ -66,6 +72,10 @@ export const Opcodes = {
     OP_FORWARD_MINT_REQUEST: 0xf62ed009,
     OP_JETTON_USED: 0xd7610922,
     OP_SHIP_UPGRADE: 0x7d37523d,
+    OP_TRAVEL_TO_CC: 0x4b13d2f0,
+    OP_REQUEST_TO_FAST_TRAVEL: 0x8d2f1ca4,
+    OP_FAST_TRAVEL_UPGRADE: 0x5a1f0b21,
+    OP_RESET_SHIP: 0x6a3b8fdd,
 } as const;
 
 export function loadGameFieldsOpt(stack: TupleReader): GameFields | null {
@@ -131,6 +141,12 @@ export type Move = {
     moveData: Cell;
 };
 
+export type TravelToCC = {
+    user: Address;
+    ship_hp: bigint;
+    xy: XY;
+};
+
 export type WithdrawTON = {
     queryId: bigint; // uint64
     recipient: Address;
@@ -165,6 +181,10 @@ export type RequestToMove = {
     mode: MoveMode;
 };
 
+export type RequestToFastTravel = {
+    xy: XY;
+};
+
 // To Game
 
 export type RequestMint = {
@@ -193,23 +213,33 @@ export type ShipUpgrade = {
     hpIncrease: bigint; // uint256
 };
 
+export type FastTravelUpgrade = {
+    jettonAmount: bigint;
+};
+
+export type ResetShip = {};
+
 // Удобный union, если захочешь матчить по $$type
 export type AnyMessage =
     | ({ $$type: 'ReturnExcessesBack' } & ReturnExcessesBack)
     | ({ $$type: 'LiteralyAnything' } & LiteralyAnything)
     | ({ $$type: 'MoveShipToCC' } & MoveShipToCC)
     | ({ $$type: 'Move' } & Move)
+    | ({ $$type: 'TravelToCC' } & TravelToCC)
     | ({ $$type: 'WithdrawTON' } & WithdrawTON)
     | ({ $$type: 'WithdrawJetton' } & WithdrawJetton)
     | ({ $$type: 'WithdrawNFT' } & WithdrawNFT)
     | ({ $$type: 'MoveEnd' } & MoveEnd)
     | ({ $$type: 'RequestToMove' } & RequestToMove)
+    | ({ $$type: 'RequestToFastTravel' } & RequestToFastTravel)
     | ({ $$type: 'RequestMint' } & RequestMint)
     | ({ $$type: 'RequestShipAddress' } & RequestShipAddress)
     | ({ $$type: 'RequestCoordinateCellAddress' } & RequestCoordinateCellAddress)
     | ({ $$type: 'ResponseAddress' } & ResponseAddress)
     | ({ $$type: 'JettonUsed' } & JettonUsed)
-    | ({ $$type: 'ShipUpgrade' } & ShipUpgrade);
+    | ({ $$type: 'ShipUpgrade' } & ShipUpgrade)
+    | ({ $$type: 'FastTravelUpgrade' } & FastTravelUpgrade)
+    | ({ $$type: 'ResetShip' } & ResetShip);
 
 // -------------------------
 // encode-функции для body сообщений
@@ -251,6 +281,17 @@ export function encodeMove(msg: Move): Cell {
     storeMoveMode(b, msg.mode);
     // Cell<MoveData> — считаем, что это ref на сериализованный MoveData
     b.storeRef(msg.moveData);
+    return b.endCell();
+}
+
+export function encodeTravelToCC(msg: TravelToCC): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_TRAVEL_TO_CC, 32);
+    b.storeAddress(msg.user);
+    b.storeUint(msg.ship_hp, 256);
+    const xyCell = beginCell();
+    storeXY(xyCell, msg.xy);
+    b.storeRef(xyCell.endCell());
     return b.endCell();
 }
 
@@ -303,6 +344,13 @@ export function encodeRequestToMove(msg: RequestToMove): Cell {
     return b.endCell();
 }
 
+export function encodeRequestToFastTravel(msg: RequestToFastTravel): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_REQUEST_TO_FAST_TRAVEL, 32);
+    storeXY(b, msg.xy);
+    return b.endCell();
+}
+
 // To Game
 
 export function encodeRequestMint(msg: RequestMint): Cell {
@@ -349,6 +397,17 @@ export function encodeShipUpgrade(msg: ShipUpgrade): Cell {
     return b.endCell();
 }
 
+export function encodeFastTravelUpgrade(msg: FastTravelUpgrade): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_FAST_TRAVEL_UPGRADE, 32);
+    b.storeCoins(msg.jettonAmount);
+    return b.endCell();
+}
+
+export function encodeResetShip(): Cell {
+    return beginCell().storeUint(Opcodes.OP_RESET_SHIP, 32).endCell();
+}
+
 // -------------------------
 // (опционально) универсальный encoder по $$type
 // -------------------------
@@ -363,6 +422,8 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeMoveShipToCC(msg);
         case 'Move':
             return encodeMove(msg);
+        case 'TravelToCC':
+            return encodeTravelToCC(msg);
         case 'WithdrawTON':
             return encodeWithdrawTON(msg);
         case 'WithdrawJetton':
@@ -373,6 +434,8 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeMoveEnd(msg);
         case 'RequestToMove':
             return encodeRequestToMove(msg);
+        case 'RequestToFastTravel':
+            return encodeRequestToFastTravel(msg);
         case 'RequestMint':
             return encodeRequestMint(msg);
         case 'RequestShipAddress':
@@ -385,6 +448,10 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeJettonUsed(msg);
         case 'ShipUpgrade':
             return encodeShipUpgrade(msg);
+        case 'FastTravelUpgrade':
+            return encodeFastTravelUpgrade(msg);
+        case 'ResetShip':
+            return encodeResetShip();
         default:
             // TS должен не дать сюда добраться, но на всякий случай:
             throw new Error('Unknown message type');

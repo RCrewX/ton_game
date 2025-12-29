@@ -1,8 +1,8 @@
 import { beginCell, Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP, GAS_COST_SEND_MOVE } from '../wrappers/game/types';
+import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from './test_utils';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP, GAS_COST_SEND_MOVE, JettonUsageMode } from '../wrappers/game/types';
 import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import { MoveMode } from '../wrappers/game/structs';
 import { JettonMinter } from '../wrappers/jetton/JettonMinter';
@@ -44,22 +44,8 @@ describe('Ship Upgrade', () => {
             success: true,
             deploy: true,
         });
-        // First move UP to get to (0, 1)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.UP);
-        expect(SC_System.messageResult.transactions).toHaveTransaction({
-            to: SC_System.ownerShip.address,
-            success: true,
-            op: Opcodes.OP_MOVE_END,
-        });
-        // Now move EXIT from (0, 1)
-        // EXIT mode: x stays same (0), y increases by 1 -> (0, 2)
-        SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_SEND_MOVE, MoveMode.EXIT);
-        expect(SC_System.messageResult.transactions).toHaveTransaction({
-            to: SC_System.ownerShip.address,
-            success: true,
-            op: Opcodes.OP_MOVE_END,
-        });
-
+        expect(await SC_System.ownerShip.getMovementInProcess()).toBe(false);
+        
     }, 100000);
 
     afterEach(() => {
@@ -88,7 +74,7 @@ describe('Ship Upgrade', () => {
         // Get initial ship HP
         const initialGameData = await SC_System.ownerShip.getCurrentGameData();
         const initialHP = initialGameData ? initialGameData.hp : 100n; // BASIC_SHIP_HP
-
+        expect(await SC_System.ownerShip.getMovementInProcess()).toBe(false);
         // Calculate GameManager's jetton wallet address
         const gameManagerJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.gameManager.address);
         const gameManagerJettonWallet = SC_System.blockchain.openContract(
@@ -105,16 +91,11 @@ describe('Ship Upgrade', () => {
         // Transfer jettons to GameManager with game address and ship address in forwardPayload
         // forwardPayload structure: first ref = game address, second ref = data cell (ship address)
         const transferAmount = toNano('100');
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
             SC_System.ownerAccount.getSender(),
@@ -215,16 +196,11 @@ describe('Ship Upgrade', () => {
 
         // otherUser transfers jettons to GameManager to upgrade anotherUser's ship
         const transferAmount = toNano('50');
-        const dataCell = beginCell()
-            .storeAddress(anotherUserShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            anotherUserShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         SC_System.messageResult = await otherUserJettonWallet.sendTransfer(
             otherUser.getSender(),
@@ -298,16 +274,11 @@ describe('Ship Upgrade', () => {
         });
 
         // Try to transfer foreign jettons to GameManager
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         SC_System.messageResult = await foreignJettonWallet.sendTransfer(
             otherUser.getSender(),
@@ -362,16 +333,11 @@ describe('Ship Upgrade', () => {
         );
         // Perform multiple upgrades to verify randomness
         const transferAmount = toNano('100');
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         const hpIncreases: bigint[] = [];
 
@@ -442,16 +408,11 @@ describe('Ship Upgrade', () => {
 
         // Transfer jettons to upgrade ship
         const transferAmount = toNano('50');
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         SC_System.messageResult = await userJettonWallet.sendTransfer(
             SC_System.ownerAccount.getSender(),
@@ -505,16 +466,11 @@ describe('Ship Upgrade', () => {
         );
 
         const transferAmount = toNano('300');
-        const dataCell = beginCell()
-            .storeAddress(SC_System.ownerShip.address)
-            .endCell();
-        const gameAddressCell = beginCell()
-            .storeAddress(SC_System.game.address)
-            .endCell();
-        const forwardPayload = beginCell()
-            .storeRef(gameAddressCell)
-            .storeRef(dataCell)
-            .endCell();
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.SHIP_UPGRADE,
+        );
 
         SC_System.messageResult = await userJettonWallet.sendTransfer(
             SC_System.ownerAccount.getSender(),

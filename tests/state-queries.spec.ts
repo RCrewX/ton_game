@@ -4,6 +4,7 @@ import { ContractSystem, initContractSystem, cleanupContractSystem } from './tes
 import { MoveMode } from '../wrappers/game/structs';
 import { CoordinateCell } from '../wrappers/game/CoordinateCell';
 import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE, BASIC_SHIP_HP, Opcodes } from '../wrappers/game/types';
+import { Ship } from '../wrappers/game/Ship';
 
 describe('State Queries', () => {
     let SC_System: ContractSystem;
@@ -17,7 +18,20 @@ describe('State Queries', () => {
     });
 
     it('Test Ship getCurrentGameData - verify initial state', async () => {
-        const gameData = await SC_System.ownerShip.getCurrentGameData();
+        let anyUser = await SC_System.blockchain.treasury('anyUser');
+        let someShip = SC_System.blockchain.openContract(Ship.createFromConfig({
+            userAddress: anyUser.address,
+            gameAddress: SC_System.game.address,
+            coordinateCellCode: SC_System.coordinateCellCode,
+        }, SC_System.shipCode));
+        SC_System.messageResult = await someShip.sendDeploy(anyUser.getSender(), toNano('0.5'));
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: anyUser.address,
+            to: someShip.address,
+            success: true,
+            deploy: true,
+        });
+        const gameData = await someShip.getCurrentGameData();
         expect(gameData).toBeNull(); // Should be null before first move
     });
 
@@ -220,7 +234,22 @@ describe('State Queries', () => {
     });
 
     it('Test Ship getMaxHp - initial state', async () => {
-        const maxHp = await SC_System.ownerShip.getMaxHp();
+        let anyUser = await SC_System.blockchain.treasury('anyUser');
+        let someShip = SC_System.blockchain.openContract(Ship.createFromConfig({
+            userAddress: anyUser.address,
+            gameAddress: SC_System.game.address,
+            coordinateCellCode: SC_System.coordinateCellCode,
+        }, SC_System.shipCode));
+        SC_System.messageResult = await someShip.sendDeploy(anyUser.getSender(), toNano('0.5'));
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: anyUser.address,
+            to: someShip.address,
+            success: true,
+            deploy: true,
+        });
+
+        
+        const maxHp = await someShip.getMaxHp();
         // Before first move, max_hp should be 0 (not initialized)
         // After first move, it will be set to BASIC_SHIP_HP
         expect(maxHp).toBe(0n);

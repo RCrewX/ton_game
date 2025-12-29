@@ -1,6 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
-import { encodeRequestToMove, loadGameFieldsOpt } from './types';
-import { MoveMode } from './structs';
+import { encodeRequestToMove, encodeRequestToFastTravel, loadGameFieldsOpt } from './types';
+import { MoveMode, XY } from './structs';
 import { Coins, loadCoins } from '@ton/sandbox/dist/config/config.tlb-gen';
 
 export type ShipConfig = {
@@ -15,6 +15,7 @@ export function shipConfigToCell(config: ShipConfig): Cell {
         .storeAddress(config.gameAddress)
         .storeUint(0, 256) // max_hp: 0 (will be set when gameFields are initialized)
         .storeMaybeRef(null) // gameFields: null
+        .storeMaybeRef(null) // fastTravelInfo: null
         .storeRef(config.coordinateCellCode)
         .storeBit(false) // movement_in_process: false
         .endCell();
@@ -48,6 +49,14 @@ export class Ship implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: encodeRequestToMove({ mode: move }),
+        });
+    }
+
+    async sendFastTravel(provider: ContractProvider, via: Sender, value: bigint, xy: XY) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeRequestToFastTravel({ xy }),
         });
     }
 
