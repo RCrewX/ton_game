@@ -190,17 +190,19 @@ fun generateRandomResult(base: uint256): RandomResult {
 }
 
 fun buildGameFields(max_hp: HP_TYPE): Cell<GameFields> {
-    val gameFields: Cell<GameFields> = beginCell().storeInt(0, 257).storeUint(0, 256).storeUint(max_hp, 256).storeCoins(0).endCell() as Cell<GameFields>;
+    // Dirty hack: using storeUint(0, 256) for X because of the way the compiler optimizes the code
+    val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(max_hp, 256).storeCoins(0).endCell() as Cell<GameFields>;
     return gameFields;
 }
 
-fun buildXY(x: X_TYPE, y: Y_TYPE): Cell<XY> {
-    val xy: Cell<XY> = beginCell().storeUint(0, 256).storeUint(y, 256).endCell() as Cell<XY>;
-    return xy;
-}
+// Trash:
+// fun buildXY(x: X_TYPE, y: Y_TYPE): Cell<XY> {
+//     val xy: Cell<XY> = beginCell().storeUint(0, 256).storeUint(y, 256).endCell() as Cell<XY>;
+//     return xy;
+// }
 
-@inline_ref
-fun buildMoveData(ship_hp: HP_TYPE, xy: XY): Cell<MoveData> {
-    val moveData: Cell<MoveData> = beginCell().storeUint(ship_hp, 256).storeInt(xy.x, 257).storeUint(xy.y, 256).endCell() as Cell<MoveData>;
-    return moveData;
-}
+// @inline_ref
+// fun buildMoveData(ship_hp: HP_TYPE, xy: XY): Cell<MoveData> {
+//     val moveData: Cell<MoveData> = beginCell().storeUint(ship_hp, 256).storeInt(xy.x, 256).storeUint(xy.y, 256).endCell() as Cell<MoveData>;
+//     return moveData;
+// }
