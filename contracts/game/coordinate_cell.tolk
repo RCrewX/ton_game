@@ -64,7 +64,9 @@ fun onInternalMessage(in: InMessage) {
             if (firstTimeOpened) {
                 totalReward = ccStorage.jettonAmount
             } else {
-                totalReward = ccStorage.jettonAmount / storage.xy.y;
+                // 
+                // 
+                totalReward = ccStorage.jettonAmount / 10;
             }
             if (moveData.ship_hp > ccStorage.hp && msg.mode != MoveMode.EXIT) {
                 result = UniqueResult.CONTINUE;
