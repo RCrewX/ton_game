@@ -1,5 +1,5 @@
 // Constants
-const BASIC_STORAGE_TAX = ton("0.01");
+const BASIC_STORAGE_TAX = ton("0.011");
 const DEFAULT_EXCESS_THRESHOLD = ton("0.1"); // Default excess threshold
 const MIN_EXCESS_THRESHOLD = ton("0.01"); // Minimum allowed excess threshold
 
@@ -8,6 +8,7 @@ const MIN_EXCESS_THRESHOLD = ton("0.01"); // Minimum allowed excess threshold
 const GAS_COST_FORWARD: coins = ton("0.005"); // 0.0031816 + buffer
 const GAS_COST_FORWARD_WITH_INIT: coins = ton("0.01"); // Higher cost for deploy messages
 const GAS_COST_WITHDRAW: coins = ton("0.005"); // Gas cost for withdraw operation
+const GAS_MARGIN: coins = ton("0.01"); // Safety margin for external message execution
 
 // Errors
 const ERR_UNAUTHORIZED = 901;  // Generic unauthorized (kept for backward compatibility)
@@ -18,6 +19,10 @@ const ERR_INVALID_OWNER_SENDER = 926;  // Sender is not the subcontract's owner 
 const ERR_WITHDRAW_AMOUNT_TOO_LOW = 927;  // Withdraw amount is too low (must be > BASIC_STORAGE_TAX)
 const ERR_WITHDRAW_AMOUNT_TOO_HIGH = 928;  // Withdraw amount exceeds available balance
 const ERR_EXCESS_THRESHOLD_TOO_LOW = 929;  // Excess threshold is below minimum allowed value
+// External message errors
+const ERR_INVALID_SIGNATURE = 930;  // Invalid signature for external message
+const ERR_BAD_SEQNO = 931;  // Sequence number mismatch for external message
+const ERR_EXPIRED = 932;  // External message has expired (validUntil check failed)
 
 const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
 // Storage
@@ -27,6 +32,8 @@ struct SubcontractStorage {
     id: uint256
     redirectExcess: bool
     excessThreshold: coins
+    ownerPublicKey: uint256  // Ed25519 public key (256 bits) for external message signature verification
+    extSeqno: uint32  // External message sequence number for replay protection
 }
 
 fun SubcontractStorage.load() {
@@ -94,6 +101,25 @@ struct (0x7362d09c) TransferNotificationForRecipient {
     forwardPayload: ForwardPayloadRemainder
 }
 
+// External message types (for owner-signed external messages)
+// Allowed external commands (only Forward and ForwardWithInit for now)
+type AllowedExternalCommand = 
+    | Forward
+    | ForwardWithInit
+
+// ExternalInner: signed data structure (what gets signed)
+struct ExternalInner {
+    seqno: uint32
+    validUntil: uint32  // Unix timestamp (blockchain.now)
+    command: AllowedExternalCommand
+}
+
+// ExternalEnvelope: external message body format (Approach 2: signed data as referenced cell)
+struct ExternalEnvelope {
+    signature: bits512  // Ed25519 signature (512 bits)
+    inner: cell  // Referenced cell containing ExternalInner (signed data)
+}
+
 fun reserveValue(msgValue: coins, delta: coins = 0) {
     val base = (contract.getOriginalBalance() - msgValue) + BASIC_STORAGE_TAX;
     val reserveAmount = base + delta;
@@ -110,6 +136,7 @@ fun reserveValue(msgValue: coins, delta: coins = 0) {
 fun calcDeployedSubcontract(
     ownerAddress: address,
     id: uint256,
+    ownerPublicKey: uint256,
     subcontractCode: cell,
 ): AutoDeployAddress {
     val initStorage: SubcontractStorage = {
@@ -117,6 +144,8 @@ fun calcDeployedSubcontract(
         id,
         redirectExcess: true,
         excessThreshold: DEFAULT_EXCESS_THRESHOLD,
+        ownerPublicKey,
+        extSeqno: 0,  // Start at 0 for external message sequence
     };
     return {
         stateInit: {
@@ -129,9 +158,10 @@ fun calcDeployedSubcontract(
 fun calcAddressOfSubcontract(
     ownerAddress: address,
     id: uint256,
+    ownerPublicKey: uint256,
     subcontractCode: cell,
 ): address {
-    val subcontractDeployed = calcDeployedSubcontract(ownerAddress, id, subcontractCode);
+    val subcontractDeployed = calcDeployedSubcontract(ownerAddress, id, ownerPublicKey, subcontractCode);
     return subcontractDeployed.calculateAddress()
 }
 

@@ -26,6 +26,7 @@ describe('Subcontract - Nested and Deployment', () => {
         const firstLevelSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: firstLevelId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await firstLevelSubcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -38,6 +39,7 @@ describe('Subcontract - Nested and Deployment', () => {
         const secondLevelSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: firstLevelSubcontract.address,
             id: secondLevelId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await secondLevelSubcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -117,6 +119,7 @@ describe('Subcontract - Nested and Deployment', () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -252,6 +255,7 @@ describe('Subcontract - Nested and Deployment', () => {
         const userSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: userAccount.address,
             id: userSubcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await userSubcontract.sendDeploy(userAccount.getSender(), toNano('1'));
@@ -261,6 +265,7 @@ describe('Subcontract - Nested and Deployment', () => {
         const referenceSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: userAccount.address,
             id: userSubcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         // Verify the address matches
@@ -354,6 +359,7 @@ describe('Subcontract - Nested and Deployment', () => {
         const expectedFutureSubcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: userAccount.address,
             id: futureSubcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         expect(futureSubcontractAddress).toEqualAddress(expectedFutureSubcontract.address);

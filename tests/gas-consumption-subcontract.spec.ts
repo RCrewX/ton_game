@@ -43,6 +43,7 @@ describe("Gas Prices - Subcontract", () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -136,6 +137,7 @@ describe("Gas Prices - Subcontract", () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -254,6 +256,7 @@ describe("Gas Prices - Subcontract", () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -301,6 +304,7 @@ describe("Gas Prices - Subcontract", () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -348,6 +352,7 @@ describe("Gas Prices - Subcontract", () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
@@ -394,6 +399,7 @@ describe("Gas Prices - Subcontract", () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: SC_System.ownerAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));

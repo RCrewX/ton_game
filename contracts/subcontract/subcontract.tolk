@@ -1,4 +1,5 @@
 import "static"
+import "@stdlib/gas-payments"
 
 type AllowedMessagesToSubcontract = 
     | Forward
@@ -177,11 +178,17 @@ get fun get_id(): uint256 {
 }
 
 get fun get_subcontract_address(id: uint256): address {
-    return calcAddressOfSubcontract(contract.getAddress(), id, contract.getCode());
+    // For address calculation, we need ownerPublicKey from storage
+    // Note: This calculates address assuming same ownerPublicKey as current contract
+    var storage = lazy SubcontractStorage.load();
+    return calcAddressOfSubcontract(contract.getAddress(), id, storage.ownerPublicKey, contract.getCode());
 }
 
 get fun get_subcontract_by_id_address(ownerAddress: address, id: uint256): address {
-    return calcAddressOfSubcontract(ownerAddress, id, contract.getCode());
+    // For address calculation, we need ownerPublicKey
+    // Since we don't have it, we use 0 as default (address calculation only)
+    // WARNING: Actual initialization must use the correct ownerPublicKey, or address will differ
+    return calcAddressOfSubcontract(ownerAddress, id, 0, contract.getCode());
 }
 
 get fun get_redirect_excess(): bool {
@@ -196,5 +203,110 @@ get fun get_excess_threshold(): coins {
 
 get fun tonBalance(): coins {
     return contract.getOriginalBalance();
+}
+
+get fun get_owner_public_key(): uint256 {
+    var storage = lazy SubcontractStorage.load();
+    return storage.ownerPublicKey;
+}
+
+get fun get_ext_seqno(): uint32 {
+    var storage = lazy SubcontractStorage.load();
+    return storage.extSeqno;
+}
+
+// External message handler for owner-signed messages
+fun onExternalMessage(inMsg: slice) {
+    // Parse envelope (cheap parsing, no accept yet)
+    val env = ExternalEnvelope.fromSlice(inMsg);
+    val innerCell = env.inner;
+    val signature = env.signature;
+    
+    // Load storage
+    var storage = lazy SubcontractStorage.load();
+    
+    // Verify signature (still no acceptExternalMessage() yet)
+    // Hash the inner cell (fast - cell hash is precomputed)
+    val hash = innerCell.hash();
+    // Convert bits512 to slice for isSignatureValid (UNSAFE cast, but safe here since bits512 is 512 bits)
+    val signatureSlice = signature as slice;
+    val ok = isSignatureValid(hash, signatureSlice, storage.ownerPublicKey);
+    if (!ok) {
+        throw ERR_INVALID_SIGNATURE;
+    }
+    
+    // Parse signed inner
+    val inner = ExternalInner.fromCell(innerCell);
+    
+    // Replay + time checks
+    assert(inner.seqno == storage.extSeqno) throw ERR_BAD_SEQNO;
+    assert(blockchain.now() < inner.validUntil) throw ERR_EXPIRED;
+    
+    // Now accept external message
+    acceptExternalMessage();
+    
+    // Update seqno FIRST (wallet pattern - prevents replay even if later logic throws)
+    storage.extSeqno += 1;
+    storage.save();
+    
+    // Optionally commit state before sending actions (wallet-style)
+    commitContractDataAndActions();
+    
+    // Execute forwarding based on inner.command
+    // Bind command to a variable for access in match branches
+    val cmd = inner.command;
+    match(cmd) {
+        Forward => {
+            // Balance check: ensure we have enough for forward + gas + reserve
+            val balance = contract.getOriginalBalance();
+            val requiredBalance = BASIC_STORAGE_TAX + cmd.forwardTonAmount + GAS_MARGIN;
+            assert(balance >= requiredBalance) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            
+            // Build outgoing message with bounce from command
+            var bounceMode: BounceMode;
+            if (cmd.bounce) {
+                bounceMode = BounceMode.Only256BitsOfBody;
+            } else {
+                bounceMode = BounceMode.NoBounce;
+            }
+            val out = createMessage({
+                bounce: bounceMode,
+                dest: cmd.destination,
+                value: cmd.forwardTonAmount,
+                body: cmd.messageBody
+            });
+            // Send with sendMode from command
+            out.send(cmd.sendMode);
+        }
+        ForwardWithInit => {
+            // Balance check: ensure we have enough for forward + gas + reserve
+            val balance = contract.getOriginalBalance();
+            val requiredBalance = BASIC_STORAGE_TAX + cmd.forwardTonAmount + GAS_MARGIN;
+            assert(balance >= requiredBalance) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            
+            // Build outgoing message with stateInit
+            // Parse stateInit cell: stateInit$00 code:^Cell data:^Cell
+            var stateInitSlice = cmd.stateInit.beginParse();
+            val _splitDepth = stateInitSlice.loadUint(1); // Skip split_depth (1 bit)
+            val _special = stateInitSlice.loadUint(1); // Skip special (1 bit)
+            val code = stateInitSlice.loadRef(); // Load code cell
+            val data = stateInitSlice.loadRef(); // Load data cell
+            // Create AutoDeployAddress with the parsed stateInit
+            val deployAddress: AutoDeployAddress = {
+                stateInit: {
+                    code: code,
+                    data: data
+                }
+            };
+            val out = createMessage({
+                bounce: BounceMode.NoBounce,  // Enforced for deploy
+                dest: deployAddress,
+                value: cmd.forwardTonAmount,
+                body: cmd.messageBody
+            });
+            // Send with sendMode from command
+            out.send(cmd.sendMode);
+        }
+    }
 }
 

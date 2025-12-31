@@ -159,6 +159,67 @@ function getNetworkFromProvider(provider: NetworkProvider): 'testnet' | 'mainnet
     return 'mainnet';
 }
 
+function parseId(): bigint {
+    const args = process.argv.slice(2);
+    const idIndex = args.indexOf('--id');
+    if (idIndex !== -1 && idIndex + 1 < args.length) {
+        const idValue = args[idIndex + 1];
+        const parsed = BigInt(idValue);
+        if (parsed < 1n) {
+            throw new Error('--id must be >= 1');
+        }
+        return parsed;
+    }
+    return 1n; // Default to 1
+}
+
+function loadOwnerPublicKey(): bigint {
+    // First, try to use OWNER_PUBLIC_KEY if explicitly set
+    const pk = (process.env.OWNER_PUBLIC_KEY || '').trim();
+    if (pk) {
+        const clean = pk.startsWith('0x') ? pk.slice(2) : pk;
+        if (clean.length !== 64) {
+            console.warn(`⚠️  OWNER_PUBLIC_KEY length invalid (${clean.length}); expected 64 hex chars. Trying to derive from PRIVATE_KEY...`);
+        } else {
+            const publicKey = BigInt('0x' + clean);
+            console.log(`✓ Using OWNER_PUBLIC_KEY from env: ${publicKey.toString()}`);
+            return publicKey;
+        }
+    }
+
+    // If OWNER_PUBLIC_KEY not set or invalid, try to derive from PRIVATE_KEY
+    const privateKeyHex = (process.env.PRIVATE_KEY || '').trim();
+    if (privateKeyHex) {
+        try {
+            const cleanPrivateKey = privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex;
+            if (cleanPrivateKey.length !== 128) {
+                console.warn(`⚠️  PRIVATE_KEY length invalid (${cleanPrivateKey.length}); expected 128 hex chars (64 bytes).`);
+            } else {
+                const secretKey = Buffer.from(cleanPrivateKey, 'hex');
+                if (secretKey.length !== 64) {
+                    console.warn(`⚠️  PRIVATE_KEY must be exactly 64 bytes, got ${secretKey.length}`);
+                } else {
+                    const keyPair = keyPairFromSecretKey(secretKey);
+                    const publicKey = BigInt('0x' + keyPair.publicKey.toString('hex'));
+                    console.log(`✓ Derived OWNER_PUBLIC_KEY from PRIVATE_KEY: ${publicKey.toString()}`);
+                    console.log('  Note: This public key will be used for external message signature verification.');
+                    return publicKey;
+                }
+            }
+        } catch (error: any) {
+            console.warn(`⚠️  Failed to derive public key from PRIVATE_KEY: ${error.message}`);
+        }
+    }
+
+    // If neither is set or both failed, use 0 and warn
+    console.warn('⚠️  OWNER_PUBLIC_KEY not set and could not derive from PRIVATE_KEY; using 0.');
+    console.warn('   External signatures will not verify until a valid public key is set.');
+    console.warn('   Options:');
+    console.warn('   1. Set OWNER_PUBLIC_KEY to the public key (64 hex chars)');
+    console.warn('   2. Set PRIVATE_KEY to derive the public key automatically (128 hex chars)');
+    return 0n;
+}
+
 async function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -600,12 +661,15 @@ export async function run(provider: NetworkProvider) {
         console.log('Owner Ship (non-bounceable):', deploymentData.ownerShip.nonBounceable);
         saveBuildFile(deploymentData, buildFilePath);
 
-        // Deploy Ship Station (Subcontract with id=1)
+        // Deploy Ship Station (Subcontract with id from --id parameter, default 1)
+        const shipStationId = parseId();
+        console.log(`Deploying Ship Station with id: ${shipStationId.toString()}`);
         const shipStation = provider.open(
             Subcontract.createFromConfig(
                 {
                     ownerAddress: ownerAddress,
-                    id: 1n,
+                    id: shipStationId,
+                    ownerPublicKey: loadOwnerPublicKey(),
                 },
                 subcontractCode
             )
@@ -616,7 +680,7 @@ export async function run(provider: NetworkProvider) {
             shipStation,
             'Ship Station',
             shipStation.address,
-            async () => await shipStation.sendDeploy(provider.sender(), toNano('0.5'))
+            async () => await shipStation.sendDeploy(provider.sender(), toNano('0.2'))
         );
         
         deploymentData.ship_station = formatAddress(shipStation.address, isTestnet);

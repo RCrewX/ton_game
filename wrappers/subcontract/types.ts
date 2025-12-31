@@ -111,3 +111,68 @@ export function encodeReturnExcessesBack(msg: ReturnExcessesBack): Cell {
         .endCell();
 }
 
+// External message types
+export type ExternalInner = {
+    seqno: number; // uint32
+    validUntil: number; // uint32 (Unix timestamp)
+    command: Forward | ForwardWithInit;
+};
+
+export type ExternalEnvelope = {
+    signature: Buffer; // bits512 (Ed25519 signature, 64 bytes)
+    inner: Cell; // Referenced cell containing ExternalInner
+};
+
+/**
+ * Encode ExternalInner (signed data structure)
+ * This is what gets signed - the cell hash is used as the message to sign
+ * 
+ * Layout:
+ * - seqno: uint32 (32 bits)
+ * - validUntil: uint32 (32 bits)
+ * - command: AllowedExternalCommand (union type, stored with opcode)
+ *   - If Forward: opcode (32 bits) + Forward fields
+ *   - If ForwardWithInit: opcode (32 bits) + ForwardWithInit fields
+ */
+export function encodeExternalInner(inner: ExternalInner): Cell {
+    const cell = beginCell()
+        .storeUint(inner.seqno, 32)
+        .storeUint(inner.validUntil, 32);
+    
+    // Store command inline (union type with opcode)
+    if ('stateInit' in inner.command) {
+        // ForwardWithInit
+        const cmd = inner.command as ForwardWithInit;
+        cell.storeUint(Opcodes.OP_FORWARD_WITH_INIT, 32)
+            .storeUint(cmd.queryId, 64)
+            .storeAddress(cmd.destination)
+            .storeCoins(cmd.forwardTonAmount)
+            .storeUint(cmd.sendMode, 8)
+            .storeRef(cmd.stateInit)
+            .storeRef(cmd.messageBody);
+    } else {
+        // Forward
+        const cmd = inner.command as Forward;
+        cell.storeUint(Opcodes.OP_FORWARD, 32)
+            .storeUint(cmd.queryId, 64)
+            .storeAddress(cmd.destination)
+            .storeCoins(cmd.forwardTonAmount)
+            .storeBit(cmd.bounce)
+            .storeUint(cmd.sendMode, 8)
+            .storeRef(cmd.messageBody);
+    }
+    
+    return cell.endCell();
+}
+
+/**
+ * Encode ExternalEnvelope (external message body)
+ * Approach 2: signed data as referenced cell
+ */
+export function encodeExternalEnvelope(envelope: ExternalEnvelope): Cell {
+    return beginCell()
+        .storeBuffer(envelope.signature) // 512 bits (64 bytes)
+        .storeRef(envelope.inner)
+        .endCell();
+}
+
