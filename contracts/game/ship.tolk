@@ -142,9 +142,13 @@ fun onInternalMessage(in: InMessage) {
             // Check we have enough balance for the operation: gas cost + coordinate cell gas
             assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
 
-            
-            assert (msg.xy.y >= (msg.xy.x > (x_zero) ? msg.xy.x as Y_TYPE : -msg.xy.x as Y_TYPE)) throw ERR_WRONG_XY;
             assert (msg.xy.y > 2) throw ERR_WRONG_XY;
+            
+            if (msg.xy.x < x_zero) {
+                assert (-msg.xy.x <= msg.xy.y) throw ERR_WRONG_XY;
+            } else {
+                assert (msg.xy.x <= msg.xy.y) throw ERR_WRONG_XY;
+            }
             
             assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
             var gameFields: GameFields = lazy storage.gameFields!.load();
