@@ -1,10 +1,10 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { MoveMode } from '../wrappers/game/structs';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_MOVE, GAS_COST_MOVE_END, GAS_COST_REQUEST_MINT, MINT_TON_AMOUNT, BASIC_STORAGE_TAX } from '../wrappers/game/types';
-import { CoordinateCell } from '../wrappers/game/CoordinateCell';
-import { Ship } from '../wrappers/game/Ship';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { MoveMode } from '../../wrappers/game/structs';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_MOVE, GAS_COST_MOVE_END, GAS_COST_REQUEST_MINT, MINT_TON_AMOUNT, BASIC_STORAGE_TAX } from '../../wrappers/game/types';
+import { CoordinateCell } from '../../wrappers/game/CoordinateCell';
+import { Ship } from '../../wrappers/game/Ship';
 import * as fs from 'fs';
 import * as path from 'path';
 

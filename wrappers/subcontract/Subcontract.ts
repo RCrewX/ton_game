@@ -1,6 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
 import { sign } from '@ton/crypto';
-import { encodeForward, encodeForwardWithInit, encodeWithdraw, encodeSetRedirectExcess, encodeSetExcessThreshold, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward, ForwardWithInit, Withdraw, SetRedirectExcess, SetExcessThreshold, encodeExternalInner, encodeExternalEnvelope, ExternalInner } from './types';
+import { encodeForward, encodeForwardWithInit, encodeWithdraw, encodeSetRedirectExcess, encodeSetExcessThreshold, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward, ForwardWithInit, Withdraw, SetRedirectExcess, SetExcessThreshold, encodeExternalInner, encodeExternalEnvelope, ExternalInner, encodeManualDeploy } from './types';
 
 export type SubcontractConfig = {
     ownerAddress: Address;
@@ -12,8 +12,8 @@ export function subcontractConfigToCell(config: SubcontractConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
         .storeUint(config.id, 256)
-        .storeBit(true) // redirectExcess: true by default
-        .storeCoins(toNano('0.1')) // excessThreshold: 0.1 TON by default
+        .storeBit(false) // redirectExcess: false by default (DEFAULT_REDIRECT_EXCESS)
+        .storeCoins(toNano('0.5')) // excessThreshold: 0.5 TON by default (DEFAULT_EXCESS_THRESHOLD)
         .storeUint(config.ownerPublicKey, 256) // ownerPublicKey
         .storeUint(0, 32) // extSeqno: starts at 0
         .endCell();
@@ -35,8 +35,8 @@ export class Subcontract implements Contract {
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
         await provider.internal(via, {
             value,
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell().endCell(),
+            sendMode: SendMode.NONE,
+            body: encodeManualDeploy({ queryId: 0n }),
         });
     }
 
@@ -116,6 +116,19 @@ export class Subcontract implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: encodeSetExcessThreshold({ queryId, excessThreshold }),
+        });
+    }
+
+    async sendManualDeploy(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        queryId: bigint = 0n
+    ) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeManualDeploy({ queryId }),
         });
     }
 

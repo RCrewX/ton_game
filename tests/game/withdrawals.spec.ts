@@ -1,13 +1,13 @@
 import { beginCell, Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { CoordinateCell } from '../wrappers/game/CoordinateCell';
+import { CoordinateCell } from '../../wrappers/game/CoordinateCell';
 import '@ton/test-utils';
-import { Opcodes } from '../wrappers/game/types';
-import { JettonMinter } from '../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../wrappers/jetton/JettonWallet';
-import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
-import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from './test_utils';
-import { BASIC_STORAGE_TAX } from '../wrappers/game/types';
+import { Opcodes } from '../../wrappers/game/types';
+import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
+import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from '../test_utils';
+import { BASIC_STORAGE_TAX } from '../../wrappers/game/types';
 
 
 describe('Withdrawals', () => {

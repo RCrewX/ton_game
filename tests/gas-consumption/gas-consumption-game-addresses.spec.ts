@@ -1,7 +1,7 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../wrappers/game/types';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../../wrappers/game/types';
 import * as fs from 'fs';
 import * as path from 'path';
 

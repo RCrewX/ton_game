@@ -1,5 +1,5 @@
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from './test_utils';
+import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from '../test_utils';
 
 describe('Deployment', () => {
     let SC_System: ContractSystem;

@@ -1,13 +1,13 @@
 import { beginCell, toNano, SendMode } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Subcontract, subcontractConfigToCell } from '../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, encodeForward } from '../wrappers/subcontract/types';
-import { Ship, shipConfigToCell } from '../wrappers/game/Ship';
-import { MoveMode } from '../wrappers/game/structs';
-import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../wrappers/game/types';
-import { Opcodes } from '../wrappers/game/types';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { Subcontract, subcontractConfigToCell } from '../../wrappers/subcontract/Subcontract';
+import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, encodeForward } from '../../wrappers/subcontract/types';
+import { Ship, shipConfigToCell } from '../../wrappers/game/Ship';
+import { MoveMode } from '../../wrappers/game/structs';
+import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../../wrappers/game/types';
+import { Opcodes } from '../../wrappers/game/types';
 
 describe('Subcontract - Nested and Deployment', () => {
     let SC_System: ContractSystem;
@@ -31,6 +31,12 @@ describe('Subcontract - Nested and Deployment', () => {
 
         await firstLevelSubcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 
+        // Fund the first-level subcontract so it has enough balance for forwarding
+        await SC_System.ownerAccount.send({
+            to: firstLevelSubcontract.address,
+            value: toNano('1'),
+        });
+
         // Get address of second level subcontract (owned by first level)
         const secondLevelId = 200n;
         const secondLevelSubcontractAddress = await firstLevelSubcontract.getSubcontractAddress(secondLevelId);
@@ -43,6 +49,12 @@ describe('Subcontract - Nested and Deployment', () => {
         }, SC_System.subcontractCode));
 
         await secondLevelSubcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the second-level subcontract so it has enough balance for forwarding
+        await SC_System.ownerAccount.send({
+            to: secondLevelSubcontract.address,
+            value: toNano('1'),
+        });
 
         // Verify the address matches
         expect(secondLevelSubcontractAddress).toEqualAddress(secondLevelSubcontract.address);

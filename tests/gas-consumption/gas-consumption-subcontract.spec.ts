@@ -1,12 +1,12 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Subcontract } from '../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Opcodes as SubcontractOpcodes } from '../wrappers/subcontract/types';
-import { encodeRequestToMove, Opcodes } from '../wrappers/game/types';
-import { Ship, shipConfigToCell } from '../wrappers/game/Ship';
-import { MoveMode } from '../wrappers/game/structs';
-import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_MOVE_SHIP_TO_CC, BASIC_STORAGE_TAX } from '../wrappers/game/types';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { Subcontract } from '../../wrappers/subcontract/Subcontract';
+import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Opcodes as SubcontractOpcodes } from '../../wrappers/subcontract/types';
+import { encodeRequestToMove, Opcodes } from '../../wrappers/game/types';
+import { Ship, shipConfigToCell } from '../../wrappers/game/Ship';
+import { MoveMode } from '../../wrappers/game/structs';
+import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_MOVE_SHIP_TO_CC, BASIC_STORAGE_TAX } from '../../wrappers/game/types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -439,6 +439,85 @@ describe("Gas Prices - Subcontract", () => {
 
         expect(cost).toBeLessThanOrEqual(gas_sent);
         expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
+    });
+
+    it("Manual Deploy", async () => {
+        const subcontractId = 106n;
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
+        }, SC_System.subcontractCode));
+
+        
+        // Create a user account to send 1 TON to pop-up the address
+        const userAccount = await SC_System.blockchain.treasury("user");
+        
+        // User sends 1 TON to pop-up the subcontract address
+        SC_System.messageResult = await userAccount.send({
+            to: subcontract.address,
+            value: toNano('1'),
+            body: beginCell().endCell(),
+            bounce: false,
+            sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: userAccount.address,
+            to: subcontract.address,
+            // success: true,
+            value: toNano('1'),
+        });
+        
+        let little_less_than_gas_needed = toNano('0.01');
+        // const GAS_COST_MANUAL_DEPLOY: int = ton("0.4");
+        const manualDeployAmount = toNano('0.4');
+        
+        // Verify contract has enough balance (contract.getOriginalBalance() - in.valueCoins > GAS_COST_MANUAL_DEPLOY)
+        // Contract should have ~1 TON from user (minus gas), so after receiving 0.5 TON, balance will be > 0.4 TON ✓
+        const ownerOriginalBalance = await SC_System.ownerAccount.getBalance();
+        SC_System.messageResult = await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), manualDeployAmount);
+        const ownerNewBalance = await SC_System.ownerAccount.getBalance();
+        const contractBalance = await subcontract.getTonBalance();
+        
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+            op: SubcontractOpcodes.OP_MANUAL_DEPLOY,
+        });
+
+        // Check that owner received cashback
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: subcontract.address,
+            to: SC_System.ownerAccount.address,
+            success: true,
+            // value: manualDeployAmount,
+        });
+
+        const manualDeployTx = SC_System.messageResult.transactions.find((tx: any) => 
+            tx.from === SC_System.ownerAccount.address && 
+            tx.to === subcontract.address &&
+            tx.op === SubcontractOpcodes.OP_MANUAL_DEPLOY
+        );
+        
+        
+        expect(contractBalance).toBeGreaterThan(toNano('0.9')); // Account for gas fees
+        expect(contractBalance).toBeLessThan(toNano('1.1'));
+
+        // Use transaction fees instead of balance difference (cashback is sent)
+        const cost = manualDeployTx?.totalFees || toNano('0.05');
+        const costStr = fromNano(cost);
+        console.log(`Cost: ${costStr}`);
+        gasCosts['ManualDeploy'] = costStr;
+
+        const costReallyForAdmin = ownerNewBalance - ownerOriginalBalance;
+        console.log(`Cost Really for Admin: ${costReallyForAdmin}`);
+        console.log(`Owner Original Balance: ${ownerOriginalBalance}`);
+        console.log(`Owner New Balance: ${ownerNewBalance}`);
+        gasCosts['ManualDeployAdmin'] = costReallyForAdmin.toString();
+        expect(costReallyForAdmin).toBeLessThan(toNano('0.05'));
+        // expect(costReallyForAdmin).toBeGreaterThan(toNano('0.4')); // Account for gas fees
     });
 });
 

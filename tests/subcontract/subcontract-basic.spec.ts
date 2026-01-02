@@ -1,15 +1,15 @@
 import { beginCell, toNano, SendMode } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Subcontract, subcontractConfigToCell } from '../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, encodeForward } from '../wrappers/subcontract/types';
-import { Ship, shipConfigToCell } from '../wrappers/game/Ship';
-import { MoveMode } from '../wrappers/game/structs';
-import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../wrappers/game/types';
-import { Opcodes } from '../wrappers/game/types';
-import { JettonMinter, jettonContentToCell } from '../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../wrappers/jetton/JettonWallet';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { Subcontract, subcontractConfigToCell } from '../../wrappers/subcontract/Subcontract';
+import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, encodeForward } from '../../wrappers/subcontract/types';
+import { Ship, shipConfigToCell } from '../../wrappers/game/Ship';
+import { MoveMode } from '../../wrappers/game/structs';
+import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../../wrappers/game/types';
+import { Opcodes } from '../../wrappers/game/types';
+import { JettonMinter, jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
 
 describe('Subcontract - Basic Operations', () => {
     let SC_System: ContractSystem;
@@ -32,6 +32,12 @@ describe('Subcontract - Basic Operations', () => {
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract so it has enough balance for forwarding
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('0.5'),
+        });
 
         const recipient = await SC_System.blockchain.treasury('redirectRecipient');
         const testMessage = beginCell()
@@ -74,6 +80,12 @@ describe('Subcontract - Basic Operations', () => {
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract so it has enough balance for forwarding
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('0.5'),
+        });
 
         // Create a recipient for jetton transfer
         const recipient = await SC_System.blockchain.treasury('jettonRecipient');
@@ -133,6 +145,12 @@ describe('Subcontract - Basic Operations', () => {
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract so it has enough balance for forwarding
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('1'),
+        });
 
         // Create a ship with subcontract address as userAddress
         const shipForSubcontract = SC_System.blockchain.openContract(Ship.createFromConfig({
@@ -317,8 +335,8 @@ describe('Subcontract - Basic Operations', () => {
         const defaultRedirectExcess = await subcontract.getRedirectExcess();
         const defaultThreshold = await subcontract.getExcessThreshold();
         
-        expect(defaultRedirectExcess).toBe(true);
-        expect(defaultThreshold).toBe(toNano('0.1'));
+        expect(defaultRedirectExcess).toBe(false);
+        expect(defaultThreshold).toBe(toNano('0.5'));
 
         // Set redirect excess to true
         SC_System.messageResult = await subcontract.sendSetRedirectExcess(SC_System.ownerAccount.getSender(), true, toNano('0.1'));

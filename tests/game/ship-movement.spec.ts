@@ -1,12 +1,12 @@
 import { Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { Game } from '../wrappers/game/Game';
+import { Game } from '../../wrappers/game/Game';
 import '@ton/test-utils';
-import { Ship } from '../wrappers/game/Ship';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { MoveMode } from '../wrappers/game/structs';
-import { Opcodes, GAS_COST_SEND_MOVE, GAS_COST_ANY_MESSAGE } from '../wrappers/game/types';
-import { CoordinateCell } from '../wrappers/game/CoordinateCell';
+import { Ship } from '../../wrappers/game/Ship';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { MoveMode } from '../../wrappers/game/structs';
+import { Opcodes, GAS_COST_SEND_MOVE, GAS_COST_ANY_MESSAGE } from '../../wrappers/game/types';
+import { CoordinateCell } from '../../wrappers/game/CoordinateCell';
 
 describe('Ship Movement', () => {
     let SC_System: ContractSystem;

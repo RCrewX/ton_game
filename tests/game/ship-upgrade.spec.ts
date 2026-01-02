@@ -1,15 +1,15 @@
 import { beginCell, Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from './test_utils';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP, GAS_COST_SEND_MOVE, JettonUsageMode } from '../wrappers/game/types';
-import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
-import { MoveMode } from '../wrappers/game/structs';
-import { JettonMinter } from '../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../wrappers/jetton/JettonWallet';
-import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
-import { Ship } from '../wrappers/game/Ship';
-import { Op } from '../wrappers/jetton/JettonConstants';
+import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from '../test_utils';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP, GAS_COST_SEND_MOVE, JettonUsageMode } from '../../wrappers/game/types';
+import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../../wrappers/game_manager/types';
+import { MoveMode } from '../../wrappers/game/structs';
+import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
+import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { Ship } from '../../wrappers/game/Ship';
+import { Op } from '../../wrappers/jetton/JettonConstants';
 
 describe('Ship Upgrade', () => {
     let SC_System: ContractSystem;

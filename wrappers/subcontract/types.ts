@@ -13,9 +13,15 @@ export const Opcodes = {
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
     OP_SET_REDIRECT_EXCESS: 0x50245bad,
     OP_SET_EXCESS_THRESHOLD: 0xc64d98a7,
+    OP_MANUAL_DEPLOY: 0xa2c65e14,
 } as const;
 
 // Message types
+
+export type ManualDeploy = {
+    queryId: bigint;
+};
+
 export type Forward = {
     queryId: bigint;
     destination: Address;
@@ -55,6 +61,14 @@ export type ReturnExcessesBack = {
 };
 
 // Encode functions
+
+export function encodeManualDeploy(msg: ManualDeploy): Cell {
+    return beginCell()
+        .storeUint(Opcodes.OP_MANUAL_DEPLOY, 32)
+        .storeUint(msg.queryId, 64)
+        .endCell();
+}
+
 export function encodeForward(msg: Forward): Cell {
     return beginCell()
         .storeUint(Opcodes.OP_FORWARD, 32)

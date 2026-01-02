@@ -1,12 +1,12 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from './test_utils';
-import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, BASIC_STORAGE_TAX, GAS_COST_REQUEST_MINT, GAS_COST_REQUEST_TO_MOVE, JettonUsageMode } from '../wrappers/game/types';
-import { Opcodes as GameManagerOpcodes } from '../wrappers/game_manager/types';
-import { JettonWallet } from '../wrappers/jetton/JettonWallet';
+import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from '../test_utils';
+import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, BASIC_STORAGE_TAX, GAS_COST_REQUEST_MINT, GAS_COST_REQUEST_TO_MOVE, JettonUsageMode } from '../../wrappers/game/types';
+import { Opcodes as GameManagerOpcodes } from '../../wrappers/game_manager/types';
+import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
 import * as fs from 'fs';
 import * as path from 'path';
-import { MoveMode } from "../wrappers/game/structs";
+import { MoveMode } from "../../wrappers/game/structs";
 
 describe("Gas Prices - Game Upgrade", () => {
     let SC_System: ContractSystem;

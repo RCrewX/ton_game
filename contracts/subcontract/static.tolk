@@ -1,6 +1,7 @@
 // Constants
 const BASIC_STORAGE_TAX = ton("0.011");
-const DEFAULT_EXCESS_THRESHOLD = ton("0.1"); // Default excess threshold
+const DEFAULT_REDIRECT_EXCESS = false;
+const DEFAULT_EXCESS_THRESHOLD = ton("0.5"); // Default excess threshold
 const MIN_EXCESS_THRESHOLD = ton("0.01"); // Minimum allowed excess threshold
 
 // Gas costs from gas consumption tests (in TON)
@@ -9,11 +10,11 @@ const GAS_COST_FORWARD: coins = ton("0.005"); // 0.0031816 + buffer
 const GAS_COST_FORWARD_WITH_INIT: coins = ton("0.01"); // Higher cost for deploy messages
 const GAS_COST_WITHDRAW: coins = ton("0.005"); // Gas cost for withdraw operation
 const GAS_MARGIN: coins = ton("0.01"); // Safety margin for external message execution
-
+const GAS_COST_MANUAL_DEPLOY: int = ton("0.4");
 // Errors
 const ERR_UNAUTHORIZED = 901;  // Generic unauthorized (kept for backward compatibility)
 const ERR_MESSAGE_VALUE_TOO_LOW = 904;  // Message value is too low (less than estimated gas cost)
-
+const ERR_NOT_ENOUGH_BALANCE = 906;  // Not enough balance to perform the operation
 // Subcontract-specific errors
 const ERR_INVALID_OWNER_SENDER = 926;  // Sender is not the subcontract's owner address
 const ERR_WITHDRAW_AMOUNT_TOO_LOW = 927;  // Withdraw amount is too low (must be > BASIC_STORAGE_TAX)
@@ -45,6 +46,9 @@ fun SubcontractStorage.save(self) {
 }
 
 // Messages
+struct (0xa2c65e14) ManualDeploy {
+    queryId: uint64
+}
 
 // Forward message without stateInit (no deploy)
 struct (0xf1c65e14) Forward {
@@ -142,7 +146,7 @@ fun calcDeployedSubcontract(
     val initStorage: SubcontractStorage = {
         ownerAddress,
         id,
-        redirectExcess: true,
+        redirectExcess: DEFAULT_REDIRECT_EXCESS,
         excessThreshold: DEFAULT_EXCESS_THRESHOLD,
         ownerPublicKey,
         extSeqno: 0,  // Start at 0 for external message sequence

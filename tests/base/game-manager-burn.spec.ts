@@ -1,10 +1,10 @@
 import { beginCell, toNano, Address, contractAddress } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN, Opcodes, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
-import { JettonWallet } from '../wrappers/jetton/JettonWallet';
-import { JettonMinter } from '../wrappers/jetton/JettonMinter';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN, Opcodes, GAS_COST_REDIRECT_MESSAGE } from '../../wrappers/game_manager/types';
+import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
+import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
 
 describe('GameManager Burn Functionality', () => {
     let SC_System: ContractSystem;

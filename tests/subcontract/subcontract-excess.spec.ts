@@ -1,13 +1,13 @@
 import { beginCell, toNano, SendMode } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Subcontract, subcontractConfigToCell } from '../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD } from '../wrappers/subcontract/types';
-import { Ship, shipConfigToCell } from '../wrappers/game/Ship';
-import { MoveMode } from '../wrappers/game/structs';
-import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../wrappers/game/types';
-import { Opcodes } from '../wrappers/game/types';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { Subcontract, subcontractConfigToCell } from '../../wrappers/subcontract/Subcontract';
+import { GAS_COST_FORWARD } from '../../wrappers/subcontract/types';
+import { Ship, shipConfigToCell } from '../../wrappers/game/Ship';
+import { MoveMode } from '../../wrappers/game/structs';
+import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../../wrappers/game/types';
+import { Opcodes } from '../../wrappers/game/types';
 
 describe('Subcontract - Excess Handling', () => {
     let SC_System: ContractSystem;
@@ -37,8 +37,16 @@ describe('Subcontract - Excess Handling', () => {
             value: toNano('1'),
         });
 
-        // Enable redirect excess (default threshold is 0.1 TON)
+        // Enable redirect excess
         SC_System.messageResult = await subcontract.sendSetRedirectExcess(SC_System.ownerAccount.getSender(), true, toNano('0.1'));
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: subcontract.address,
+            success: true,
+        });
+
+        // Set threshold to 0.1 TON for this test (default is 0.5 TON)
+        SC_System.messageResult = await subcontract.sendSetExcessThreshold(SC_System.ownerAccount.getSender(), toNano('0.1'), toNano('0.1'));
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: subcontract.address,
@@ -114,7 +122,7 @@ describe('Subcontract - Excess Handling', () => {
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 
-        // Explicitly disable redirect excess (default is now true)
+        // Explicitly disable redirect excess (default is false, but we're explicitly disabling it)
         await subcontract.sendSetRedirectExcess(SC_System.ownerAccount.getSender(), false, toNano('0.1'));
 
         // Excess should not be forwarded when redirect is disabled
@@ -157,10 +165,10 @@ describe('Subcontract - Excess Handling', () => {
 
         await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
 
-        // Enable redirect excess
+        // Enable redirect excess (uses default threshold of 0.5 TON)
         await subcontract.sendSetRedirectExcess(SC_System.ownerAccount.getSender(), true);
 
-        // Send excess message with value below threshold (default 0.1 TON)
+        // Send excess message with value below threshold (default 0.5 TON)
         const excessAmount = toNano('0.05');
         const excessMessage = beginCell()
             .storeUint(0xd53276db, 32) // ReturnExcessesBack opcode
@@ -223,6 +231,7 @@ describe('Subcontract - Excess Handling', () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: userAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(userAccount.getSender(), toNano('0.5'));
@@ -315,6 +324,7 @@ describe('Subcontract - Excess Handling', () => {
         const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
             ownerAddress: userAccount.address,
             id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
         }, SC_System.subcontractCode));
 
         await subcontract.sendDeploy(userAccount.getSender(), toNano('0.5'));

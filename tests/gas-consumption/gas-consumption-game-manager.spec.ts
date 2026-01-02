@@ -1,10 +1,10 @@
 import { beginCell, fromNano, toNano } from "@ton/core";
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN } from '../wrappers/game_manager/types';
-import { JettonMinter } from '../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../wrappers/jetton/JettonWallet';
-import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN } from '../../wrappers/game_manager/types';
+import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
+import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
 import * as fs from 'fs';
 import * as path from 'path';
 

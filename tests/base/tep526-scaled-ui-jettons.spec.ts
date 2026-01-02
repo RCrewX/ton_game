@@ -1,9 +1,9 @@
 import { toNano } from '@ton/core';
 import '@ton/test-utils';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { JettonMinter } from '../wrappers/jetton/JettonMinter';
-import { jettonContentToCell } from '../wrappers/jetton/JettonMinter';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
+import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
 
 describe('TEP-526 Scaled UI Jettons', () => {
     let SC_System: ContractSystem;

@@ -2,6 +2,7 @@ import "static"
 import "@stdlib/gas-payments"
 
 type AllowedMessagesToSubcontract = 
+    | ManualDeploy
     | Forward
     | ForwardWithInit
     | Withdraw
@@ -11,8 +12,31 @@ type AllowedMessagesToSubcontract =
     | SetExcessThreshold
 
 fun onInternalMessage(in: InMessage) {
+    // Handle empty body for initialization (similar to JettonMinter)
+    // If body is empty, just reserve value and return
+    if (in.body.isEmpty()) {
+        reserveValue(in.valueCoins);
+        return;
+    }
+    
     val msg = lazy AllowedMessagesToSubcontract.fromSlice(in.body);
     match (msg) {
+        ManualDeploy => {
+
+            // assert gas>const_min_to_deploy-fee 
+            assert (in.valueCoins >= GAS_COST_MANUAL_DEPLOY - BASIC_STORAGE_TAX) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            assert (contract.getOriginalBalance() - in.valueCoins > GAS_COST_MANUAL_DEPLOY) throw ERR_NOT_ENOUGH_BALANCE;
+            // No auth check needed - anyone can send manual deploy messages
+            
+            val cashbackMessage = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: in.senderAddress,
+                value: GAS_COST_MANUAL_DEPLOY,
+                body: beginCell().endCell() // Empty body for simple transfer
+            });
+            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS);
+            
+        }
         ReturnExcessesBack => {
             // Handle excess message
             // Load storage fresh to get current redirectExcess and excessThreshold values

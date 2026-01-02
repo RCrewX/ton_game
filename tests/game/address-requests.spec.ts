@@ -1,9 +1,9 @@
 import { toNano } from '@ton/core';
-import { Game } from '../wrappers/game/Game';
+import { Game } from '../../wrappers/game/Game';
 import '@ton/test-utils';
-import { ContractSystem, initContractSystem, cleanupContractSystem } from './test_utils';
-import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../wrappers/game/types';
-import { CoordinateCell } from '../wrappers/game/CoordinateCell';
+import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
+import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../../wrappers/game/types';
+import { CoordinateCell } from '../../wrappers/game/CoordinateCell';
 
 describe('Address Requests', () => {
     let SC_System: ContractSystem;
