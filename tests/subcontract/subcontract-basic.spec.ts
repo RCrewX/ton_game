@@ -3,7 +3,7 @@ import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Subcontract, subcontractConfigToCell } from '../../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, encodeForward } from '../../wrappers/subcontract/types';
+import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, GAS_COST_MANUAL_DEPLOY, encodeForward } from '../../wrappers/subcontract/types';
 import { Ship, shipConfigToCell } from '../../wrappers/game/Ship';
 import { MoveMode } from '../../wrappers/game/structs';
 import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../../wrappers/game/types';
@@ -227,6 +227,41 @@ describe('Subcontract - Basic Operations', () => {
             forwardAmount,
             false, // NoBounce
             SendMode.PAY_GAS_SEPARATELY
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: unauthorizedAccount.address,
+            to: subcontract.address,
+            success: false,
+            exitCode: 926, // ERR_INVALID_OWNER_SENDER
+        });
+    });
+
+    it('Test Subcontract unauthorized access - non-owner cannot send ManualDeploy', async () => {
+        const subcontractId = 401n;
+        
+        const subcontract = SC_System.blockchain.openContract(Subcontract.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+            id: subcontractId,
+            ownerPublicKey: 0n, // Dummy public key for basic tests
+        }, SC_System.subcontractCode));
+
+        await subcontract.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+
+        // Fund the subcontract so it has enough balance for manual deploy
+        await SC_System.ownerAccount.send({
+            to: subcontract.address,
+            value: toNano('1'),
+        });
+
+        // Create unauthorized sender
+        const unauthorizedAccount = await SC_System.blockchain.treasury('unauthorized');
+        
+        // Try to send ManualDeploy as unauthorized user - should fail
+        SC_System.messageResult = await subcontract.sendManualDeploy(
+            unauthorizedAccount.getSender(),
+            GAS_COST_MANUAL_DEPLOY,
+            0n
         );
 
         expect(SC_System.messageResult.transactions).toHaveTransaction({

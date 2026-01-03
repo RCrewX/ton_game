@@ -21,6 +21,8 @@ fun onInternalMessage(in: InMessage) {
             assert (in.valueCoins >= GAS_COST_MANUAL_DEPLOY - BASIC_STORAGE_TAX) throw ERR_MESSAGE_VALUE_TOO_LOW;
             assert (contract.getOriginalBalance() > (2 * GAS_COST_MANUAL_DEPLOY) - BASIC_STORAGE_TAX) throw ERR_NOT_ENOUGH_BALANCE;
             // No auth check needed - anyone can send manual deploy messages
+            var storage = lazy SubcontractStorage.load();
+            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
 
             val cashbackMessage = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -28,7 +30,7 @@ fun onInternalMessage(in: InMessage) {
                 value: GAS_COST_MANUAL_DEPLOY + BASIC_STORAGE_TAX,
                 body: beginCell().endCell() // Empty body for simple transfer
             });
-            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS);
+            cashbackMessage.send(SEND_MODE_IGNORE_ERRORS + SEND_MODE_PAY_FEES_SEPARATELY);
             
         }
         ReturnExcessesBack => {
