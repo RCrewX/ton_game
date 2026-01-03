@@ -1,4 +1,4 @@
-import { Address, toNano, ContractProvider, Cell, beginCell, contractAddress, fromNano } from '@ton/core';
+import { Address, toNano, ContractProvider, Cell, beginCell, contractAddress, fromNano, SendMode } from '@ton/core';
 import { keyPairFromSecretKey, sign } from '@ton/crypto';
 import { NetworkProvider, compile } from '@ton/blueprint';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
@@ -501,7 +501,7 @@ export async function run(provider: NetworkProvider) {
             
             // Try to deploy via provider if possible
             try {
-                const deployAmount = toNano('0.5');
+                const deployAmount = toNano('0.4');
                 await subcontract.sendDeploy(provider.sender(), deployAmount);
                 console.log(`✓ Deployed subcontract via provider (${fromNano(deployAmount)} TON)`);
                 
@@ -528,11 +528,13 @@ export async function run(provider: NetworkProvider) {
         // Fund subcontract for operations
         // Optimized based on test results: DeployShip (0.01) + MoveUP (0.0625) + MoveEXIT (0.004) + buffer = ~0.15 TON
         console.log(`\n--- Funding Subcontract ---`);
-        const fundAmount = toNano('0.2'); // Optimized: enough for ship deployment and 2 moves with buffer
+        const fundAmount = toNano('1'); // Optimized: enough for ship deployment and 2 moves with buffer
         try {
             await provider.sender().send({
                 to: subcontractAddress,
                 value: fundAmount,
+                bounce: false,
+                sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
             });
             console.log(`✓ Funded subcontract with ${fromNano(fundAmount)} TON`);
             await sleep(3000); // Wait for funding

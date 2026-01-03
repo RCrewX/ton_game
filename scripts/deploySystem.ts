@@ -1,4 +1,4 @@
-import { toNano, beginCell, Address, Cell } from '@ton/core';
+import { toNano, beginCell, Address, Cell, SendMode } from '@ton/core';
 import { compile, NetworkProvider } from '@ton/blueprint';
 import { GameManager } from '../wrappers/game_manager/GameManager';
 import { Game } from '../wrappers/game/Game';
@@ -14,6 +14,8 @@ import { WalletIdV5R1 } from '@ton/ton/dist/wallets/WalletContractV5R1';
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { GAS_COST_MANUAL_DEPLOY } from '../wrappers/subcontract/types';
+import { BASIC_STORAGE_TAX } from '../wrappers/game/types';
 
 // Load environment variables
 dotenv.config();
@@ -674,13 +676,33 @@ export async function run(provider: NetworkProvider) {
                 subcontractCode
             )
         );
+        console.log('Ship Station Calculated Address:', shipStation.address.toString());
+        // // Pop-up ship station like user does
 
+        // const popUpAmount = toNano('1');
+        // await withTimeout(
+        //     provider.sender().send({
+        //         to: shipStation.address,
+        //         value: popUpAmount,
+        //         body: beginCell().endCell(),
+        //         bounce: false,
+        //         sendMode: SendMode.PAY_GAS_SEPARATELY,
+        //     }),
+        //     API_TIMEOUT,
+        //     'Popping up ship station'
+        // );
+        // console.log('Ship station popped up successfully');
+        // await sleep(TRANSACTION_WAIT_TIME);
+        // Deploy ship station like user does
+
+        // Here we use non user way
+        const deployAmount = (GAS_COST_MANUAL_DEPLOY + BASIC_STORAGE_TAX) * 2n;
         await checkAndDeploy(
             provider,
             shipStation,
             'Ship Station',
             shipStation.address,
-            async () => await shipStation.sendDeploy(provider.sender(), toNano('0.2'))
+            async () => await shipStation.sendDeploy(provider.sender(), deployAmount)
         );
         
         deploymentData.ship_station = formatAddress(shipStation.address, isTestnet);

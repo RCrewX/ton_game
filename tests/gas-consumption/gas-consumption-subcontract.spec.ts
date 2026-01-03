@@ -2,7 +2,7 @@ import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Subcontract } from '../../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Opcodes as SubcontractOpcodes } from '../../wrappers/subcontract/types';
+import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, GAS_COST_MANUAL_DEPLOY, Opcodes as SubcontractOpcodes } from '../../wrappers/subcontract/types';
 import { encodeRequestToMove, Opcodes } from '../../wrappers/game/types';
 import { Ship, shipConfigToCell } from '../../wrappers/game/Ship';
 import { MoveMode } from '../../wrappers/game/structs';
@@ -471,7 +471,7 @@ describe("Gas Prices - Subcontract", () => {
         
         let little_less_than_gas_needed = toNano('0.01');
         // const GAS_COST_MANUAL_DEPLOY: int = ton("0.4");
-        const manualDeployAmount = toNano('0.4');
+        const manualDeployAmount = GAS_COST_MANUAL_DEPLOY;
         
         // Verify contract has enough balance (contract.getOriginalBalance() - in.valueCoins > GAS_COST_MANUAL_DEPLOY)
         // Contract should have ~1 TON from user (minus gas), so after receiving 0.5 TON, balance will be > 0.4 TON ✓
@@ -516,7 +516,7 @@ describe("Gas Prices - Subcontract", () => {
         console.log(`Owner Original Balance: ${ownerOriginalBalance}`);
         console.log(`Owner New Balance: ${ownerNewBalance}`);
         gasCosts['ManualDeployAdmin'] = costReallyForAdmin.toString();
-        expect(costReallyForAdmin).toBeLessThan(toNano('0.05'));
+        expect(costReallyForAdmin).toBeLessThan(toNano('0.001'));
         // expect(costReallyForAdmin).toBeGreaterThan(toNano('0.4')); // Account for gas fees
     });
 });

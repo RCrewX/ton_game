@@ -1,5 +1,5 @@
 // Constants
-const BASIC_STORAGE_TAX = ton("0.011");
+const BASIC_STORAGE_TAX = ton("0.01");
 const DEFAULT_REDIRECT_EXCESS = false;
 const DEFAULT_EXCESS_THRESHOLD = ton("0.5"); // Default excess threshold
 const MIN_EXCESS_THRESHOLD = ton("0.01"); // Minimum allowed excess threshold
