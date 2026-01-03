@@ -86,10 +86,12 @@ fun onInternalMessage(in: InMessage) {
                 forwardTonAmount: forwardTonAmount,
                 forwardPayload: forwardPayload,
             };
+
+            var dif = in.valueCoins - MINT_TON_AMOUNT - BASIC_STORAGE_TAX;
             val mintNewJettons = MintNewJettons {
                 queryId: 0,
                 mintRecipient: msg.receiver,
-                tonAmount: MINT_TON_AMOUNT,
+                tonAmount: MINT_TON_AMOUNT + dif,
                 internalTransferMsg: internalTransferStep.toCell(),
             };
             reserveValue(in.valueCoins);
