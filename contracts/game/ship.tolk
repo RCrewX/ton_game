@@ -142,12 +142,12 @@ fun onInternalMessage(in: InMessage) {
             // Check we have enough balance for the operation: gas cost + coordinate cell gas
             assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
 
-            assert (msg.xy.y > 2) throw ERR_WRONG_XY;
+            assert (msg.xy.y > 2) throw ERR_FAST_TRAVEL_Y_TOO_LOW;
             
             if (msg.xy.x < x_zero) {
-                assert (-msg.xy.x <= msg.xy.y) throw ERR_WRONG_XY;
+                assert (-msg.xy.x <= msg.xy.y) throw ERR_FAST_TRAVEL_NEGATIVE_X_INVALID;
             } else {
-                assert (msg.xy.x <= msg.xy.y) throw ERR_WRONG_XY;
+                assert (msg.xy.x <= msg.xy.y) throw ERR_FAST_TRAVEL_POSITIVE_X_INVALID;
             }
             
             assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
@@ -159,7 +159,8 @@ fun onInternalMessage(in: InMessage) {
             var fastTravelInfo: FastTravelInfo = lazy storage.fastTravelInfo!.load();
             
             // TODO: Calculate travel cost correctly (make it more effective than move?)
-            assert (msg.xy.x >= x_zero && msg.xy.y >= y_zero) throw ERR_WRONG_XY;
+            // Note: x can be negative (already validated above), but y must be >= 0 (already validated as y > 2)
+            assert (msg.xy.y >= y_zero) throw ERR_WRONG_XY;
             var travelCost = msg.xy.y * (msg.xy.y - 1) / 2 as coins;
 
             assert (fastTravelInfo.enrichedFuelAmount >= travelCost) throw ERR_NOT_ENOUGH_FUEL_FOR_TRAVEL;

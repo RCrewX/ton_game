@@ -224,5 +224,251 @@ describe('Fast Travel', () => {
 
 
     });
+
+    it('fails fast travel when y <= 2', async () => {
+        const ERR_FAST_TRAVEL_Y_TOO_LOW = 933;
+        
+        // Initialize ship with fast travel info
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.FAST_TRAVEL_UPGRADE,
+        );
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            toNano('50'),
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        // Test with y = 2 (should fail)
+        const targetXY = { x: 0n, y: 2n };
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: false,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+            exitCode: ERR_FAST_TRAVEL_Y_TOO_LOW,
+        });
+
+        // Test with y = 1 (should fail)
+        const targetXY2 = { x: 0n, y: 1n };
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY2
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: false,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+            exitCode: ERR_FAST_TRAVEL_Y_TOO_LOW,
+        });
+    });
+
+    it('fails fast travel when negative x violates constraint (-x > y)', async () => {
+        const ERR_FAST_TRAVEL_NEGATIVE_X_INVALID = 934;
+        
+        // Initialize ship with fast travel info
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.FAST_TRAVEL_UPGRADE,
+        );
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            toNano('50'),
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        // Test with x = -4, y = 3 (should fail: -(-4) = 4 > 3)
+        const targetXY = { x: -4n, y: 3n };
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: false,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+            exitCode: ERR_FAST_TRAVEL_NEGATIVE_X_INVALID,
+        });
+
+        // Test with x = -5, y = 3 (should fail: -(-5) = 5 > 3)
+        const targetXY2 = { x: -5n, y: 3n };
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY2
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: false,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+            exitCode: ERR_FAST_TRAVEL_NEGATIVE_X_INVALID,
+        });
+    });
+
+    it('fails fast travel when positive x violates constraint (x > y)', async () => {
+        const ERR_FAST_TRAVEL_POSITIVE_X_INVALID = 935;
+        
+        // Initialize ship with fast travel info
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.FAST_TRAVEL_UPGRADE,
+        );
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            toNano('50'),
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        // Test with x = 4, y = 3 (should fail: 4 > 3)
+        const targetXY = { x: 4n, y: 3n };
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: false,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+            exitCode: ERR_FAST_TRAVEL_POSITIVE_X_INVALID,
+        });
+
+        // Test with x = 5, y = 3 (should fail: 5 > 3)
+        const targetXY2 = { x: 5n, y: 3n };
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY2
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: false,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+            exitCode: ERR_FAST_TRAVEL_POSITIVE_X_INVALID,
+        });
+    });
+
+    it('allows fast travel with negative x when constraint is satisfied (x=-4, y=4)', async () => {
+        const targetXY = { x: -4n, y: 4n };
+        
+        // Initialize ship with fast travel info and enough fuel
+        // Travel cost = y * (y - 1) / 2 = 4 * 3 / 2 = 6
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.FAST_TRAVEL_UPGRADE,
+        );
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.2'),
+            toNano('50'), // Enough fuel for travel cost
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.1'),
+            forwardPayload
+        );
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.gameManager.address,
+            to: SC_System.game.address,
+            success: true,
+            op: Opcodes.OP_JETTON_USED,
+        });
+
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.game.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_FAST_TRAVEL_UPGRADE,
+        });
+
+        // Open target coordinate cell before fast travel (by moving to it)
+        // We need to move to coordinates that will eventually reach (-4, 4)
+        // Since we start at (0, 0), we can't directly move to negative x
+        // But for fast travel, we just need the cell to be opened
+        // Let's use a workaround: we'll manually open the cell by deploying it
+        // Actually, coordinate cells are opened on first access, so we can just try to access it
+        // However, for fast travel to work, the cell needs to be opened first
+        // Let's check if we can open it by sending a message to it, or we need to move there first
+        
+        // For now, let's try the fast travel - if the cell needs to be opened, we might get an error
+        // But the main goal is to verify coordinate validation passes
+        
+        const startCC = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({
+            gameAddress: SC_System.game.address,
+            xy: { x: 0n, y: 0n },
+            shipCode: SC_System.shipCode,
+        }, SC_System.coordinateCellCode));
+        
+        const targetCC = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({
+            gameAddress: SC_System.game.address,
+            xy: targetXY,
+            shipCode: SC_System.shipCode,
+        }, SC_System.coordinateCellCode));
+
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY
+        );
+
+        // Verify the fast travel request was accepted (coordinate validation passed)
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+        });
+
+        // Verify travel message was sent to start coordinate cell
+        // This confirms that coordinate validation passed (x=-4, y=4 is valid)
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerShip.address,
+            to: startCC.address,
+            success: true,
+            op: Opcodes.OP_TRAVEL_TO_CC,
+        });
+        
+        // Note: The target cell at (-4, 4) may not be opened yet (error 927),
+        // but the important part is that the coordinate validation passed,
+        // allowing the fast travel request to proceed to the travel stage
+    });
 });
 
