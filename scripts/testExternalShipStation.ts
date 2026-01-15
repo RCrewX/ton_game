@@ -14,6 +14,8 @@ type DeploymentData = {
     game?: { bounceable: string; nonBounceable: string };
     ship_station?: { bounceable: string; nonBounceable: string };
     network?: 'testnet' | 'mainnet';
+    status?: 'in_progress' | 'completed' | 'failed';
+    error?: string;
     contractCodes?: {
         subcontract?: { hex: string };
         ship?: { hex: string };
@@ -346,8 +348,32 @@ export async function run(provider: NetworkProvider) {
     try {
         // Load deployment info
         const deployment = loadDeployment();
+        
+        // Check deployment status first
+        if (deployment.status === 'failed') {
+            const errorMsg = deployment.error || 'Unknown error';
+            throw new Error(
+                `Deployment failed. Cannot run external test without successful deployment.\n` +
+                `Deployment error: ${errorMsg}\n` +
+                `Please fix the deployment issue and run deploySystem.ts again.`
+            );
+        }
+        
+        if (deployment.status === 'in_progress') {
+            throw new Error(
+                `Deployment is still in progress. Please wait for deployment to complete before running external test.`
+            );
+        }
+        
         if (!deployment.game || !deployment.ownerAddress) {
-            throw new Error('game or ownerAddress missing in build_info/deployment.json');
+            const missingFields = [];
+            if (!deployment.game) missingFields.push('game');
+            if (!deployment.ownerAddress) missingFields.push('ownerAddress');
+            throw new Error(
+                `Missing required fields in build_info/deployment.json: ${missingFields.join(', ')}\n` +
+                `This usually means deployment failed or was incomplete.\n` +
+                `Please check the deployment status and run deploySystem.ts again if needed.`
+            );
         }
 
         const gameAddress = Address.parse(deployment.game.bounceable);
@@ -708,6 +734,13 @@ export async function run(provider: NetworkProvider) {
         console.log(`Current extSeqno: ${extSeqno}`);
 
         balanceBefore = await getAddressBalance(endpointAny, subcontractAddress);
+        console.log(`Subcontract balance: ${fromNano(balanceBefore)} TON`);
+        
+        // Verify subcontract has enough balance
+        const minRequiredBalance = toNano('0.05'); // Minimum for EXIT move
+        if (balanceBefore < minRequiredBalance) {
+            throw new Error(`Subcontract balance (${fromNano(balanceBefore)} TON) is too low. Minimum required: ${fromNano(minRequiredBalance)} TON`);
+        }
 
         const moveExitBody = encodeRequestToMove({ mode: MoveMode.EXIT });
         // Optimized based on test results: actual cost is 0.004 TON, so use minimal amount
@@ -729,19 +762,60 @@ export async function run(provider: NetworkProvider) {
 
         const hashExit = innerCellExit.hash();
         const signatureExit = sign(hashExit, secretKey);
-        const envelopeExit = encodeExternalEnvelope({
+        let envelopeExit = encodeExternalEnvelope({
             signature: signatureExit,
             inner: innerCellExit,
         });
 
+        // Wait a bit before sending to ensure previous transaction is fully processed
+        await sleep(3000);
+        
         console.log('Sending external Forward message for EXIT move...');
-        await sendExternalViaChainstackSendQuery({
-            endpointAny,
-            address: subcontractAddress,
-            body: envelopeExit,
-            timeoutMs: 30000,
-        });
-        console.log('✓ External message sent');
+        // Retry logic for network issues
+        const maxRetries = 3;
+        let lastError: Error | null = null;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Increase timeout for EXIT move as it may take longer to process
+                await sendExternalViaChainstackSendQuery({
+                    endpointAny,
+                    address: subcontractAddress,
+                    body: envelopeExit,
+                    timeoutMs: 60000, // Increased to 60 seconds
+                });
+                console.log('✓ External message sent');
+                break; // Success, exit retry loop
+            } catch (error: any) {
+                lastError = error;
+                const errorMsg = error.message || '';
+                if (attempt < maxRetries && (errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('network'))) {
+                    const delay = 5000 * attempt; // Exponential backoff: 5s, 10s
+                    console.warn(`Send attempt ${attempt} failed: ${errorMsg}`);
+                    console.log(`Retrying in ${delay}ms...`);
+                    await sleep(delay);
+                    // Re-fetch seqno in case it changed
+                    extSeqno = await subcontract.getExtSeqno();
+                    // Rebuild envelope with new seqno
+                    const innerCellExitRetry = encodeExternalInner({
+                        seqno: extSeqno,
+                        validUntil: Math.floor(Date.now() / 1000) + 600,
+                        command: forwardExit,
+                    });
+                    const hashExitRetry = innerCellExitRetry.hash();
+                    const signatureExitRetry = sign(hashExitRetry, secretKey);
+                    envelopeExit = encodeExternalEnvelope({
+                        signature: signatureExitRetry,
+                        inner: innerCellExitRetry,
+                    });
+                    continue;
+                }
+                throw error; // Re-throw if not a retryable error or max retries reached
+            }
+        }
+        
+        if (lastError && !lastError.message.includes('sent')) {
+            throw lastError;
+        }
 
         await waitForConfirmation(endpointAny, subcontractAddress, async () => {
             const newSeqno = await subcontract.getExtSeqno();

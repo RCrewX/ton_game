@@ -8,7 +8,7 @@ import { GameManager } from "../wrappers/game_manager/GameManager";
 import { MoveMode } from "../wrappers/game/structs";
 import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
 import { JettonWallet } from "../wrappers/jetton/JettonWallet";
-import { Opcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from "../wrappers/game_manager/types";
+import { Opcodes, GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, GAS_COST_REDIRECT_MESSAGE, encodeGamesInfo } from "../wrappers/game_manager/types";
 import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, JettonUsageMode, GAS_COST_SEND_MOVE, Opcodes as GameOpcodes } from "../wrappers/game/types";
 
 export type ContractSystem = {
@@ -100,16 +100,30 @@ export async function initContractSystem(): Promise<ContractSystem> {
         success: true,
     });
 
-    // Set jetton minter address in GameManager
-    messageResult = await gameManager.sendSetJettonMinterAddress(ownerAccount.getSender(), GAS_COST_SET_JETTON_MINTER_ADDRESS, jettonMinter.address, jettonWalletCode);
+    // Deploy jetton in GameManager
+    const jettonContent = jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' });
+    messageResult = await gameManager.sendDeployJetton(ownerAccount.getSender(), GAS_COST_DEPLOY_JETTON + toNano('0.1'), {
+        jettonMinterCode,
+        jettonWalletCode,
+        jettonContent,
+    });
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
         to: gameManager.address,
         success: true,
     });
 
-    // Set game address in game manager
-    messageResult = await gameManager.sendSetGames(ownerAccount.getSender(), GAS_COST_SET_GAMES, beginCell().storeAddress(game.address).endCell());
+    // Set games info in game manager
+    const allGamesCell = beginCell()
+        .storeUint(1, 2) // mode 1
+        .storeAddress(game.address) // active_game
+        .storeUint(0, 2) // mode 0 (end)
+        .endCell();
+    const gamesInfoData = {
+        active_game: game.address,
+        all_games: allGamesCell,
+    };
+    messageResult = await gameManager.sendSetGamesInfo(ownerAccount.getSender(), GAS_COST_SET_GAMES_INFO, gamesInfoData);
     expect(messageResult.transactions).toHaveTransaction({
         from: ownerAccount.address,
         to: gameManager.address,
@@ -124,10 +138,10 @@ export async function initContractSystem(): Promise<ContractSystem> {
     let jettonMinterAddress = await gameManager.getJettonMinterAddress();
     expect(jettonMinterAddress).toEqualAddress(jettonMinter.address);
 
-    // Check game address in game manager
-    let games = await gameManager.getGames();
-    let gameAddress = games?.beginParse().loadAddress();
-    expect(gameAddress).toEqualAddress(game.address);
+    // Check games info in game manager
+    let storedGamesInfo = await gameManager.getGamesInfo();
+    expect(storedGamesInfo).not.toBeNull();
+    expect(storedGamesInfo?.active_game).toEqualAddress(game.address);
 
     // Mint jettons thru redirecting mint message to game manager to user first (so they can transfer)
     const mintAmount = toNano('1000');

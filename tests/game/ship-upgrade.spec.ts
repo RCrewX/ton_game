@@ -3,7 +3,7 @@ import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from '../test_utils';
 import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, BASIC_SHIP_HP, GAS_COST_SEND_MOVE, JettonUsageMode } from '../../wrappers/game/types';
-import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_REDIRECT_MESSAGE } from '../../wrappers/game_manager/types';
+import { Opcodes as GameManagerOpcodes, GAS_COST_REDIRECT_MESSAGE } from '../../wrappers/game_manager/types';
 import { MoveMode } from '../../wrappers/game/structs';
 import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
@@ -56,20 +56,8 @@ describe('Ship Upgrade', () => {
     });
 
     it('should upgrade ship HP when jettons are transferred to GameManager', async () => {
-        // Set jetton minter address and wallet code in GameManager
-        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
-            SC_System.ownerAccount.getSender(),
-            GAS_COST_SET_JETTON_MINTER_ADDRESS,
-            SC_System.jettonMinter.address,
-            SC_System.jettonWalletCode
-        );
-
-        expect(SC_System.messageResult.transactions).toHaveTransaction({
-            from: SC_System.ownerAccount.address,
-            to: SC_System.gameManager.address,
-            success: true,
-            op: GameManagerOpcodes.OP_SET_JETTON_MINTER_ADDRESS,
-        });
+        // Jetton info is already set up by test_utils
+        // Jetton info is already set up by test_utils, no need to check for set transaction
 
         // Get initial ship HP
         const initialGameData = await SC_System.ownerShip.getCurrentGameData();
@@ -143,14 +131,7 @@ describe('Ship Upgrade', () => {
     });
 
     it('should allow any user to upgrade any ship', async () => {
-        // Set jetton minter address and wallet code in GameManager
-        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
-            SC_System.ownerAccount.getSender(),
-            GAS_COST_SET_JETTON_MINTER_ADDRESS,
-            SC_System.jettonMinter.address,
-            SC_System.jettonWalletCode
-        );
-
+        // Jetton info is already set up by test_utils
         // Create a ship for another user
         const anotherUserShip = SC_System.blockchain.openContract(Ship.createFromConfig({
             userAddress: anotherUser.address,
@@ -232,14 +213,7 @@ describe('Ship Upgrade', () => {
     });
 
     it('should only accept transfers from native jetton wallet', async () => {
-        // Set jetton minter address and wallet code in GameManager
-        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
-            SC_System.ownerAccount.getSender(),
-            GAS_COST_SET_JETTON_MINTER_ADDRESS,
-            SC_System.jettonMinter.address,
-            SC_System.jettonWalletCode
-        );
-
+        // Jetton info is already set up by test_utils
         // Create a different jetton minter (not the native one)
         const foreignJettonContent = jettonContentToCell({ type: 1, uri: 'https://foreign.com/jetton.json' });
         const foreignJettonMinter = SC_System.blockchain.openContract(JettonMinter.createFromConfig({
@@ -308,14 +282,7 @@ describe('Ship Upgrade', () => {
     });
 
     it('should calculate HP increase randomly between 1 and N', async () => {
-        // Set jetton minter address and wallet code in GameManager
-        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
-            SC_System.ownerAccount.getSender(),
-            GAS_COST_SET_JETTON_MINTER_ADDRESS,
-            SC_System.jettonMinter.address,
-            SC_System.jettonWalletCode
-        );
-
+        // Jetton info is already set up by test_utils
         // Get user's jetton wallet
         const userJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.ownerAccount.address);
         const userJettonWallet = SC_System.blockchain.openContract(
@@ -372,14 +339,7 @@ describe('Ship Upgrade', () => {
     });
 
     it('should update max_hp when ship is upgraded', async () => {
-        // Set jetton minter address and wallet code in GameManager
-        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
-            SC_System.ownerAccount.getSender(),
-            GAS_COST_SET_JETTON_MINTER_ADDRESS,
-            SC_System.jettonMinter.address,
-            SC_System.jettonWalletCode
-        );
-
+        // Jetton info is already set up by test_utils
         // Initialize ship by doing a first move (this sets max_hp to BASIC_SHIP_HP)
         // Use a higher value to ensure it covers TODO_TOTAL_GAS_TO_MOVE
         const moveValue = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
@@ -451,14 +411,7 @@ describe('Ship Upgrade', () => {
     });
 
     it('should restore HP to max_hp on safe exit', async () => {
-        // Set jetton minter address and wallet code in GameManager
-        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
-            SC_System.ownerAccount.getSender(),
-            GAS_COST_SET_JETTON_MINTER_ADDRESS,
-            SC_System.jettonMinter.address,
-            SC_System.jettonWalletCode
-        );
-
+        // Jetton info is already set up by test_utils
         // Upgrade ship first to increase max_hp
         const userJettonWalletAddress = await SC_System.jettonMinter.getWalletAddress(SC_System.ownerAccount.address);
         const userJettonWallet = SC_System.blockchain.openContract(

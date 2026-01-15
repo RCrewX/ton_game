@@ -2,16 +2,16 @@ import { Address, beginCell, Cell, toNano } from '@ton/core';
 
 // Gas costs from gas consumption tests (in TON)
 // These match the constants in contracts/game_manager/static.tolk
-export const GAS_COST_SET_JETTON_MINTER_ADDRESS = toNano("0.019"); // 0.0184204 + buffer
-export const GAS_COST_SET_GAMES = toNano("0.015"); // 0.0141556 + buffer
+export const GAS_COST_DEPLOY_JETTON = toNano("0.025"); // Estimated gas cost for DeployJetton
+export const GAS_COST_SET_GAMES_INFO = toNano("0.020"); // Estimated gas cost for SetGamesInfo
 export const GAS_COST_REDIRECT_MESSAGE = toNano("0.009"); // 0.0081816 + buffer
 export const GAS_COST_SET_ALLOW_BURN = toNano("0.015"); // Estimated gas cost for SetAllowBurn
 export const GAS_COST_REQUEST_BURN = toNano("0.015"); // Estimated gas cost for RequestBurn
 
 // Opcodes
 export const Opcodes = {
-    OP_SET_JETTON_MINTER_ADDRESS: 0x40ee785c,
-    OP_SET_GAMES: 0x6ed804ea,
+    OP_DEPLOY_JETTON: 0x5a1b2c3d,
+    OP_SET_GAMES_INFO: 0x7b2c3d4e,
     OP_REDIRECT_MESSAGE: 0x83449946,
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
     OP_LITERALY_ANYTHING: 0x0a1b2c3d,
@@ -23,18 +23,24 @@ export const Opcodes = {
 } as const;
 
 // Message types
-export type SetJettonMinterAddress = {
-    jettonMinterAddress: Address;
-    jettonWalletCode: Cell;
-};
-
 export type JettonUsed = {
     jettonAmount: bigint; // coins
     data: Cell; // cell containing ship address
 };
 
-export type SetGames = {
-    games: Cell;
+export type DeployJetton = {
+    jettonMinterCode: Cell;
+    jettonWalletCode: Cell;
+    jettonContent: Cell; // content cell for jetton minter
+};
+
+export type GamesInfo = {
+    active_game: Address;
+    all_games: Cell;
+};
+
+export type SetGamesInfo = {
+    gamesInfo: Cell; // Cell<GamesInfo>
 };
 
 export type RedirectMessage = {
@@ -56,18 +62,26 @@ export type RequestBurn = {
 };
 
 // Encode functions
-export function encodeSetJettonMinterAddress(msg: SetJettonMinterAddress): Cell {
+export function encodeDeployJetton(msg: DeployJetton): Cell {
     return beginCell()
-        .storeUint(Opcodes.OP_SET_JETTON_MINTER_ADDRESS, 32)
-        .storeAddress(msg.jettonMinterAddress)
+        .storeUint(Opcodes.OP_DEPLOY_JETTON, 32)
+        .storeRef(msg.jettonMinterCode)
         .storeRef(msg.jettonWalletCode)
+        .storeRef(msg.jettonContent)
         .endCell();
 }
 
-export function encodeSetGames(msg: SetGames): Cell {
+export function encodeSetGamesInfo(msg: SetGamesInfo): Cell {
     return beginCell()
-        .storeUint(Opcodes.OP_SET_GAMES, 32)
-        .storeRef(msg.games)
+        .storeUint(Opcodes.OP_SET_GAMES_INFO, 32)
+        .storeRef(msg.gamesInfo)
+        .endCell();
+}
+
+export function encodeGamesInfo(gamesInfo: GamesInfo): Cell {
+    return beginCell()
+        .storeAddress(gamesInfo.active_game)
+        .storeRef(gamesInfo.all_games)
         .endCell();
 }
 

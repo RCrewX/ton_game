@@ -4,8 +4,10 @@ const MINT_TON_AMOUNT: coins = ton("0.1");
 
 // Gas costs from gas consumption tests (in TON)
 // These are maximum expected costs for each operation (updated from test results)
-const GAS_COST_SET_JETTON_MINTER_ADDRESS: coins = ton("0.019"); // 0.0184204 + buffer
-const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141556 + buffer
+const GAS_COST_SET_JETTON_MINTER_ADDRESS: coins = ton("0.019"); // 0.0184204 + buffer (deprecated, kept for compatibility)
+const GAS_COST_DEPLOY_JETTON: coins = ton("0.025"); // Estimated gas cost for DeployJetton
+const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141556 + buffer (deprecated, kept for compatibility)
+const GAS_COST_SET_GAMES_INFO: coins = ton("0.020"); // Estimated gas cost for SetGamesInfo
 const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.009"); // 0.0081816 + buffer
 const GAS_COST_SET_ALLOW_BURN: coins = ton("0.015"); // Estimated gas cost for SetAllowBurn
 const GAS_COST_REQUEST_BURN: coins = ton("0.015"); // Estimated gas cost for RequestBurn
@@ -24,6 +26,9 @@ const ERR_GAMES_NOT_SET = 924;  // Games list is not set (null)
 const ERR_INVALID_JETTON_WALLET_SENDER = 925;  // Sender is not the expected jetton wallet address
 const ERR_INVALID_GAME_ADDRESS = 926;  // Game address is null or invalid
 const ERR_BURN_NOT_ALLOWED = 927;  // Burn is not allowed (allow_burn is false)
+const ERR_JETTON_INFO_ALREADY_SET = 928;  // Jetton info is already set and cannot be changed
+const ERR_INVALID_GAMES_INFO = 929;  // Games info validation failed (first game must be active_game)
+const ERR_GAME_NOT_FOUND = 930;  // Game not found in all_games list
 
 const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
 
@@ -33,11 +38,81 @@ const MIN_JETTON_USAGE_AMOUNT: coins = 5 as coins;
 
 struct GameManagerStorage {
     ownerAddress: address // multisig will be perfect
-    jettonMinterAddress: address? // jetton minter address
-    jettonWalletCode: cell? // jetton wallet code for address calculation
-    games: cell? // Addresses of games, maybe stored differently
+
     allow_burn: bool // Allow burn operations (default false)
+    my_little_tax: coins // 0.01 by default
+    // config: Cell<ConficInfo>
+
+
+
+    // jettonMinterAddress: address? // jetton minter address
+    // jettonWalletCode: cell? // jetton wallet code for address calculation
+    jettonInfo: Cell<JettonInfo>? // jetton info for address calculation
+
+    // games: cell? // Addresses of games, maybe stored differently
+    gamesInfo: Cell<GamesInfo>?
+
+    config: cell?
+    // config is empty for now 
+
 }
+
+
+struct JettonInfo {
+    jettonMinterAddress: address // jetton minter address
+    jettonWalletCode: cell // jetton wallet code for address calculation
+
+}
+
+
+struct GamesInfo {
+    active_game: address;
+    all_games: cell;
+    // all_games: list of all games
+    // rules: first comes mode (0,1,2,3) (first expected mode is always 1 for each line)
+    // if mode 1 - next comes address
+    // if mode 0 - end of parse
+    // if mode 2 - first reference parse for next line 
+    // (nothing for mode 3 currently, but we use 2 bits)
+    // examples: [1][:address][1][:address][0] (list of 2)
+    //           [1][:address][1][:address][1][:address][2] (go to ref, expect next mode to be '1') [1][:address][1][:address][0] (total list of 5)
+    // 
+    // First game in all_games is current active_game
+    //
+    // This list is abstract, is just gets parsed during checkGame()
+}
+
+// Jetton MinterStorage struct (copied from jetton project)
+struct MinterStorage {
+    totalSupply: coins
+    adminAddress: address
+    content: cell
+    jettonWalletCode: cell
+    displayNumerator: uint256  // TEP-526: numerator for display multiplier (VarUInteger 32 in messages)
+    displayDenominator: uint256  // TEP-526: denominator for display multiplier (VarUInteger 32 in messages)
+}
+
+// Function to create MinterStorage cell for jetton minter initialization
+fun createMinterStorage(adminAddress: address, content: cell, jettonWalletCode: cell): cell {
+    val minterStorage: MinterStorage = {
+        totalSupply: 0,
+        adminAddress: adminAddress,
+        content: content,
+        jettonWalletCode: jettonWalletCode,
+        displayNumerator: 1,  // Default 1:1 multiplier (TEP-526)
+        displayDenominator: 1,
+    };
+    return minterStorage.toCell();
+}
+
+
+// struct ConfigInfo {
+
+//     // tax:
+//     // 
+//     //
+ 
+// }
 
 
 fun GameManagerStorage.load() {
@@ -51,13 +126,14 @@ fun GameManagerStorage.save(self) {
 // Messages
 
 
-struct (0x40ee785c) SetJettonMinterAddress {
-    jettonMinterAddress: address
+struct (0x5a1b2c3d) DeployJetton {
+    jettonMinterCode: cell
     jettonWalletCode: cell
+    jettonContent: cell  // content cell for jetton minter
 }
 
-struct (0x6ed804ea) SetGames {
-    games: cell
+struct (0x7b2c3d4e) SetGamesInfo {
+    gamesInfo: Cell<GamesInfo>
 }
 
 struct (0x83449946) RedirectMessage {
@@ -151,10 +227,11 @@ fun calcDeployedGameManager(
 ): AutoDeployAddress {
     val initStorage: GameManagerStorage = {
         ownerAddress,
-        jettonMinterAddress: null,
-        jettonWalletCode: null,
-        games: null,
+        jettonInfo: null,
+        gamesInfo: null,
         allow_burn: false,
+        my_little_tax: BASIC_STORAGE_TAX,
+        config: null,
     };
     return {
         stateInit: {
@@ -191,4 +268,19 @@ fun calcDeployedJettonWallet(ownerAddress: address, minterAddress: address, jett
 fun calcAddressOfJettonWallet(ownerAddress: address, minterAddress: address, jettonWalletCode: cell): address {
     val jwDeployed = calcDeployedJettonWallet(ownerAddress, minterAddress, jettonWalletCode);
     return jwDeployed.calculateAddress()
+}
+
+// Calculate jetton minter address from code and initData
+fun calcDeployedJettonMinter(jettonMinterCode: cell, jettonMinterData: cell): AutoDeployAddress {
+    return {
+        stateInit: {
+            code: jettonMinterCode,
+            data: jettonMinterData
+        }
+    }
+}
+
+fun calcAddressOfJettonMinter(jettonMinterCode: cell, jettonMinterData: cell): address {
+    val minterDeployed = calcDeployedJettonMinter(jettonMinterCode, jettonMinterData);
+    return minterDeployed.calculateAddress()
 }

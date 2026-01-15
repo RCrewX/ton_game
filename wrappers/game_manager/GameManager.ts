@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
-import { encodeSetJettonMinterAddress, encodeSetGames, encodeRedirectMessage, encodeSetAllowBurn, encodeRequestBurn } from './types';
+import { encodeDeployJetton, encodeSetGamesInfo, encodeGamesInfo, encodeRedirectMessage, encodeSetAllowBurn, encodeRequestBurn, DeployJetton, SetGamesInfo, GamesInfo } from './types';
 
 export type GameManagerConfig = {
     ownerAddress: Address;
@@ -8,10 +8,11 @@ export type GameManagerConfig = {
 export function gameManagerConfigToCell(config: GameManagerConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
-        .storeAddress(null) // jettonMinterAddress: address?
-        .storeMaybeRef(null) // jettonWalletCode: cell?
-        .storeMaybeRef(null) // games: cell?
         .storeBit(false) // allow_burn: bool (default false)
+        .storeCoins(toNano('0.01')) // my_little_tax: coins (0.01 by default)
+        .storeMaybeRef(null) // jettonInfo: Cell<JettonInfo>?
+        .storeMaybeRef(null) // gamesInfo: Cell<GamesInfo>?
+        .storeMaybeRef(null) // config: cell?
         .endCell();
 }
 
@@ -36,19 +37,20 @@ export class GameManager implements Contract {
         });
     }
 
-    async sendSetJettonMinterAddress(provider: ContractProvider, via: Sender, value: bigint, jettonMinterAddress: Address, jettonWalletCode: Cell) {
+    async sendDeployJetton(provider: ContractProvider, via: Sender, value: bigint, deployJetton: DeployJetton) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeSetJettonMinterAddress({ jettonMinterAddress, jettonWalletCode }),
+            body: encodeDeployJetton(deployJetton),
         });
     }
 
-    async sendSetGames(provider: ContractProvider, via: Sender, value: bigint, games: Cell) {
+    async sendSetGamesInfo(provider: ContractProvider, via: Sender, value: bigint, gamesInfo: GamesInfo) {
+        const gamesInfoCell = encodeGamesInfo(gamesInfo);
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeSetGames({ games }),
+            body: encodeSetGamesInfo({ gamesInfo: gamesInfoCell }),
         });
     }
 
@@ -110,6 +112,32 @@ export class GameManager implements Contract {
     async getAllowBurn(provider: ContractProvider): Promise<boolean> {
         const result = await provider.get('get_allow_burn', []);
         return result.stack.readBoolean();
+    }
+
+    async getJettonInfo(provider: ContractProvider): Promise<{ jettonMinterAddress: Address; jettonWalletCode: Cell } | null> {
+        const result = await provider.get('get_jetton_info', []);
+        const jettonInfoCell = result.stack.readCellOpt();
+        if (!jettonInfoCell) {
+            return null;
+        }
+        const slice = jettonInfoCell.beginParse();
+        return {
+            jettonMinterAddress: slice.loadAddress(),
+            jettonWalletCode: slice.loadRef(),
+        };
+    }
+
+    async getGamesInfo(provider: ContractProvider): Promise<GamesInfo | null> {
+        const result = await provider.get('get_games_info', []);
+        const gamesInfoCell = result.stack.readCellOpt();
+        if (!gamesInfoCell) {
+            return null;
+        }
+        const slice = gamesInfoCell.beginParse();
+        return {
+            active_game: slice.loadAddress(),
+            all_games: slice.loadRef(),
+        };
     }
 }
 

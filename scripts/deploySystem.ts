@@ -6,7 +6,7 @@ import { Ship } from '../wrappers/game/Ship';
 import { JettonMinter, jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
-import { GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
+import { GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, GAS_COST_REDIRECT_MESSAGE } from '../wrappers/game_manager/types';
 import * as dotenv from 'dotenv';
 import { WalletContractV4, WalletContractV5R1 } from '@ton/ton';
 import { keyPairFromSecretKey } from '@ton/crypto';
@@ -20,9 +20,12 @@ import { BASIC_STORAGE_TAX } from '../wrappers/game/types';
 // Load environment variables
 dotenv.config();
 
-// API timeout in milliseconds (30 seconds)
+// API timeout in milliseconds (30 seconds for regular operations, longer for deployment)
 const API_TIMEOUT = 30000;
+const DEPLOYMENT_TIMEOUT = 120000; // 120 seconds for deployment operations (increased for slow networks)
+const VERIFICATION_TIMEOUT = 120000; // 120 seconds for verification after timeout
 const TRANSACTION_WAIT_TIME = 5000; // 5 seconds between transactions
+const RETRY_DELAY = 10000; // 10 seconds base delay before retry (exponential backoff)
 
 interface DeploymentData {
     timestamp: string;
@@ -235,18 +238,71 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation:
     ]);
 }
 
-async function isContractDeployed(provider: NetworkProvider, address: Address): Promise<boolean> {
+async function isContractDeployed(
+    provider: NetworkProvider, 
+    address: Address, 
+    timeout: number = API_TIMEOUT
+): Promise<boolean> {
     try {
         const state = await withTimeout(
             provider.provider(address).getState(),
-            API_TIMEOUT,
+            timeout,
             `Checking deployment status for ${address.toString()}`
         );
         return state.state.type === 'active';
     } catch (error) {
-        console.warn(`Could not check deployment status for ${address.toString()}:`, (error as Error).message);
+        const errorMsg = (error as Error).message;
+        // If it's a timeout, assume not deployed and proceed (for initial checks)
+        if (errorMsg.includes('timeout') || errorMsg.includes('timed out')) {
+            if (timeout === API_TIMEOUT) {
+                console.warn(`Timeout checking deployment status for ${address.toString()}, assuming not deployed`);
+            }
+            return false;
+        }
+        console.warn(`Could not check deployment status for ${address.toString()}:`, errorMsg);
         return false;
     }
+}
+
+async function verifyDeploymentWithRetry(
+    provider: NetworkProvider,
+    address: Address,
+    contractName: string,
+    maxRetries: number = 4
+): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`Verifying ${contractName} deployment (attempt ${attempt}/${maxRetries})...`);
+        try {
+            const isDeployed = await isContractDeployed(provider, address, VERIFICATION_TIMEOUT);
+            if (isDeployed) {
+                console.log(`✓ ${contractName} is confirmed deployed`);
+                return true;
+            }
+        } catch (error) {
+            const errorMsg = (error as Error).message;
+            console.warn(`Verification attempt ${attempt} failed: ${errorMsg}`);
+        }
+        if (attempt < maxRetries) {
+            // Use exponential backoff: 10s, 20s, 30s, 40s, 50s...
+            const delay = RETRY_DELAY * attempt;
+            console.log(`Contract not yet deployed, waiting ${delay}ms before retry...`);
+            await sleep(delay);
+        } else {
+            console.log(`✗ ${contractName} is not deployed after ${maxRetries} verification attempts`);
+        }
+    }
+    return false;
+}
+
+async function deployWithStateInit(
+    provider: NetworkProvider,
+    contract: any,
+    value: bigint
+): Promise<void> {
+    // Blueprint's provider.open() wraps methods to automatically pass provider
+    // Call sendDeploy with just via and value - Blueprint handles provider injection
+    // Blueprint should also automatically include stateInit when contract has init
+    await (contract as any).sendDeploy(provider.sender(), value);
 }
 
 async function checkAndDeploy(
@@ -256,94 +312,232 @@ async function checkAndDeploy(
     address: Address,
     deployFn: () => Promise<void>
 ): Promise<void> {
-    const isDeployed = await isContractDeployed(provider, address);
+    // Try to check if already deployed, but don't fail if it times out
+    let isDeployed = false;
+    try {
+        isDeployed = await isContractDeployed(provider, address, API_TIMEOUT * 2);
+    } catch (error) {
+        // Ignore timeout on initial check - we'll proceed with deployment
+        console.warn(`Initial deployment check failed for ${contractName}, proceeding with deployment...`);
+    }
+    
     if (isDeployed) {
         console.log(`${contractName} is already deployed at ${address.toString()}`);
         return;
     }
     
     console.log(`Deploying ${contractName}...`);
-    await withTimeout(deployFn(), API_TIMEOUT, `Deploying ${contractName}`);
-    await provider.waitForDeploy(address);
+    let deploymentSent = false;
+    
+    // Try to send deployment transaction
+    try {
+        await withTimeout(deployFn(), DEPLOYMENT_TIMEOUT, `Deploying ${contractName}`);
+        deploymentSent = true;
+        console.log(`Deployment transaction sent for ${contractName}`);
+    } catch (error) {
+        const errorMsg = (error as Error).message;
+        // If deployment times out, the transaction might still have been sent
+        // TON transactions can be sent successfully even if the API response is slow
+        if (errorMsg.includes('timeout') || errorMsg.includes('timed out')) {
+            console.warn(`Deployment call timed out for ${contractName}. The transaction may have been sent despite the timeout.`);
+            console.warn(`Waiting ${TRANSACTION_WAIT_TIME * 4}ms for transaction to propagate, then verifying...`);
+            // Give more time for the transaction to propagate through the network
+            await sleep(TRANSACTION_WAIT_TIME * 4);
+            // Try verification with more retries and longer delays
+            const isDeployedAfterTimeout = await verifyDeploymentWithRetry(provider, address, contractName, 4);
+            if (isDeployedAfterTimeout) {
+                console.log(`${contractName} is deployed (verified after send timeout)`);
+                return;
+            }
+            // Check one more time after a longer wait - sometimes transactions take a while
+            console.warn(`Still not deployed after initial retries. Waiting additional ${RETRY_DELAY * 2}ms and checking again...`);
+            await sleep(RETRY_DELAY * 2);
+            const finalCheck = await isContractDeployed(provider, address, VERIFICATION_TIMEOUT);
+            if (finalCheck) {
+                console.log(`${contractName} is deployed (verified after extended wait)`);
+                return;
+            }
+            // If still not deployed after many retries, assume transaction wasn't sent
+            // But give a helpful error message
+            throw new Error(
+                `${contractName} deployment transaction timed out and contract is not deployed after verification. ` +
+                `This could mean:\n` +
+                `  1. The transaction was not sent (network/API issue)\n` +
+                `  2. The transaction is still pending in mempool (check manually later)\n` +
+                `  3. The network is extremely slow (try again later)\n` +
+                `Check the contract address manually: ${address.toString()}`
+            );
+        }
+        throw error;
+    }
+    
+    // Wait for deployment confirmation
+    if (deploymentSent) {
+        try {
+            await withTimeout(
+                provider.waitForDeploy(address),
+                DEPLOYMENT_TIMEOUT,
+                `Waiting for ${contractName} deployment`
+            );
+            console.log(`${contractName} deployment confirmed`);
+        } catch (error) {
+            const errorMsg = (error as Error).message;
+            // If waitForDeploy times out, verify manually with retries
+            if (errorMsg.includes('timeout') || errorMsg.includes('timed out')) {
+                console.warn(`waitForDeploy timed out for ${contractName}, verifying deployment manually with extended retries...`);
+                const isDeployed = await verifyDeploymentWithRetry(provider, address, contractName, 4);
+                if (!isDeployed) {
+                    // One final check after extended wait
+                    console.warn(`Still not deployed after retries. Waiting additional ${RETRY_DELAY * 2}ms and checking again...`);
+                    await sleep(RETRY_DELAY * 2);
+                    const finalCheck = await isContractDeployed(provider, address, VERIFICATION_TIMEOUT);
+                    if (finalCheck) {
+                        console.log(`${contractName} is deployed (verified after extended wait)`);
+                    } else {
+                        throw new Error(
+                            `${contractName} deployment verification failed after multiple retries. ` +
+                            `The transaction was sent but contract is not yet active. ` +
+                            `This could mean the transaction is still processing. ` +
+                            `Check manually later: ${address.toString()}`
+                        );
+                    }
+                } else {
+                    console.log(`${contractName} is deployed (verified after waitForDeploy timeout with retries)`);
+                }
+            } else {
+                throw error;
+            }
+        }
+    }
+    
     await sleep(TRANSACTION_WAIT_TIME); // Wait for transaction to be processed
     console.log(`${contractName} deployed successfully`);
 }
 
-async function checkAndSetJettonMinter(
+async function checkAndDeployJetton(
     provider: NetworkProvider,
     gameManager: any,
+    jettonMinterCode: Cell,
+    jettonWalletCode: Cell,
     jettonMinter: Address,
-    jettonWalletCode: any,
     contractName: string
 ): Promise<boolean> {
     try {
-        const currentAddress = await withTimeout(
-            gameManager.getJettonMinterAddress(),
+        const jettonInfo = await withTimeout(
+            gameManager.getJettonInfo(),
             API_TIMEOUT,
-            `Getting ${contractName} jetton minter address`
-        );
+            `Getting ${contractName} jetton info`
+        ) as { jettonMinterAddress: Address; jettonWalletCode: Cell } | null;
         
-        if (currentAddress && Address.isAddress(currentAddress) && currentAddress.equals(jettonMinter)) {
-            console.log(`${contractName} jetton minter address is already set`);
-            return false; // Already set, no need to send transaction
+        if (jettonInfo && jettonInfo.jettonMinterAddress && jettonInfo.jettonMinterAddress.equals(jettonMinter)) {
+            console.log(`${contractName} jetton is already deployed`);
+            return false; // Already deployed, no need to send transaction
         }
         
-        console.log(`Setting ${contractName} jetton minter address...`);
+        if (jettonInfo) {
+            console.log(`${contractName} jetton is already deployed with different address`);
+            return false; // Cannot redeploy
+        }
+        
+        console.log(`Deploying ${contractName} jetton...`);
+        const jettonContent = jettonContentToCell({ type: 1, uri: process.env.JETTON_CONTENT_URI || 'https://example.com/jetton.json' });
+        
         await withTimeout(
-            gameManager.sendSetJettonMinterAddress(
+            gameManager.sendDeployJetton(
                 provider.sender(),
-                GAS_COST_SET_JETTON_MINTER_ADDRESS,
-                jettonMinter,
-                jettonWalletCode
+                GAS_COST_DEPLOY_JETTON + toNano('0.1'),
+                {
+                    jettonMinterCode,
+                    jettonWalletCode,
+                    jettonContent,
+                }
             ),
-            API_TIMEOUT,
-            `Setting ${contractName} jetton minter address`
+            DEPLOYMENT_TIMEOUT,
+            `Deploying ${contractName} jetton`
         );
         await sleep(TRANSACTION_WAIT_TIME);
-        console.log(`${contractName} jetton minter address set`);
+        console.log(`${contractName} jetton deployed`);
         return true;
     } catch (error) {
-        console.error(`Error setting ${contractName} jetton minter address:`, (error as Error).message);
+        console.error(`Error deploying ${contractName} jetton:`, (error as Error).message);
         throw error;
     }
 }
 
-async function checkAndSetGames(
+async function checkAndSetGamesInfo(
     provider: NetworkProvider,
     gameManager: any,
     game: Address,
     contractName: string
 ): Promise<boolean> {
     try {
-        const games = await withTimeout(
-            gameManager.getGames(),
+        const gamesInfo = await withTimeout(
+            gameManager.getGamesInfo(),
             API_TIMEOUT,
-            `Getting ${contractName} games`
-        );
+            `Getting ${contractName} games info`
+        ) as { active_game: Address; all_games: Cell } | null;
         
-        if (games instanceof Cell) {
-            const currentGameAddress = games.beginParse().loadAddress();
-            if (currentGameAddress && Address.isAddress(currentGameAddress) && currentGameAddress.equals(game)) {
-                console.log(`${contractName} game address is already set`);
-                return false; // Already set, no need to send transaction
+        if (gamesInfo?.active_game && gamesInfo.active_game.equals(game)) {
+            console.log(`${contractName} game address is already set`);
+            return false; // Already set, no need to send transaction
+        }
+        
+        console.log(`Setting ${contractName} games info...`);
+        const allGamesCell = beginCell()
+            .storeUint(1, 2) // mode 1
+            .storeAddress(game) // active_game
+            .storeUint(0, 2) // mode 0 (end)
+            .endCell();
+        
+        const gamesInfoData = {
+            active_game: game,
+            all_games: allGamesCell,
+        };
+        
+        // Wait for previous transactions to be confirmed before sending
+        await sleep(TRANSACTION_WAIT_TIME);
+        
+        // Retry logic for seqno mismatches
+        const maxRetries = 3;
+        let lastError: Error | null = null;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                await withTimeout(
+                    gameManager.sendSetGamesInfo(
+                        provider.sender(),
+                        GAS_COST_SET_GAMES_INFO,
+                        gamesInfoData
+                    ),
+                    API_TIMEOUT,
+                    `Setting ${contractName} games info (attempt ${attempt}/${maxRetries})`
+                );
+                await sleep(TRANSACTION_WAIT_TIME);
+                console.log(`${contractName} games info set`);
+                return true;
+            } catch (error) {
+                lastError = error as Error;
+                const errorMsg = lastError.message;
+                
+                // Check if it's a seqno mismatch error
+                if (errorMsg.includes('Too old seqno') || errorMsg.includes('seqno')) {
+                    if (attempt < maxRetries) {
+                        const delay = RETRY_DELAY * attempt;
+                        console.warn(`Seqno mismatch on attempt ${attempt}, waiting ${delay}ms before retry...`);
+                        await sleep(delay);
+                        continue;
+                    }
+                }
+                
+                // If it's not a seqno error or we've exhausted retries, throw
+                throw error;
             }
         }
         
-        console.log(`Setting ${contractName} game address...`);
-        await withTimeout(
-            gameManager.sendSetGames(
-                provider.sender(),
-                GAS_COST_SET_GAMES,
-                beginCell().storeAddress(game).endCell()
-            ),
-            API_TIMEOUT,
-            `Setting ${contractName} game address`
-        );
-        await sleep(TRANSACTION_WAIT_TIME);
-        console.log(`${contractName} game address set`);
-        return true;
+        // If we get here, all retries failed
+        throw lastError || new Error(`Failed to set ${contractName} games info after ${maxRetries} attempts`);
     } catch (error) {
-        console.error(`Error setting ${contractName} game address:`, (error as Error).message);
+        console.error(`Error setting ${contractName} games info:`, (error as Error).message);
         throw error;
     }
 }
@@ -410,7 +604,7 @@ export async function run(provider: NetworkProvider) {
             gameManager,
             'GameManager',
             gameManager.address,
-            async () => await gameManager.sendDeploy(provider.sender(), toNano('0.5'))
+            async () => await deployWithStateInit(provider, gameManager, toNano('1'))
         );
         
         deploymentData.gameManager = formatAddress(gameManager.address, isTestnet);
@@ -435,7 +629,7 @@ export async function run(provider: NetworkProvider) {
             game,
             'Game',
             game.address,
-            async () => await game.sendDeploy(provider.sender(), toNano('0.5'))
+            async () => await deployWithStateInit(provider, game, toNano('0.5'))
         );
         
         deploymentData.game = formatAddress(game.address, isTestnet);
@@ -464,7 +658,7 @@ export async function run(provider: NetworkProvider) {
             jettonMinter,
             'JettonMinter',
             jettonMinter.address,
-            async () => await jettonMinter.sendDeploy(provider.sender(), toNano('0.5'))
+            async () => await deployWithStateInit(provider, jettonMinter, toNano('0.5'))
         );
         
         deploymentData.jettonMinter = formatAddress(jettonMinter.address, isTestnet);
@@ -488,7 +682,7 @@ export async function run(provider: NetworkProvider) {
             ownerJettonWallet,
             'Owner JettonWallet',
             ownerJettonWallet.address,
-            async () => await ownerJettonWallet.sendDeploy(provider.sender(), toNano('0.5'))
+            async () => await deployWithStateInit(provider, ownerJettonWallet, toNano('0.5'))
         );
         
         deploymentData.ownerJettonWallet = formatAddress(ownerJettonWallet.address, isTestnet);
@@ -496,11 +690,11 @@ export async function run(provider: NetworkProvider) {
         console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet.nonBounceable);
         saveBuildFile(deploymentData, buildFilePath);
 
-        // Set jetton minter address in GameManager (with check)
-        await checkAndSetJettonMinter(provider, gameManager, jettonMinter.address, jettonWalletCode, 'GameManager');
+        // Deploy jetton in GameManager (with check)
+        await checkAndDeployJetton(provider, gameManager, jettonMinterCode, jettonWalletCode, jettonMinter.address, 'GameManager');
 
-        // Set game address in game manager (with check)
-        await checkAndSetGames(provider, gameManager, game.address, 'GameManager');
+        // Set games info in game manager (with check)
+        await checkAndSetGamesInfo(provider, gameManager, game.address, 'GameManager');
 
         // Verify configurations
         console.log('Verifying configurations...');
@@ -545,25 +739,25 @@ export async function run(provider: NetworkProvider) {
         }
         console.log('✓ GameManager jetton minter address verified');
 
-        // Retry getting game address with a small delay if needed
-        let games = await withTimeout(
-            gameManager.getGames(),
+        // Retry getting games info with a small delay if needed
+        let gamesInfo = await withTimeout(
+            gameManager.getGamesInfo(),
             API_TIMEOUT,
-            'Getting GameManager games'
+            'Getting GameManager games info'
         );
-        let gameAddress = games instanceof Cell ? games.beginParse().loadAddress() : null;
+        let gameAddress = gamesInfo?.active_game || null;
         let gameRetries = 5;
         while ((!gameAddress || !gameAddress.equals(game.address)) && gameRetries > 0) {
             console.log(`Waiting for game address to be set (${gameRetries} retries left)...`);
             console.log(`  Expected: ${game.address.toString()}`);
             console.log(`  Current: ${gameAddress?.toString() || 'null'}`);
             await sleep(TRANSACTION_WAIT_TIME);
-            games = await withTimeout(
-                gameManager.getGames(),
+            gamesInfo = await withTimeout(
+                gameManager.getGamesInfo(),
                 API_TIMEOUT,
-                'Getting GameManager games (retry)'
+                'Getting GameManager games info (retry)'
             );
-            gameAddress = games instanceof Cell ? games.beginParse().loadAddress() : null;
+            gameAddress = gamesInfo?.active_game || null;
             gameRetries--;
         }
         
@@ -655,7 +849,7 @@ export async function run(provider: NetworkProvider) {
             ownerShip,
             'Owner Ship',
             ownerShip.address,
-            async () => await ownerShip.sendDeploy(provider.sender(), toNano('0.5'))
+            async () => await deployWithStateInit(provider, ownerShip, toNano('0.5'))
         );
         
         deploymentData.ownerShip = formatAddress(ownerShip.address, isTestnet);
@@ -702,7 +896,7 @@ export async function run(provider: NetworkProvider) {
             shipStation,
             'Ship Station',
             shipStation.address,
-            async () => await shipStation.sendDeploy(provider.sender(), deployAmount)
+            async () => await deployWithStateInit(provider, shipStation, deployAmount)
         );
         
         deploymentData.ship_station = formatAddress(shipStation.address, isTestnet);
@@ -719,23 +913,36 @@ export async function run(provider: NetworkProvider) {
         console.log('Network:', network);
         console.log('Owner address (bounceable):', deploymentData.ownerAddress.bounceable);
         console.log('Owner address (non-bounceable):', deploymentData.ownerAddress.nonBounceable);
-        console.log('GameManager (bounceable):', deploymentData.gameManager!.bounceable);
-        console.log('GameManager (non-bounceable):', deploymentData.gameManager!.nonBounceable);
-        console.log('Game (bounceable):', deploymentData.game!.bounceable);
-        console.log('Game (non-bounceable):', deploymentData.game!.nonBounceable);
-        console.log('JettonMinter (bounceable):', deploymentData.jettonMinter!.bounceable);
-        console.log('JettonMinter (non-bounceable):', deploymentData.jettonMinter!.nonBounceable);
-        console.log('Owner JettonWallet (bounceable):', deploymentData.ownerJettonWallet!.bounceable);
-        console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet!.nonBounceable);
-        console.log('Owner Ship (bounceable):', deploymentData.ownerShip!.bounceable);
-        console.log('Owner Ship (non-bounceable):', deploymentData.ownerShip!.nonBounceable);
-        console.log('Ship Station (bounceable):', deploymentData.ship_station!.bounceable);
-        console.log('Ship Station (non-bounceable):', deploymentData.ship_station!.nonBounceable);
-        console.log('Owner jetton balance:', deploymentData.ownerJettonBalance);
+        if (deploymentData.gameManager) {
+            console.log('GameManager (bounceable):', deploymentData.gameManager.bounceable);
+            console.log('GameManager (non-bounceable):', deploymentData.gameManager.nonBounceable);
+        }
+        if (deploymentData.game) {
+            console.log('Game (bounceable):', deploymentData.game.bounceable);
+            console.log('Game (non-bounceable):', deploymentData.game.nonBounceable);
+        }
+        if (deploymentData.jettonMinter) {
+            console.log('JettonMinter (bounceable):', deploymentData.jettonMinter.bounceable);
+            console.log('JettonMinter (non-bounceable):', deploymentData.jettonMinter.nonBounceable);
+        }
+        if (deploymentData.ownerJettonWallet) {
+            console.log('Owner JettonWallet (bounceable):', deploymentData.ownerJettonWallet.bounceable);
+            console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet.nonBounceable);
+        }
+        if (deploymentData.ownerShip) {
+            console.log('Owner Ship (bounceable):', deploymentData.ownerShip.bounceable);
+            console.log('Owner Ship (non-bounceable):', deploymentData.ownerShip.nonBounceable);
+        }
+        if (deploymentData.ship_station) {
+            console.log('Ship Station (bounceable):', deploymentData.ship_station.bounceable);
+            console.log('Ship Station (non-bounceable):', deploymentData.ship_station.nonBounceable);
+        }
+        if (deploymentData.ownerJettonBalance) {
+            console.log('Owner jetton balance:', deploymentData.ownerJettonBalance);
+        }
         console.log(`\nBuild file saved to: ${buildFilePath}`);
+        console.log(`Default build file saved to: ${getDefaultBuildFilePath()}`);
         console.log('========================\n');
-        console.error(`Default build file saved to: ${getDefaultBuildFilePath()}`);
-        console.error('========================\n');
     } catch (error: any) {
         deploymentData.status = 'failed';
         deploymentData.error = error.message || String(error);

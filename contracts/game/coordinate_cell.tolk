@@ -65,8 +65,13 @@ fun onInternalMessage(in: InMessage) {
                 totalReward = ccStorage.jettonAmount
             } else {
                 // 
-                // 
-                totalReward = ccStorage.jettonAmount / 10;
+                // For Users to have minimum of 1 jetton
+                val smallAmount = ccStorage.jettonAmount / 10;
+                if (smallAmount < 1 && ccStorage.jettonAmount > 0) {
+                    totalReward = 1;
+                } else {
+                    totalReward = smallAmount;
+                }
             }
             if (moveData.ship_hp > ccStorage.hp && msg.mode != MoveMode.EXIT) {
                 result = UniqueResult.CONTINUE;

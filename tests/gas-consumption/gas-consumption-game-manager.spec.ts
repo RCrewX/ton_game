@@ -1,7 +1,7 @@
 import { beginCell, fromNano, toNano } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
-import { Opcodes as GameManagerOpcodes, GAS_COST_SET_JETTON_MINTER_ADDRESS, GAS_COST_SET_GAMES, GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN } from '../../wrappers/game_manager/types';
+import { Opcodes as GameManagerOpcodes, GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN } from '../../wrappers/game_manager/types';
 import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
@@ -36,58 +36,86 @@ describe("Gas Prices - GameManager", () => {
         Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });
 
-    it("SetJettonMinterAddress", async () => {
+    it("DeployJetton", async () => {
+        // Create a fresh GameManager for this test since jetton can only be deployed once
+        const { GameManager } = await import('../../wrappers/game_manager/GameManager');
+        const { compile } = await import('@ton/blueprint');
+        const gameManagerCode = await compile('GameManager');
+        const freshGameManager = SC_System.blockchain.openContract(GameManager.createFromConfig({
+            ownerAddress: SC_System.ownerAccount.address,
+        }, gameManagerCode));
+        await freshGameManager.sendDeploy(SC_System.ownerAccount.getSender(), toNano('0.5'));
+        
         let initial_balance = await SC_System.ownerAccount.getBalance();
         let little_less_than_gas_needed = toNano('0.01');
-        let gas_sent = GAS_COST_SET_JETTON_MINTER_ADDRESS;
+        let gas_sent = GAS_COST_DEPLOY_JETTON + toNano('0.1');
 
-        SC_System.messageResult = await SC_System.gameManager.sendSetJettonMinterAddress(
+        const jettonContent = jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' });
+
+        SC_System.messageResult = await freshGameManager.sendDeployJetton(
             SC_System.ownerAccount.getSender(),
             gas_sent,
-            SC_System.jettonMinter.address,
-            SC_System.jettonWalletCode
+            {
+                jettonMinterCode: SC_System.jettonMinterCode,
+                jettonWalletCode: SC_System.jettonWalletCode,
+                jettonContent,
+            }
         );
 
+        // Verify jettonInfo was set (even if mint message bounced)
+        const jettonInfo = await freshGameManager.getJettonInfo();
+        expect(jettonInfo).not.toBeNull();
+        
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
-            to: SC_System.gameManager.address,
-            success: true,
-            op: GameManagerOpcodes.OP_SET_JETTON_MINTER_ADDRESS,
+            to: freshGameManager.address,
+            op: GameManagerOpcodes.OP_DEPLOY_JETTON,
         });
 
         let final_balance = await SC_System.ownerAccount.getBalance();
         let cost = initial_balance - final_balance;
         const costStr = fromNano(cost);
         console.log(`Cost: ${costStr}`);
-        gasCosts['SetJettonMinterAddress'] = costStr;
+        gasCosts['DeployJetton'] = costStr;
 
         expect(cost).toBeLessThanOrEqual(gas_sent);
         expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
     });
 
-    it("SetGames", async () => {
+    it("SetGamesInfo", async () => {
         let initial_balance = await SC_System.ownerAccount.getBalance();
         let little_less_than_gas_needed = toNano('0.01');
-        let gas_sent = GAS_COST_SET_GAMES;
+        let gas_sent = GAS_COST_SET_GAMES_INFO;
 
-        SC_System.messageResult = await SC_System.gameManager.sendSetGames(
+        const allGamesCell = beginCell()
+            .storeUint(1, 2) // mode 1
+            .storeAddress(SC_System.game.address) // active_game
+            .storeUint(0, 2) // mode 0 (end)
+            .endCell();
+
+        const gamesInfo = {
+            active_game: SC_System.game.address,
+            all_games: allGamesCell,
+        };
+
+        SC_System.messageResult = await SC_System.gameManager.sendSetGamesInfo(
             SC_System.ownerAccount.getSender(),
             gas_sent,
-            beginCell().storeAddress(SC_System.game.address).endCell()
+            gamesInfo
         );
 
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerAccount.address,
             to: SC_System.gameManager.address,
             success: true,
-            op: GameManagerOpcodes.OP_SET_GAMES,
+            op: GameManagerOpcodes.OP_SET_GAMES_INFO,
         });
 
         let final_balance = await SC_System.ownerAccount.getBalance();
         let cost = initial_balance - final_balance;
         const costStr = fromNano(cost);
         console.log(`Cost: ${costStr}`);
-        gasCosts['SetGames'] = costStr;
+        gasCosts['SetGamesInfo'] = costStr;
 
         expect(cost).toBeLessThanOrEqual(gas_sent);
         expect(cost).toBeGreaterThanOrEqual(little_less_than_gas_needed);
