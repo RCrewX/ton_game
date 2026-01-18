@@ -1,8 +1,8 @@
 import { toNano } from '@ton/core';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
-import { MoveMode } from '../../wrappers/game/structs';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE } from '../../wrappers/game/types';
+import { MoveMode } from '../../wrappers/ton_race_game/structs';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE } from '../../wrappers/ton_race_game/types';
 import { Opcodes as GameManagerOpcodes } from '../../wrappers/game_manager/types';
 import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/jetton/JettonWallet';

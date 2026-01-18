@@ -1,10 +1,10 @@
 import { toNano } from '@ton/core';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
-import { MoveMode } from '../../wrappers/game/structs';
-import { CoordinateCell } from '../../wrappers/game/CoordinateCell';
-import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE, Opcodes } from '../../wrappers/game/types';
-import { Ship } from '../../wrappers/game/Ship';
+import { MoveMode } from '../../wrappers/ton_race_game/structs';
+import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
+import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE, Opcodes } from '../../wrappers/ton_race_game/types';
+import { Ship } from '../../wrappers/ton_race_game/Ship';
 
 describe('Coordinate Cell Rewards - Minimal Reward Logic', () => {
     let SC_System: ContractSystem;

@@ -1,9 +1,9 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from '../test_utils';
-import { Opcodes } from '../../wrappers/game/types';
+import { Opcodes } from '../../wrappers/ton_race_game/types';
 import { JettonMinter, jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
-import { CoordinateCell } from '../../wrappers/game/CoordinateCell';
+import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
 import * as fs from 'fs';
 import * as path from 'path';
 

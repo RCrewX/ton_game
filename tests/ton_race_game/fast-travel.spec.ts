@@ -1,9 +1,9 @@
 import { beginCell, toNano } from '@ton/core';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from '../test_utils';
-import { CoordinateCell } from '../../wrappers/game/CoordinateCell';
-import { Opcodes, GAS_COST_SEND_MOVE, JettonUsageMode } from '../../wrappers/game/types';
-import { MoveMode } from '../../wrappers/game/structs';
+import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
+import { Opcodes, GAS_COST_SEND_MOVE, JettonUsageMode } from '../../wrappers/ton_race_game/types';
+import { MoveMode } from '../../wrappers/ton_race_game/structs';
 
 describe('Fast Travel', () => {
     let SC_System: ContractSystem;

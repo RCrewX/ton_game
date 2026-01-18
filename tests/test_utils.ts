@@ -1,15 +1,15 @@
 import { compile } from "@ton/blueprint";
 import { Address, beginCell, Cell, toNano } from "@ton/core";
 import { Blockchain, SandboxContract, TreasuryContract } from "@ton/sandbox";
-import { Game } from "../wrappers/game/Game";
-import { Ship } from "../wrappers/game/Ship";
-import { CoordinateCell } from "../wrappers/game/CoordinateCell";
+import { Game } from "../wrappers/ton_race_game/Game";
+import { Ship } from "../wrappers/ton_race_game/Ship";
+import { CoordinateCell } from "../wrappers/ton_race_game/CoordinateCell";
 import { GameManager } from "../wrappers/game_manager/GameManager";
-import { MoveMode } from "../wrappers/game/structs";
+import { MoveMode } from "../wrappers/ton_race_game/structs";
 import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
 import { JettonWallet } from "../wrappers/jetton/JettonWallet";
 import { Opcodes, GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, GAS_COST_REDIRECT_MESSAGE, encodeGamesInfo } from "../wrappers/game_manager/types";
-import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, JettonUsageMode, GAS_COST_SEND_MOVE, Opcodes as GameOpcodes } from "../wrappers/game/types";
+import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, JettonUsageMode, GAS_COST_SEND_MOVE, Opcodes as GameOpcodes } from "../wrappers/ton_race_game/types";
 
 export type ContractSystem = {
     blockchain: Blockchain;

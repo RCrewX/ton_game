@@ -1,8 +1,8 @@
 import { toNano, beginCell, Address, Cell, SendMode } from '@ton/core';
 import { compile, NetworkProvider } from '@ton/blueprint';
 import { GameManager } from '../wrappers/game_manager/GameManager';
-import { Game } from '../wrappers/game/Game';
-import { Ship } from '../wrappers/game/Ship';
+import { Game } from '../wrappers/ton_race_game/Game';
+import { Ship } from '../wrappers/ton_race_game/Ship';
 import { JettonMinter, jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
@@ -15,7 +15,7 @@ import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { GAS_COST_MANUAL_DEPLOY } from '../wrappers/subcontract/types';
-import { BASIC_STORAGE_TAX } from '../wrappers/game/types';
+import { BASIC_STORAGE_TAX } from '../wrappers/ton_race_game/types';
 
 // Load environment variables
 dotenv.config();

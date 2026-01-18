@@ -3,7 +3,7 @@ import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Subcontract, subcontractConfigToCell } from '../../wrappers/subcontract/Subcontract';
-import { BASIC_STORAGE_TAX } from '../../wrappers/game/types';
+import { BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
 
 describe('Subcontract - Withdraw Operations', () => {
     let SC_System: ContractSystem;

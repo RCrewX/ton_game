@@ -1,8 +1,8 @@
 import { Address } from '@ton/core';
 import { NetworkProvider } from '@ton/blueprint';
-import { Ship } from '../wrappers/game/Ship';
-import { MoveMode } from '../wrappers/game/structs';
-import { GAS_COST_SEND_MOVE } from '../wrappers/game/types';
+import { Ship } from '../wrappers/ton_race_game/Ship';
+import { MoveMode } from '../wrappers/ton_race_game/structs';
+import { GAS_COST_SEND_MOVE } from '../wrappers/ton_race_game/types';
 import * as dotenv from 'dotenv';
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';

@@ -5,9 +5,9 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { Subcontract, subcontractConfigToCell } from '../wrappers/subcontract/Subcontract';
 import { encodeExternalInner, encodeExternalEnvelope, Forward, ForwardWithInit, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT } from '../wrappers/subcontract/types';
-import { MoveMode } from '../wrappers/game/structs';
-import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE } from '../wrappers/game/types';
-import { Ship, shipConfigToCell } from '../wrappers/game/Ship';
+import { MoveMode } from '../wrappers/ton_race_game/structs';
+import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE } from '../wrappers/ton_race_game/types';
+import { Ship, shipConfigToCell } from '../wrappers/ton_race_game/Ship';
 
 type DeploymentData = {
     ownerAddress: { bounceable: string; nonBounceable: string };

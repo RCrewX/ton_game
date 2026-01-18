@@ -6,7 +6,7 @@ export const BASIC_SHIP_HP: bigint = 100n;
 export const MINT_TON_AMOUNT: bigint = toNano("0.2");
 
 // Gas costs from gas consumption tests (in TON)
-// These match the constants in contracts/game/static/constants.tolk
+// These match the constants in contracts/ton_race_game/static/constants.tolk
 export const GAS_COST_REQUEST_SHIP_ADDRESS = toNano("0.015"); // From gas consumption test
 export const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS = toNano("0.015"); // From gas consumption test
 export const GAS_COST_REQUEST_TO_MOVE = toNano("0.06"); // 0.0589864 + buffer

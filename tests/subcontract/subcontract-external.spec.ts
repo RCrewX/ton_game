@@ -5,7 +5,7 @@ import { keyPairFromSecretKey } from '@ton/crypto';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Subcontract } from '../../wrappers/subcontract/Subcontract';
 import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward } from '../../wrappers/subcontract/types';
-import { BASIC_STORAGE_TAX } from '../../wrappers/game/types';
+import { BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
 
 describe('Subcontract - External Messages', () => {
     let SC_System: ContractSystem;

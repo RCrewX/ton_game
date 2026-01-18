@@ -1,8 +1,8 @@
 import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, GAS_COST_FORWARD_MINT_REQUEST, MINT_TON_AMOUNT, BASIC_STORAGE_TAX } from '../../wrappers/game/types';
-import { MoveMode } from '../../wrappers/game/structs';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_REQUEST_MINT, GAS_COST_FORWARD_MINT_REQUEST, MINT_TON_AMOUNT, BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
+import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import * as fs from 'fs';
 import * as path from 'path';
 
