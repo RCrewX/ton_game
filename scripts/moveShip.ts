@@ -4,47 +4,38 @@ import { Ship } from '../wrappers/ton_race_game/Ship';
 import { MoveMode } from '../wrappers/ton_race_game/structs';
 import { GAS_COST_SEND_MOVE } from '../wrappers/ton_race_game/types';
 import * as dotenv from 'dotenv';
-import { readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import {
+    Network,
+    NetworkDeploymentData,
+    readNetworkDeploymentData,
+    getDeploymentLatestPath,
+} from '../lib/buildOutput';
 
 // Load environment variables
 dotenv.config();
 
-interface DeploymentData {
-    network: 'testnet' | 'mainnet';
-    ownerAddress?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    ownerShip?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    game?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-}
-
-function getLatestDeploymentFile(): string {
-    const buildDir = join(process.cwd(), 'build');
-    const files = readdirSync(buildDir)
-        .filter(f => f.startsWith('deployment-') && f.endsWith('.json'))
-        .sort()
-        .reverse();
-    
-    if (files.length === 0) {
-        throw new Error('No deployment files found in build/ directory. Please deploy the system first.');
+function loadDeploymentData(network: Network): { data: NetworkDeploymentData; network: Network } {
+    const data = readNetworkDeploymentData(network);
+    if (!data) {
+        throw new Error(`No deployment found for ${network}. Please deploy the system first.`);
     }
     
-    return join(buildDir, files[0]);
-}
-
-function loadDeploymentData(): DeploymentData {
-    const deploymentFile = getLatestDeploymentFile();
-    console.log(`Loading deployment data from: ${deploymentFile}`);
-    const data = JSON.parse(readFileSync(deploymentFile, 'utf-8')) as DeploymentData;
-    return data;
+    // Check deployment status
+    if (data.status === 'in_progress') {
+        throw new Error(`Deployment is still in progress for ${network}. Please wait for deployment to complete.`);
+    }
+    
+    if (data.status === 'failed' || !data.deployed) {
+        const errorMsg = data.error || 'Unknown error';
+        throw new Error(
+            `Deployment failed for ${network}. Please fix and redeploy.\n` +
+            `Error: ${errorMsg}`
+        );
+    }
+    
+    console.log(`Loading deployment data from: ${getDeploymentLatestPath()}`);
+    console.log(`Network: ${network}`);
+    return { data, network };
 }
 
 function parseDirection(): MoveMode {
@@ -222,8 +213,21 @@ export async function run(provider: NetworkProvider) {
     console.log(`Number of moves: ${moveCount}`);
     console.log('==========================\n');
 
+    // Determine network from provider
+    const providerAny = provider as any;
+    const networkStr = 
+        providerAny.network?.() || 
+        providerAny.api?.endpoint || 
+        providerAny.api?.baseURL ||
+        process.env.TON_NETWORK ||
+        '';
+    const networkLower = networkStr.toLowerCase();
+    const network: Network = (networkLower.includes('testnet') || networkLower.includes('test') || networkLower.includes('sandbox'))
+        ? 'testnet'
+        : 'mainnet';
+
     // Load deployment data
-    const deploymentData = loadDeploymentData();
+    const { data: deploymentData } = loadDeploymentData(network);
 
     // Log sender (wallet) address to ensure it matches deployment owner
     const senderAddress = provider.sender().address;
@@ -236,14 +240,15 @@ export async function run(provider: NetworkProvider) {
         }
     }
 
-    if (!deploymentData.ownerShip) {
+    const ownerShipAddress = deploymentData.games?.ton_race_game?.ownerShip;
+    if (!ownerShipAddress) {
         throw new Error('Owner ship address not found in deployment data');
     }
 
     // Get ship address (use bounceable for contracts)
-    const shipAddress = Address.parse(deploymentData.ownerShip.bounceable);
+    const shipAddress = Address.parse(ownerShipAddress.bounceable);
     console.log(`Ship address (bounceable): ${shipAddress.toString()}`);
-    console.log(`Network from deployment: ${deploymentData.network}\n`);
+    console.log(`Network: ${network}\n`);
 
     // Open ship contract
     const ship = provider.open(Ship.createFromAddress(shipAddress));

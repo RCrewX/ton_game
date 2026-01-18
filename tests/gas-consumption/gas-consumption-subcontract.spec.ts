@@ -7,8 +7,7 @@ import { encodeRequestToMove, Opcodes } from '../../wrappers/ton_race_game/types
 import { Ship, shipConfigToCell } from '../../wrappers/ton_race_game/Ship';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_MOVE_SHIP_TO_CC, BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
-import * as fs from 'fs';
-import * as path from 'path';
+import { writeGasCosts } from '../../lib/buildOutput';
 
 describe("Gas Prices - Subcontract", () => {
     let SC_System: ContractSystem;
@@ -24,16 +23,7 @@ describe("Gas Prices - Subcontract", () => {
     });
 
     afterAll(() => {
-        const timestamp = new Date().toISOString();
-        const buildData = { timestamp, gasCosts };
-        const buildDir = path.join(process.cwd(), 'build');
-        if (!fs.existsSync(buildDir)) {
-            fs.mkdirSync(buildDir, { recursive: true });
-        }
-        const filename = `gas-costs-subcontract-${Date.now()}.json`;
-        const filepath = path.join(buildDir, filename);
-        fs.writeFileSync(filepath, JSON.stringify(buildData, null, 2));
-        console.log(`\n✅ Gas costs written to ${filepath}`);
+        writeGasCosts('subcontract', gasCosts);
         // Clear gasCosts to free memory
         Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });

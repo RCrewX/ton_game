@@ -2,6 +2,8 @@ node_modules
 temp
 build
 build_info
+deployment_info
+gas_costs
 dist
 .DS_Store
 package.ts

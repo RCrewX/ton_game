@@ -4,8 +4,7 @@ import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonU
 import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, BASIC_STORAGE_TAX, GAS_COST_REQUEST_MINT, GAS_COST_REQUEST_TO_MOVE, JettonUsageMode } from '../../wrappers/ton_race_game/types';
 import { Opcodes as GameManagerOpcodes } from '../../wrappers/game_manager/types';
 import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
-import * as fs from 'fs';
-import * as path from 'path';
+import { writeGasCosts } from '../../lib/buildOutput';
 import { MoveMode } from "../../wrappers/ton_race_game/structs";
 
 describe("Gas Prices - Game Upgrade", () => {
@@ -22,16 +21,7 @@ describe("Gas Prices - Game Upgrade", () => {
     });
 
     afterAll(() => {
-        const timestamp = new Date().toISOString();
-        const buildData = { timestamp, gasCosts };
-        const buildDir = path.join(process.cwd(), 'build');
-        if (!fs.existsSync(buildDir)) {
-            fs.mkdirSync(buildDir, { recursive: true });
-        }
-        const filename = `gas-costs-game-upgrade-${Date.now()}.json`;
-        const filepath = path.join(buildDir, filename);
-        fs.writeFileSync(filepath, JSON.stringify(buildData, null, 2));
-        console.log(`\n✅ Gas costs written to ${filepath}`);
+        writeGasCosts('game-upgrade', gasCosts);
         // Clear gasCosts to free memory
         Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });

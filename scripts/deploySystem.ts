@@ -3,6 +3,7 @@ import { compile, NetworkProvider } from '@ton/blueprint';
 import { GameManager } from '../wrappers/game_manager/GameManager';
 import { Game } from '../wrappers/ton_race_game/Game';
 import { Ship } from '../wrappers/ton_race_game/Ship';
+import { SoullessSlotMachine } from '../wrappers/soulless_slot_machine/SoullessSlotMachine';
 import { JettonMinter, jettonContentToCell } from '../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/jetton/JettonWallet';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
@@ -11,11 +12,16 @@ import * as dotenv from 'dotenv';
 import { WalletContractV4, WalletContractV5R1 } from '@ton/ton';
 import { keyPairFromSecretKey } from '@ton/crypto';
 import { WalletIdV5R1 } from '@ton/ton/dist/wallets/WalletContractV5R1';
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { createHash } from 'crypto';
 import { GAS_COST_MANUAL_DEPLOY } from '../wrappers/subcontract/types';
 import { BASIC_STORAGE_TAX } from '../wrappers/ton_race_game/types';
+import {
+    Network,
+    NetworkDeploymentData,
+    formatAddress,
+    getContractCodeData,
+    writeDeploymentData,
+    readDeploymentData,
+} from '../lib/buildOutput';
 
 // Load environment variables
 dotenv.config();
@@ -27,125 +33,7 @@ const VERIFICATION_TIMEOUT = 120000; // 120 seconds for verification after timeo
 const TRANSACTION_WAIT_TIME = 5000; // 5 seconds between transactions
 const RETRY_DELAY = 10000; // 10 seconds base delay before retry (exponential backoff)
 
-interface DeploymentData {
-    timestamp: string;
-    network: 'testnet' | 'mainnet';
-    ownerAddress: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    gameManager?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    game?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    jettonMinter?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    ownerJettonWallet?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    ownerShip?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    ship_station?: {
-        bounceable: string;
-        nonBounceable: string;
-    };
-    ownerJettonBalance?: string;
-    contractCodes?: {
-        gameManager: {
-            hex: string;
-            hash: string;
-            hashBase64: string;
-        };
-        game: {
-            hex: string;
-            hash: string;
-            hashBase64: string;
-        };
-        ship: {
-            hex: string;
-            hash: string;
-            hashBase64: string;
-        };
-        coordinateCell: {
-            hex: string;
-            hash: string;
-            hashBase64: string;
-        };
-        jettonWallet: {
-            hex: string;
-            hash: string;
-            hashBase64: string;
-        };
-        jettonMinter: {
-            hex: string;
-            hash: string;
-            hashBase64: string;
-        };
-        subcontract: {
-            hex: string;
-            hash: string;
-            hashBase64: string;
-        };
-    };
-    status: 'in_progress' | 'completed' | 'failed';
-    error?: string;
-}
-
-function formatAddress(address: Address, isTestnet: boolean): { bounceable: string; nonBounceable: string } {
-    return {
-        bounceable: address.toString({ 
-            bounceable: true, 
-            urlSafe: true,
-            testOnly: isTestnet 
-        }),
-        nonBounceable: address.toString({ 
-            bounceable: false, 
-            urlSafe: true,
-            testOnly: isTestnet 
-        })
-    };
-}
-
-function saveBuildFile(data: DeploymentData, filePath: string) {
-    writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-function getContractCodeData(code: Cell): { hex: string; hash: string; hashBase64: string } {
-    const boc = code.toBoc();
-    const hex = boc.toString('hex');
-    const hash = createHash('sha256').update(boc).digest('hex');
-    const hashBase64 = createHash('sha256').update(boc).digest('base64');
-    return { hex, hash, hashBase64 };
-}
-
-function getBuildFilePath(network: 'testnet' | 'mainnet'): string {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `deployment-${network}-${timestamp}.json`;
-    const buildDir = join(process.cwd(), 'build_info');
-    if (!existsSync(buildDir)) {
-        mkdirSync(buildDir, { recursive: true });
-    }
-    return join(buildDir, filename);
-}
-
-function getDefaultBuildFilePath(): string {
-    const buildDir = join(process.cwd(), 'build_info');
-    if (!existsSync(buildDir)) {
-        mkdirSync(buildDir, { recursive: true });
-    }
-    return join(buildDir, 'deployment.json');
-}
-
-function getNetworkFromProvider(provider: NetworkProvider): 'testnet' | 'mainnet' {
+function getNetworkFromProvider(provider: NetworkProvider): Network {
     // Try to detect network from provider
     // Check various possible properties
     const providerAny = provider as any;
@@ -467,7 +355,8 @@ async function checkAndDeployJetton(
 async function checkAndSetGamesInfo(
     provider: NetworkProvider,
     gameManager: any,
-    game: Address,
+    activeGame: Address,
+    allGames: Address[],
     contractName: string
 ): Promise<boolean> {
     try {
@@ -477,20 +366,26 @@ async function checkAndSetGamesInfo(
             `Getting ${contractName} games info`
         ) as { active_game: Address; all_games: Cell } | null;
         
-        if (gamesInfo?.active_game && gamesInfo.active_game.equals(game)) {
-            console.log(`${contractName} game address is already set`);
+        if (gamesInfo?.active_game && gamesInfo.active_game.equals(activeGame)) {
+            console.log(`${contractName} active game address is already set`);
             return false; // Already set, no need to send transaction
         }
         
-        console.log(`Setting ${contractName} games info...`);
-        const allGamesCell = beginCell()
-            .storeUint(1, 2) // mode 1
-            .storeAddress(game) // active_game
-            .storeUint(0, 2) // mode 0 (end)
-            .endCell();
+        console.log(`Setting ${contractName} games info with ${allGames.length} games...`);
+        
+        // Build all_games cell: [mode1][address][mode1][address]...[mode0]
+        // First game must be active_game
+        let allGamesBuilder = beginCell();
+        for (const gameAddr of allGames) {
+            allGamesBuilder = allGamesBuilder
+                .storeUint(1, 2) // mode 1 = address follows
+                .storeAddress(gameAddr);
+        }
+        allGamesBuilder = allGamesBuilder.storeUint(0, 2); // mode 0 = end
+        const allGamesCell = allGamesBuilder.endCell();
         
         const gamesInfoData = {
-            active_game: game,
+            active_game: activeGame,
             all_games: allGamesCell,
         };
         
@@ -513,7 +408,7 @@ async function checkAndSetGamesInfo(
                     `Setting ${contractName} games info (attempt ${attempt}/${maxRetries})`
                 );
                 await sleep(TRANSACTION_WAIT_TIME);
-                console.log(`${contractName} games info set`);
+                console.log(`${contractName} games info set with ${allGames.length} games`);
                 return true;
             } catch (error) {
                 lastError = error as Error;
@@ -544,15 +439,14 @@ async function checkAndSetGamesInfo(
 
 export async function run(provider: NetworkProvider) {
     const network = getNetworkFromProvider(provider);
-    const buildFilePath = getBuildFilePath(network);
     const isTestnet = network === 'testnet';
 
-    // Initialize deployment data
-    const deploymentData: DeploymentData = {
+    // Initialize deployment data for this network
+    const deploymentData: NetworkDeploymentData = {
+        deployed: false,
         timestamp: new Date().toISOString(),
-        network,
         ownerAddress: { bounceable: '', nonBounceable: '' },
-        status: 'in_progress'
+        status: 'in_progress',
     };
 
     try {
@@ -563,7 +457,9 @@ export async function run(provider: NetworkProvider) {
         console.log('Owner address (non-bounceable):', deploymentData.ownerAddress.nonBounceable);
         console.log('Using native blueprint provider sender');
         console.log(`Network: ${network}`);
-        saveBuildFile(deploymentData, buildFilePath);
+        
+        // Save initial progress
+        writeDeploymentData(network, deploymentData);
 
         // Compile all contracts
         console.log('Compiling contracts...');
@@ -571,6 +467,7 @@ export async function run(provider: NetworkProvider) {
         const gameCode = await compile('Game');
         const shipCode = await compile('Ship');
         const coordinateCellCode = await compile('CoordinateCell');
+        const ssmCode = await compile('SoullessSlotMachine');
         const jettonWalletCode = await compile('JettonWallet');
         const jettonMinterCode = await compile('JettonMinter');
         const subcontractCode = await compile('Subcontract');
@@ -579,14 +476,30 @@ export async function run(provider: NetworkProvider) {
         // Store contract codes with full data (hex, hash, hashBase64)
         deploymentData.contractCodes = {
             gameManager: getContractCodeData(gameManagerCode),
-            game: getContractCodeData(gameCode),
-            ship: getContractCodeData(shipCode),
-            coordinateCell: getContractCodeData(coordinateCellCode),
             jettonWallet: getContractCodeData(jettonWalletCode),
             jettonMinter: getContractCodeData(jettonMinterCode),
             subcontract: getContractCodeData(subcontractCode),
         };
-        saveBuildFile(deploymentData, buildFilePath);
+        
+        // Initialize games section
+        deploymentData.games = {
+            ton_race_game: {
+                game: { bounceable: '', nonBounceable: '' },
+                contractCodes: {
+                    game: getContractCodeData(gameCode),
+                    ship: getContractCodeData(shipCode),
+                    coordinateCell: getContractCodeData(coordinateCellCode),
+                },
+            },
+            soulless_slot_machine: {
+                ssm: { bounceable: '', nonBounceable: '' },
+                contractCodes: {
+                    soullessSlotMachine: getContractCodeData(ssmCode),
+                },
+            },
+        };
+        
+        writeDeploymentData(network, deploymentData);
         console.log('Contract codes saved to deployment data');
 
         // Deploy GameManager first
@@ -610,7 +523,7 @@ export async function run(provider: NetworkProvider) {
         deploymentData.gameManager = formatAddress(gameManager.address, isTestnet);
         console.log('GameManager (bounceable):', deploymentData.gameManager.bounceable);
         console.log('GameManager (non-bounceable):', deploymentData.gameManager.nonBounceable);
-        saveBuildFile(deploymentData, buildFilePath);
+        writeDeploymentData(network, deploymentData);
 
         // Deploy Game with GameManager as manager
         const game = provider.open(
@@ -627,15 +540,38 @@ export async function run(provider: NetworkProvider) {
         await checkAndDeploy(
             provider,
             game,
-            'Game',
+            'TON Race Game',
             game.address,
             async () => await deployWithStateInit(provider, game, toNano('0.5'))
         );
         
-        deploymentData.game = formatAddress(game.address, isTestnet);
-        console.log('Game (bounceable):', deploymentData.game.bounceable);
-        console.log('Game (non-bounceable):', deploymentData.game.nonBounceable);
-        saveBuildFile(deploymentData, buildFilePath);
+        deploymentData.games!.ton_race_game!.game = formatAddress(game.address, isTestnet);
+        console.log('TON Race Game (bounceable):', deploymentData.games!.ton_race_game!.game.bounceable);
+        console.log('TON Race Game (non-bounceable):', deploymentData.games!.ton_race_game!.game.nonBounceable);
+        writeDeploymentData(network, deploymentData);
+
+        // Deploy SoullessSlotMachine with GameManager as owner
+        const ssm = provider.open(
+            SoullessSlotMachine.createFromConfig(
+                {
+                    ownerAddress: gameManager.address,
+                },
+                ssmCode
+            )
+        );
+
+        await checkAndDeploy(
+            provider,
+            ssm,
+            'Soulless Slot Machine',
+            ssm.address,
+            async () => await deployWithStateInit(provider, ssm, toNano('0.5'))
+        );
+        
+        deploymentData.games!.soulless_slot_machine!.ssm = formatAddress(ssm.address, isTestnet);
+        console.log('Soulless Slot Machine (bounceable):', deploymentData.games!.soulless_slot_machine!.ssm.bounceable);
+        console.log('Soulless Slot Machine (non-bounceable):', deploymentData.games!.soulless_slot_machine!.ssm.nonBounceable);
+        writeDeploymentData(network, deploymentData);
 
         // Deploy JettonMinter
         // Get jetton content URI from .env or use default
@@ -664,7 +600,7 @@ export async function run(provider: NetworkProvider) {
         deploymentData.jettonMinter = formatAddress(jettonMinter.address, isTestnet);
         console.log('JettonMinter (bounceable):', deploymentData.jettonMinter.bounceable);
         console.log('JettonMinter (non-bounceable):', deploymentData.jettonMinter.nonBounceable);
-        saveBuildFile(deploymentData, buildFilePath);
+        writeDeploymentData(network, deploymentData);
 
         // Deploy owner's JettonWallet
         const ownerJettonWallet = provider.open(
@@ -688,13 +624,13 @@ export async function run(provider: NetworkProvider) {
         deploymentData.ownerJettonWallet = formatAddress(ownerJettonWallet.address, isTestnet);
         console.log('Owner JettonWallet (bounceable):', deploymentData.ownerJettonWallet.bounceable);
         console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet.nonBounceable);
-        saveBuildFile(deploymentData, buildFilePath);
+        writeDeploymentData(network, deploymentData);
 
         // Deploy jetton in GameManager (with check)
         await checkAndDeployJetton(provider, gameManager, jettonMinterCode, jettonWalletCode, jettonMinter.address, 'GameManager');
 
-        // Set games info in game manager (with check)
-        await checkAndSetGamesInfo(provider, gameManager, game.address, 'GameManager');
+        // Set games info in game manager (with check) - TON Race Game is active, SSM is second
+        await checkAndSetGamesInfo(provider, gameManager, game.address, [game.address, ssm.address], 'GameManager');
 
         // Verify configurations
         console.log('Verifying configurations...');
@@ -830,7 +766,7 @@ export async function run(provider: NetworkProvider) {
         // Save final balance
         deploymentData.ownerJettonBalance = userBalance.toString();
         console.log('Owner jetton balance:', userBalance.toString());
-        saveBuildFile(deploymentData, buildFilePath);
+        writeDeploymentData(network, deploymentData);
 
         // Deploy Ship
         const ownerShip = provider.open(
@@ -852,10 +788,10 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, ownerShip, toNano('0.5'))
         );
         
-        deploymentData.ownerShip = formatAddress(ownerShip.address, isTestnet);
-        console.log('Owner Ship (bounceable):', deploymentData.ownerShip.bounceable);
-        console.log('Owner Ship (non-bounceable):', deploymentData.ownerShip.nonBounceable);
-        saveBuildFile(deploymentData, buildFilePath);
+        deploymentData.games!.ton_race_game!.ownerShip = formatAddress(ownerShip.address, isTestnet);
+        console.log('Owner Ship (bounceable):', deploymentData.games!.ton_race_game!.ownerShip.bounceable);
+        console.log('Owner Ship (non-bounceable):', deploymentData.games!.ton_race_game!.ownerShip.nonBounceable);
+        writeDeploymentData(network, deploymentData);
 
         // Deploy Ship Station (Subcontract with id from --id parameter, default 1)
         const shipStationId = parseId();
@@ -871,25 +807,8 @@ export async function run(provider: NetworkProvider) {
             )
         );
         console.log('Ship Station Calculated Address:', shipStation.address.toString());
-        // // Pop-up ship station like user does
 
-        // const popUpAmount = toNano('1');
-        // await withTimeout(
-        //     provider.sender().send({
-        //         to: shipStation.address,
-        //         value: popUpAmount,
-        //         body: beginCell().endCell(),
-        //         bounce: false,
-        //         sendMode: SendMode.PAY_GAS_SEPARATELY,
-        //     }),
-        //     API_TIMEOUT,
-        //     'Popping up ship station'
-        // );
-        // console.log('Ship station popped up successfully');
-        // await sleep(TRANSACTION_WAIT_TIME);
-        // Deploy ship station like user does
-
-        // Here we use non user way
+        // Deploy ship station
         const deployAmount = (GAS_COST_MANUAL_DEPLOY + BASIC_STORAGE_TAX) * 2n;
         await checkAndDeploy(
             provider,
@@ -902,24 +821,27 @@ export async function run(provider: NetworkProvider) {
         deploymentData.ship_station = formatAddress(shipStation.address, isTestnet);
         console.log('Ship Station (bounceable):', deploymentData.ship_station.bounceable);
         console.log('Ship Station (non-bounceable):', deploymentData.ship_station.nonBounceable);
-        saveBuildFile(deploymentData, buildFilePath);
 
+        // Mark deployment as completed
         deploymentData.status = 'completed';
-        saveBuildFile(deploymentData, buildFilePath);
-        saveBuildFile(deploymentData, getDefaultBuildFilePath());
-        
+        deploymentData.deployed = true;
+        writeDeploymentData(network, deploymentData);
         
         console.log('\n=== Deployment Summary ===');
         console.log('Network:', network);
-        console.log('Owner address (bounceable):', deploymentData.ownerAddress.bounceable);
-        console.log('Owner address (non-bounceable):', deploymentData.ownerAddress.nonBounceable);
+        console.log('Owner address (bounceable):', deploymentData.ownerAddress?.bounceable);
+        console.log('Owner address (non-bounceable):', deploymentData.ownerAddress?.nonBounceable);
         if (deploymentData.gameManager) {
             console.log('GameManager (bounceable):', deploymentData.gameManager.bounceable);
             console.log('GameManager (non-bounceable):', deploymentData.gameManager.nonBounceable);
         }
-        if (deploymentData.game) {
-            console.log('Game (bounceable):', deploymentData.game.bounceable);
-            console.log('Game (non-bounceable):', deploymentData.game.nonBounceable);
+        if (deploymentData.games?.ton_race_game?.game) {
+            console.log('TON Race Game (bounceable):', deploymentData.games.ton_race_game.game.bounceable);
+            console.log('TON Race Game (non-bounceable):', deploymentData.games.ton_race_game.game.nonBounceable);
+        }
+        if (deploymentData.games?.soulless_slot_machine?.ssm) {
+            console.log('Soulless Slot Machine (bounceable):', deploymentData.games.soulless_slot_machine.ssm.bounceable);
+            console.log('Soulless Slot Machine (non-bounceable):', deploymentData.games.soulless_slot_machine.ssm.nonBounceable);
         }
         if (deploymentData.jettonMinter) {
             console.log('JettonMinter (bounceable):', deploymentData.jettonMinter.bounceable);
@@ -929,9 +851,9 @@ export async function run(provider: NetworkProvider) {
             console.log('Owner JettonWallet (bounceable):', deploymentData.ownerJettonWallet.bounceable);
             console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet.nonBounceable);
         }
-        if (deploymentData.ownerShip) {
-            console.log('Owner Ship (bounceable):', deploymentData.ownerShip.bounceable);
-            console.log('Owner Ship (non-bounceable):', deploymentData.ownerShip.nonBounceable);
+        if (deploymentData.games?.ton_race_game?.ownerShip) {
+            console.log('Owner Ship (bounceable):', deploymentData.games.ton_race_game.ownerShip.bounceable);
+            console.log('Owner Ship (non-bounceable):', deploymentData.games.ton_race_game.ownerShip.nonBounceable);
         }
         if (deploymentData.ship_station) {
             console.log('Ship Station (bounceable):', deploymentData.ship_station.bounceable);
@@ -940,18 +862,16 @@ export async function run(provider: NetworkProvider) {
         if (deploymentData.ownerJettonBalance) {
             console.log('Owner jetton balance:', deploymentData.ownerJettonBalance);
         }
-        console.log(`\nBuild file saved to: ${buildFilePath}`);
-        console.log(`Default build file saved to: ${getDefaultBuildFilePath()}`);
+        console.log('\nDeployment info saved to: deployment_info/deployment_latest.json');
         console.log('========================\n');
     } catch (error: any) {
         deploymentData.status = 'failed';
         deploymentData.error = error.message || String(error);
-        saveBuildFile(deploymentData, buildFilePath);
-        saveBuildFile(deploymentData, getDefaultBuildFilePath());
+        deploymentData.deployed = false;
+        writeDeploymentData(network, deploymentData);
         console.error('\n=== Deployment Failed ===');
         console.error('Error:', error.message || error);
-        console.error(`Build file saved to: ${buildFilePath}`);
-        console.error(`Default build file saved to: ${getDefaultBuildFilePath()}`);
+        console.error('Deployment info saved to: deployment_info/deployment_latest.json');
         console.error('========================\n');
         throw error;
     }

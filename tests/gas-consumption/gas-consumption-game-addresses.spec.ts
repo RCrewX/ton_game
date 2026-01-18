@@ -2,8 +2,7 @@ import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../../wrappers/ton_race_game/types';
-import * as fs from 'fs';
-import * as path from 'path';
+import { writeGasCosts } from '../../lib/buildOutput';
 
 describe("Gas Prices - Game Address Requests", () => {
     let SC_System: ContractSystem;
@@ -19,16 +18,7 @@ describe("Gas Prices - Game Address Requests", () => {
     });
 
     afterAll(() => {
-        const timestamp = new Date().toISOString();
-        const buildData = { timestamp, gasCosts };
-        const buildDir = path.join(process.cwd(), 'build');
-        if (!fs.existsSync(buildDir)) {
-            fs.mkdirSync(buildDir, { recursive: true });
-        }
-        const filename = `gas-costs-game-addresses-${Date.now()}.json`;
-        const filepath = path.join(buildDir, filename);
-        fs.writeFileSync(filepath, JSON.stringify(buildData, null, 2));
-        console.log(`\n✅ Gas costs written to ${filepath}`);
+        writeGasCosts('game-addresses', gasCosts);
         // Clear gasCosts to free memory
         Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });

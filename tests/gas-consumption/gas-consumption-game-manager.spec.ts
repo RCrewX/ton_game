@@ -5,8 +5,7 @@ import { Opcodes as GameManagerOpcodes, GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAM
 import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
 import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
-import * as fs from 'fs';
-import * as path from 'path';
+import { writeGasCosts } from '../../lib/buildOutput';
 
 describe("Gas Prices - GameManager", () => {
     let SC_System: ContractSystem;
@@ -22,16 +21,7 @@ describe("Gas Prices - GameManager", () => {
     });
 
     afterAll(() => {
-        const timestamp = new Date().toISOString();
-        const buildData = { timestamp, gasCosts };
-        const buildDir = path.join(process.cwd(), 'build');
-        if (!fs.existsSync(buildDir)) {
-            fs.mkdirSync(buildDir, { recursive: true });
-        }
-        const filename = `gas-costs-game-manager-${Date.now()}.json`;
-        const filepath = path.join(buildDir, filename);
-        fs.writeFileSync(filepath, JSON.stringify(buildData, null, 2));
-        console.log(`\n✅ Gas costs written to ${filepath}`);
+        writeGasCosts('game-manager', gasCosts);
         // Clear gasCosts to free memory
         Object.keys(gasCosts).forEach(key => delete gasCosts[key]);
     });

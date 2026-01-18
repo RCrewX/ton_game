@@ -1,71 +1,23 @@
 import { Address, toNano, ContractProvider, Cell, beginCell, contractAddress, fromNano, SendMode } from '@ton/core';
 import { keyPairFromSecretKey, sign } from '@ton/crypto';
 import { NetworkProvider, compile } from '@ton/blueprint';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
 import { Subcontract, subcontractConfigToCell } from '../wrappers/subcontract/Subcontract';
 import { encodeExternalInner, encodeExternalEnvelope, Forward, ForwardWithInit, GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT } from '../wrappers/subcontract/types';
 import { MoveMode } from '../wrappers/ton_race_game/structs';
 import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE } from '../wrappers/ton_race_game/types';
 import { Ship, shipConfigToCell } from '../wrappers/ton_race_game/Ship';
-
-type DeploymentData = {
-    ownerAddress: { bounceable: string; nonBounceable: string };
-    game?: { bounceable: string; nonBounceable: string };
-    ship_station?: { bounceable: string; nonBounceable: string };
-    network?: 'testnet' | 'mainnet';
-    status?: 'in_progress' | 'completed' | 'failed';
-    error?: string;
-    contractCodes?: {
-        subcontract?: { hex: string };
-        ship?: { hex: string };
-        coordinateCell?: { hex: string };
-    };
-};
-
-type GasCost = {
-    operation: string;
-    costNano: string; // bigint as string
-    costTon: string; // human readable
-};
-
-type TestResult = {
-    timestamp: string;
-    network: string;
-    uniqueId: string;
-    subcontractAddress: string;
-    shipAddress: string;
-    extSeqno: string;
-    gasCosts: GasCost[];
-    totalCostNano: string;
-    totalCostTon: string;
-    success: boolean;
-    error?: string;
-    shipStateAfterMoves?: {
-        movementInProcess: boolean;
-        balance: string;
-    };
-};
-
-function loadDeployment(): DeploymentData {
-    const buildPath = join(process.cwd(), 'build_info', 'deployment.json');
-    const raw = readFileSync(buildPath, 'utf-8');
-    return JSON.parse(raw);
-}
+import {
+    Network,
+    readDeploymentData,
+    readNetworkDeploymentData,
+    writeExternalTestResult,
+    ExternalTestResult,
+    ExternalTestGasCost,
+} from '../lib/buildOutput';
 
 function hexToBigInt(hex: string): bigint {
     const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
     return BigInt('0x' + clean);
-}
-
-function saveTestResult(result: TestResult) {
-    const dir = join(process.cwd(), 'build_info');
-    if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-    }
-    const path = join(dir, 'external-test-result.json');
-    writeFileSync(path, JSON.stringify(result, null, 2));
-    console.log(`\n✅ Test result saved to ${path}`);
 }
 
 function toV2Base(endpointAny: string): string {
@@ -342,20 +294,31 @@ async function waitForConfirmation(
 
 export async function run(provider: NetworkProvider) {
     const startedAt = new Date().toISOString();
-    let result: TestResult | null = null;
-    const gasCosts: GasCost[] = [];
+    let result: ExternalTestResult | null = null;
+    const gasCosts: ExternalTestGasCost[] = [];
 
     try {
-        // Load deployment info
-        const deployment = loadDeployment();
+        // Determine network from provider
+        const providerAny = provider as any;
+        const networkStr = 
+            providerAny.network?.() || 
+            providerAny.api?.endpoint || 
+            providerAny.api?.baseURL ||
+            process.env.TON_NETWORK ||
+            '';
+        const networkLower = networkStr.toLowerCase();
+        const network: Network = (networkLower.includes('testnet') || networkLower.includes('test') || networkLower.includes('sandbox'))
+            ? 'testnet'
+            : 'mainnet';
+
+        // Load deployment info for the network
+        const deployment = readNetworkDeploymentData(network);
         
         // Check deployment status first
-        if (deployment.status === 'failed') {
-            const errorMsg = deployment.error || 'Unknown error';
+        if (!deployment) {
             throw new Error(
-                `Deployment failed. Cannot run external test without successful deployment.\n` +
-                `Deployment error: ${errorMsg}\n` +
-                `Please fix the deployment issue and run deploySystem.ts again.`
+                `No deployment found for ${network}. Cannot run external test without successful deployment.\n` +
+                `Please run deploySystem.ts first.`
             );
         }
         
@@ -365,20 +328,29 @@ export async function run(provider: NetworkProvider) {
             );
         }
         
-        if (!deployment.game || !deployment.ownerAddress) {
+        if (deployment.status === 'failed' || !deployment.deployed) {
+            const errorMsg = deployment.error || 'Unknown error';
+            throw new Error(
+                `Deployment failed for ${network}. Cannot run external test without successful deployment.\n` +
+                `Deployment error: ${errorMsg}\n` +
+                `Please fix the deployment issue and run deploySystem.ts again.`
+            );
+        }
+        
+        const gameInfo = deployment.games?.ton_race_game;
+        if (!gameInfo?.game || !deployment.ownerAddress) {
             const missingFields = [];
-            if (!deployment.game) missingFields.push('game');
+            if (!gameInfo?.game) missingFields.push('game');
             if (!deployment.ownerAddress) missingFields.push('ownerAddress');
             throw new Error(
-                `Missing required fields in build_info/deployment.json: ${missingFields.join(', ')}\n` +
+                `Missing required fields in deployment_info/deployment_latest.json: ${missingFields.join(', ')}\n` +
                 `This usually means deployment failed or was incomplete.\n` +
                 `Please check the deployment status and run deploySystem.ts again if needed.`
             );
         }
 
-        const gameAddress = Address.parse(deployment.game.bounceable);
+        const gameAddress = Address.parse(gameInfo.game.bounceable);
         const ownerAddress = Address.parse(deployment.ownerAddress.bounceable);
-        const network = deployment.network ?? 'testnet';
 
         console.log('=== External ShipStation Full Cycle Test ===');
         console.log(`Network: ${network}`);
@@ -430,23 +402,25 @@ export async function run(provider: NetworkProvider) {
 
         if (deployment.contractCodes?.subcontract?.hex) {
             subcontractCode = Cell.fromBoc(Buffer.from(deployment.contractCodes.subcontract.hex, 'hex'))[0];
-            console.log('✓ Loaded subcontract code from deployment.json');
+            console.log('✓ Loaded subcontract code from deployment_latest.json');
         } else {
             subcontractCode = await compile('Subcontract');
             console.log('✓ Compiled subcontract code');
         }
 
-        if (deployment.contractCodes?.ship?.hex) {
-            shipCode = Cell.fromBoc(Buffer.from(deployment.contractCodes.ship.hex, 'hex'))[0];
-            console.log('✓ Loaded ship code from deployment.json');
+        const shipCodeHex = gameInfo?.contractCodes?.ship?.hex;
+        if (shipCodeHex) {
+            shipCode = Cell.fromBoc(Buffer.from(shipCodeHex, 'hex'))[0];
+            console.log('✓ Loaded ship code from deployment_latest.json');
         } else {
             shipCode = await compile('Ship');
             console.log('✓ Compiled ship code');
         }
 
-        if (deployment.contractCodes?.coordinateCell?.hex) {
-            coordinateCellCode = Cell.fromBoc(Buffer.from(deployment.contractCodes.coordinateCell.hex, 'hex'))[0];
-            console.log('✓ Loaded coordinateCell code from deployment.json');
+        const ccCodeHex = gameInfo?.contractCodes?.coordinateCell?.hex;
+        if (ccCodeHex) {
+            coordinateCellCode = Cell.fromBoc(Buffer.from(ccCodeHex, 'hex'))[0];
+            console.log('✓ Loaded coordinateCell code from deployment_latest.json');
         } else {
             coordinateCellCode = await compile('CoordinateCell');
             console.log('✓ Compiled coordinateCell code');
@@ -902,7 +876,7 @@ export async function run(provider: NetworkProvider) {
         };
     } finally {
         if (result) {
-            saveTestResult(result);
+            writeExternalTestResult(result);
         }
     }
 }
