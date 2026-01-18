@@ -177,21 +177,24 @@ export async function run(provider: NetworkProvider) {
         console.log(`\n--- Step 1: Generate Unique ID ---`);
         console.log(`Unique ID: ${uniqueId.toString()} (from --id parameter, default: 1)`);
 
-        // Step 2: Get contract codes
+        // Step 2: Get contract codes (from root-level contractCodes)
         console.log(`\n--- Step 2: Loading Contract Codes ---`);
+        const fullDeploymentData = readDeploymentData();
+        const contractCodes = fullDeploymentData.contractCodes;
+        
         let subcontractCode: Cell;
         let shipCode: Cell;
         let coordinateCellCode: Cell;
 
-        if (deployment.contractCodes?.subcontract?.hex) {
-            subcontractCode = Cell.fromBoc(Buffer.from(deployment.contractCodes.subcontract.hex, 'hex'))[0];
+        if (contractCodes?.subcontract?.hex) {
+            subcontractCode = Cell.fromBoc(Buffer.from(contractCodes.subcontract.hex, 'hex'))[0];
             console.log('✓ Loaded subcontract code from deployment_latest.json');
         } else {
             subcontractCode = await compile('Subcontract');
             console.log('✓ Compiled subcontract code');
         }
 
-        const shipCodeHex = gameInfo?.contractCodes?.ship?.hex;
+        const shipCodeHex = contractCodes?.games?.ton_race_game?.ship?.hex;
         if (shipCodeHex) {
             shipCode = Cell.fromBoc(Buffer.from(shipCodeHex, 'hex'))[0];
             console.log('✓ Loaded ship code from deployment_latest.json');
@@ -200,7 +203,7 @@ export async function run(provider: NetworkProvider) {
             console.log('✓ Compiled ship code');
         }
 
-        const ccCodeHex = gameInfo?.contractCodes?.coordinateCell?.hex;
+        const ccCodeHex = contractCodes?.games?.ton_race_game?.coordinateCell?.hex;
         if (ccCodeHex) {
             coordinateCellCode = Cell.fromBoc(Buffer.from(ccCodeHex, 'hex'))[0];
             console.log('✓ Loaded coordinateCell code from deployment_latest.json');

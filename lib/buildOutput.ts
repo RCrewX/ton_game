@@ -32,26 +32,36 @@ export interface ContractCodeInfo {
     hashBase64: string;
 }
 
-export interface TonRaceGameInfo {
+/**
+ * Game-specific address info (addresses only, no codes)
+ */
+export interface TonRaceGameAddresses {
     game: AddressInfo;
     ownerShip?: AddressInfo;
-    contractCodes: {
-        game: ContractCodeInfo;
-        ship: ContractCodeInfo;
-        coordinateCell: ContractCodeInfo;
-    };
 }
 
-export interface SoullessSlotMachineInfo {
+export interface SoullessSlotMachineAddresses {
     ssm: AddressInfo;
-    contractCodes: {
-        soullessSlotMachine: ContractCodeInfo;
-    };
 }
 
+/**
+ * Contract codes for all games (stored once at root level)
+ */
+export interface TonRaceGameCodes {
+    game: ContractCodeInfo;
+    ship: ContractCodeInfo;
+    coordinateCell: ContractCodeInfo;
+}
+
+export interface SoullessSlotMachineCodes {
+    soullessSlotMachine: ContractCodeInfo;
+}
+
+/**
+ * Network-specific deployment data (addresses and deployment status)
+ */
 export interface NetworkDeploymentData {
     deployed: boolean;
-    timestamp?: string;
     ownerAddress?: AddressInfo;
     gameManager?: AddressInfo;
     jettonMinter?: AddressInfo;
@@ -59,21 +69,33 @@ export interface NetworkDeploymentData {
     ship_station?: AddressInfo;
     ownerJettonBalance?: string;
     games?: {
-        ton_race_game?: TonRaceGameInfo;
-        soulless_slot_machine?: SoullessSlotMachineInfo;
-    };
-    contractCodes?: {
-        gameManager: ContractCodeInfo;
-        jettonWallet: ContractCodeInfo;
-        jettonMinter: ContractCodeInfo;
-        subcontract: ContractCodeInfo;
+        ton_race_game?: TonRaceGameAddresses;
+        soulless_slot_machine?: SoullessSlotMachineAddresses;
     };
     status?: 'in_progress' | 'completed' | 'failed';
     error?: string;
 }
 
+/**
+ * All contract codes (stored once, shared between networks)
+ */
+export interface ContractCodes {
+    gameManager: ContractCodeInfo;
+    jettonWallet: ContractCodeInfo;
+    jettonMinter: ContractCodeInfo;
+    subcontract: ContractCodeInfo;
+    games: {
+        ton_race_game: TonRaceGameCodes;
+        soulless_slot_machine: SoullessSlotMachineCodes;
+    };
+}
+
+/**
+ * Root deployment data structure
+ */
 export interface DeploymentData {
     timestamp: string;
+    contractCodes?: ContractCodes;
     testnet: NetworkDeploymentData;
     mainnet: NetworkDeploymentData;
 }
@@ -226,59 +248,16 @@ export function readDeploymentData(): DeploymentData {
 }
 
 /**
- * Write deployment data for a specific network.
- * Preserves data for the other network unless contract codes have changed.
+ * Write full deployment data (contract codes + both networks).
+ * Used when you need to update everything at once.
  * 
  * Creates:
  * - deployment_info/deployment_latest.json
  * - deployment_info/all/deployment-<timestamp>.json
  * 
- * @param network - The network being deployed to
- * @param networkData - The deployment data for this network
+ * @param data - Full deployment data to write
  */
-export function writeDeploymentData(network: Network, networkData: NetworkDeploymentData): void {
-    const timestamp = new Date().toISOString();
-    
-    // Read existing data
-    let existingData = readDeploymentData();
-    
-    // Check if contract codes are the same for the other network
-    // If codes changed, we should NOT mark the other network as deployed
-    const otherNetwork: Network = network === 'testnet' ? 'mainnet' : 'testnet';
-    const otherNetworkData = existingData[otherNetwork];
-    
-    if (otherNetworkData.deployed && networkData.contractCodes) {
-        // Compare contract code hashes
-        const existingCodes = otherNetworkData.contractCodes;
-        const newCodes = networkData.contractCodes;
-        
-        if (existingCodes) {
-            const codesChanged = 
-                existingCodes.gameManager?.hash !== newCodes.gameManager?.hash ||
-                existingCodes.jettonMinter?.hash !== newCodes.jettonMinter?.hash ||
-                existingCodes.jettonWallet?.hash !== newCodes.jettonWallet?.hash ||
-                existingCodes.subcontract?.hash !== newCodes.subcontract?.hash;
-            
-            if (codesChanged) {
-                console.log(`⚠️  Contract codes changed. ${otherNetwork} deployment status preserved but may need redeploy.`);
-            }
-        }
-    }
-    
-    // Update the data for the target network
-    const data: DeploymentData = {
-        timestamp,
-        testnet: network === 'testnet' ? networkData : existingData.testnet,
-        mainnet: network === 'mainnet' ? networkData : existingData.mainnet,
-    };
-    
-    // Ensure network timestamps
-    if (network === 'testnet') {
-        data.testnet.timestamp = timestamp;
-    } else {
-        data.mainnet.timestamp = timestamp;
-    }
-    
+export function writeFullDeploymentData(data: DeploymentData): void {
     const baseDir = getDeploymentInfoDir();
     ensureDir(baseDir);
     
@@ -289,12 +268,62 @@ export function writeDeploymentData(network: Network, networkData: NetworkDeploy
     writeFileSync(latestPath, JSON.stringify(data, null, 2), 'utf-8');
 
     // Write timestamped version
-    const timestampStr = timestamp.replace(/[:.]/g, '-');
+    const timestampStr = data.timestamp.replace(/[:.]/g, '-');
     const archivedPath = join(allDir, `deployment-${timestampStr}.json`);
     writeFileSync(archivedPath, JSON.stringify(data, null, 2), 'utf-8');
 
     console.log(`✅ Deployment info written to ${latestPath}`);
     console.log(`   Archived to ${archivedPath}`);
+}
+
+/**
+ * Write deployment data for a specific network.
+ * Preserves data for the other network and contract codes.
+ * 
+ * Creates:
+ * - deployment_info/deployment_latest.json
+ * - deployment_info/all/deployment-<timestamp>.json
+ * 
+ * @param network - The network being deployed to
+ * @param networkData - The deployment data for this network
+ * @param contractCodes - Optional contract codes (if provided, updates the shared codes)
+ */
+export function writeDeploymentData(
+    network: Network, 
+    networkData: NetworkDeploymentData,
+    contractCodes?: ContractCodes
+): void {
+    const timestamp = new Date().toISOString();
+    
+    // Read existing data
+    const existingData = readDeploymentData();
+    
+    // Check if contract codes have changed (if both exist)
+    const otherNetwork: Network = network === 'testnet' ? 'mainnet' : 'testnet';
+    const otherNetworkData = existingData[otherNetwork];
+    
+    if (otherNetworkData.deployed && contractCodes && existingData.contractCodes) {
+        const existingCodes = existingData.contractCodes;
+        const codesChanged = 
+            existingCodes.gameManager?.hash !== contractCodes.gameManager?.hash ||
+            existingCodes.jettonMinter?.hash !== contractCodes.jettonMinter?.hash ||
+            existingCodes.jettonWallet?.hash !== contractCodes.jettonWallet?.hash ||
+            existingCodes.subcontract?.hash !== contractCodes.subcontract?.hash;
+        
+        if (codesChanged) {
+            console.log(`⚠️  Contract codes changed. ${otherNetwork} deployment may need redeploy.`);
+        }
+    }
+    
+    // Update the data for the target network
+    const data: DeploymentData = {
+        timestamp,
+        contractCodes: contractCodes ?? existingData.contractCodes,
+        testnet: network === 'testnet' ? networkData : existingData.testnet,
+        mainnet: network === 'mainnet' ? networkData : existingData.mainnet,
+    };
+    
+    writeFullDeploymentData(data);
 }
 
 /**
@@ -317,7 +346,7 @@ export function readNetworkDeploymentData(network: Network, requireDeployed: boo
     
     // If there's a status (meaning deployment was attempted), return the data
     // so caller can check the status and error message
-    if (networkData.status || networkData.timestamp) {
+    if (networkData.status) {
         return networkData;
     }
     
@@ -327,6 +356,15 @@ export function readNetworkDeploymentData(network: Network, requireDeployed: boo
     }
     
     return networkData;
+}
+
+/**
+ * Get contract codes from deployment data.
+ * Returns null if no codes have been saved yet.
+ */
+export function getContractCodes(): ContractCodes | null {
+    const data = readDeploymentData();
+    return data.contractCodes ?? null;
 }
 
 /**

@@ -17,9 +17,11 @@ import { BASIC_STORAGE_TAX } from '../wrappers/ton_race_game/types';
 import {
     Network,
     NetworkDeploymentData,
+    DeploymentData,
+    ContractCodes,
     formatAddress,
     getContractCodeData,
-    writeDeploymentData,
+    writeFullDeploymentData,
     readDeploymentData,
 } from '../lib/buildOutput';
 import {
@@ -453,17 +455,112 @@ async function checkAndSetGamesInfo(
     }
 }
 
+/**
+ * Helper function to calculate all addresses for a given owner address.
+ * Returns network deployment data with all calculated addresses.
+ */
+function calculateNetworkAddresses(
+    ownerAddress: Address,
+    gameManagerCode: Cell,
+    gameCode: Cell,
+    shipCode: Cell,
+    coordinateCellCode: Cell,
+    ssmCode: Cell,
+    jettonMinterCode: Cell,
+    jettonWalletCode: Cell,
+    subcontractCode: Cell,
+    isTestnet: boolean,
+    shipStationId: bigint,
+    ownerPublicKey: bigint,
+    jettonContentUri: string
+): NetworkDeploymentData {
+    // Create GameManager
+    const gameManager = GameManager.createFromConfig(
+        { ownerAddress },
+        gameManagerCode
+    );
+    
+    // Create Game (depends on GameManager address)
+    const game = Game.createFromConfig(
+        {
+            managerAddress: gameManager.address,
+            shipCode,
+            coordinateCellCode,
+        },
+        gameCode
+    );
+    
+    // Create SSM (depends on GameManager address)
+    const ssm = SoullessSlotMachine.createFromConfig(
+        { ownerAddress: gameManager.address },
+        ssmCode
+    );
+    
+    // Create JettonMinter (depends on GameManager address)
+    const jettonMinter = JettonMinter.createFromConfig(
+        {
+            admin: gameManager.address,
+            content: jettonContentToCell({ type: 1, uri: jettonContentUri }),
+            wallet_code: jettonWalletCode,
+        },
+        jettonMinterCode
+    );
+    
+    // Create owner's JettonWallet (depends on owner and JettonMinter addresses)
+    const ownerJettonWallet = JettonWallet.createFromConfig(
+        {
+            ownerAddress,
+            minterAddress: jettonMinter.address,
+        },
+        jettonWalletCode
+    );
+    
+    // Create owner's Ship (depends on owner and Game addresses)
+    const ownerShip = Ship.createFromConfig(
+        {
+            userAddress: ownerAddress,
+            gameAddress: game.address,
+            coordinateCellCode,
+        },
+        shipCode
+    );
+    
+    // Create Ship Station (Subcontract)
+    const shipStation = Subcontract.createFromConfig(
+        {
+            ownerAddress,
+            id: shipStationId,
+            ownerPublicKey,
+        },
+        subcontractCode
+    );
+    
+    return {
+        deployed: false,
+        ownerAddress: formatAddress(ownerAddress, isTestnet),
+        gameManager: formatAddress(gameManager.address, isTestnet),
+        jettonMinter: formatAddress(jettonMinter.address, isTestnet),
+        ownerJettonWallet: formatAddress(ownerJettonWallet.address, isTestnet),
+        ship_station: formatAddress(shipStation.address, isTestnet),
+        games: {
+            ton_race_game: {
+                game: formatAddress(game.address, isTestnet),
+                ownerShip: formatAddress(ownerShip.address, isTestnet),
+            },
+            soulless_slot_machine: {
+                ssm: formatAddress(ssm.address, isTestnet),
+            },
+        },
+    };
+}
+
 export async function run(provider: NetworkProvider) {
     const network = getNetworkFromProvider(provider);
     const isTestnet = network === 'testnet';
+    const timestamp = new Date().toISOString();
 
-    // Initialize deployment data for this network
-    const deploymentData: NetworkDeploymentData = {
-        deployed: false,
-        timestamp: new Date().toISOString(),
-        ownerAddress: { bounceable: '', nonBounceable: '' },
-        status: 'in_progress',
-    };
+    // Read existing deployment data
+    const existingData = readDeploymentData();
 
     try {
         // Log Chainstack configuration
@@ -471,14 +568,10 @@ export async function run(provider: NetworkProvider) {
 
         // Get owner address from the wallet (for contract configuration)
         const ownerAddress = provider.sender().address!;
-        deploymentData.ownerAddress = formatAddress(ownerAddress, isTestnet);
-        console.log('Owner address (bounceable):', deploymentData.ownerAddress.bounceable);
-        console.log('Owner address (non-bounceable):', deploymentData.ownerAddress.nonBounceable);
+        console.log('Owner address (bounceable):', formatAddress(ownerAddress, isTestnet).bounceable);
+        console.log('Owner address (non-bounceable):', formatAddress(ownerAddress, isTestnet).nonBounceable);
         console.log('Using native blueprint provider sender');
         console.log(`Network: ${network}`);
-        
-        // Save initial progress
-        writeDeploymentData(network, deploymentData);
 
         // Compile all contracts
         console.log('Compiling contracts...');
@@ -492,34 +585,66 @@ export async function run(provider: NetworkProvider) {
         const subcontractCode = await compile('Subcontract');
         console.log('Contracts compiled successfully');
 
-        // Store contract codes with full data (hex, hash, hashBase64)
-        deploymentData.contractCodes = {
+        // Get configuration values
+        const shipStationId = parseId();
+        const ownerPublicKey = loadOwnerPublicKey();
+        const jettonContentUri = process.env.JETTON_CONTENT_URI || 'https://example.com/jetton.json';
+        console.log(`Using jetton content URI: ${jettonContentUri}`);
+        console.log(`Ship Station ID: ${shipStationId.toString()}`);
+
+        // Build contract codes (stored at root level, shared between networks)
+        const contractCodes: ContractCodes = {
             gameManager: getContractCodeData(gameManagerCode),
             jettonWallet: getContractCodeData(jettonWalletCode),
             jettonMinter: getContractCodeData(jettonMinterCode),
             subcontract: getContractCodeData(subcontractCode),
-        };
-        
-        // Initialize games section
-        deploymentData.games = {
-            ton_race_game: {
-                game: { bounceable: '', nonBounceable: '' },
-                contractCodes: {
+            games: {
+                ton_race_game: {
                     game: getContractCodeData(gameCode),
                     ship: getContractCodeData(shipCode),
                     coordinateCell: getContractCodeData(coordinateCellCode),
                 },
-            },
-            soulless_slot_machine: {
-                ssm: { bounceable: '', nonBounceable: '' },
-                contractCodes: {
+                soulless_slot_machine: {
                     soullessSlotMachine: getContractCodeData(ssmCode),
                 },
             },
         };
+
+        // Calculate addresses for BOTH networks
+        console.log('Calculating addresses for both networks...');
+        const testnetAddresses = calculateNetworkAddresses(
+            ownerAddress, gameManagerCode, gameCode, shipCode, coordinateCellCode,
+            ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
+            true, shipStationId, ownerPublicKey, jettonContentUri
+        );
+        const mainnetAddresses = calculateNetworkAddresses(
+            ownerAddress, gameManagerCode, gameCode, shipCode, coordinateCellCode,
+            ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
+            false, shipStationId, ownerPublicKey, jettonContentUri
+        );
+
+        // Initialize deployment data with addresses for both networks
+        const deploymentData: DeploymentData = {
+            timestamp,
+            contractCodes,
+            testnet: network === 'testnet' 
+                ? { ...testnetAddresses, status: 'in_progress' }
+                : existingData.testnet.deployed 
+                    ? existingData.testnet 
+                    : testnetAddresses,
+            mainnet: network === 'mainnet'
+                ? { ...mainnetAddresses, status: 'in_progress' }
+                : existingData.mainnet.deployed 
+                    ? existingData.mainnet 
+                    : mainnetAddresses,
+        };
+
+        // Get reference to the network we're deploying to
+        const networkData = network === 'testnet' ? deploymentData.testnet : deploymentData.mainnet;
         
-        writeDeploymentData(network, deploymentData);
-        console.log('Contract codes saved to deployment data');
+        // Save initial progress with all calculated addresses
+        writeFullDeploymentData(deploymentData);
+        console.log('Contract codes and addresses saved to deployment data');
 
         // Deploy GameManager first
         const gameManager = provider.open(
@@ -539,10 +664,9 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, gameManager, toNano('1'))
         );
         
-        deploymentData.gameManager = formatAddress(gameManager.address, isTestnet);
-        console.log('GameManager (bounceable):', deploymentData.gameManager.bounceable);
-        console.log('GameManager (non-bounceable):', deploymentData.gameManager.nonBounceable);
-        writeDeploymentData(network, deploymentData);
+        console.log('GameManager (bounceable):', networkData.gameManager!.bounceable);
+        console.log('GameManager (non-bounceable):', networkData.gameManager!.nonBounceable);
+        writeFullDeploymentData(deploymentData);
 
         // Deploy Game with GameManager as manager
         const game = provider.open(
@@ -564,10 +688,9 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, game, toNano('0.5'))
         );
         
-        deploymentData.games!.ton_race_game!.game = formatAddress(game.address, isTestnet);
-        console.log('TON Race Game (bounceable):', deploymentData.games!.ton_race_game!.game.bounceable);
-        console.log('TON Race Game (non-bounceable):', deploymentData.games!.ton_race_game!.game.nonBounceable);
-        writeDeploymentData(network, deploymentData);
+        console.log('TON Race Game (bounceable):', networkData.games!.ton_race_game!.game.bounceable);
+        console.log('TON Race Game (non-bounceable):', networkData.games!.ton_race_game!.game.nonBounceable);
+        writeFullDeploymentData(deploymentData);
 
         // Deploy SoullessSlotMachine with GameManager as owner
         const ssm = provider.open(
@@ -587,16 +710,11 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, ssm, toNano('0.5'))
         );
         
-        deploymentData.games!.soulless_slot_machine!.ssm = formatAddress(ssm.address, isTestnet);
-        console.log('Soulless Slot Machine (bounceable):', deploymentData.games!.soulless_slot_machine!.ssm.bounceable);
-        console.log('Soulless Slot Machine (non-bounceable):', deploymentData.games!.soulless_slot_machine!.ssm.nonBounceable);
-        writeDeploymentData(network, deploymentData);
+        console.log('Soulless Slot Machine (bounceable):', networkData.games!.soulless_slot_machine!.ssm.bounceable);
+        console.log('Soulless Slot Machine (non-bounceable):', networkData.games!.soulless_slot_machine!.ssm.nonBounceable);
+        writeFullDeploymentData(deploymentData);
 
         // Deploy JettonMinter
-        // Get jetton content URI from .env or use default
-        const jettonContentUri = process.env.JETTON_CONTENT_URI || 'https://example.com/jetton.json';
-        console.log(`Using jetton content URI: ${jettonContentUri}`);
-        
         const jettonMinter = provider.open(
             JettonMinter.createFromConfig(
                 {
@@ -616,10 +734,9 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, jettonMinter, toNano('0.5'))
         );
         
-        deploymentData.jettonMinter = formatAddress(jettonMinter.address, isTestnet);
-        console.log('JettonMinter (bounceable):', deploymentData.jettonMinter.bounceable);
-        console.log('JettonMinter (non-bounceable):', deploymentData.jettonMinter.nonBounceable);
-        writeDeploymentData(network, deploymentData);
+        console.log('JettonMinter (bounceable):', networkData.jettonMinter!.bounceable);
+        console.log('JettonMinter (non-bounceable):', networkData.jettonMinter!.nonBounceable);
+        writeFullDeploymentData(deploymentData);
 
         // Deploy owner's JettonWallet
         const ownerJettonWallet = provider.open(
@@ -640,10 +757,9 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, ownerJettonWallet, toNano('0.5'))
         );
         
-        deploymentData.ownerJettonWallet = formatAddress(ownerJettonWallet.address, isTestnet);
-        console.log('Owner JettonWallet (bounceable):', deploymentData.ownerJettonWallet.bounceable);
-        console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet.nonBounceable);
-        writeDeploymentData(network, deploymentData);
+        console.log('Owner JettonWallet (bounceable):', networkData.ownerJettonWallet!.bounceable);
+        console.log('Owner JettonWallet (non-bounceable):', networkData.ownerJettonWallet!.nonBounceable);
+        writeFullDeploymentData(deploymentData);
 
         // Deploy jetton in GameManager (with check)
         await checkAndDeployJetton(provider, gameManager, jettonMinterCode, jettonWalletCode, jettonMinter.address, 'GameManager');
@@ -783,9 +899,9 @@ export async function run(provider: NetworkProvider) {
         }
 
         // Save final balance
-        deploymentData.ownerJettonBalance = userBalance.toString();
+        networkData.ownerJettonBalance = userBalance.toString();
         console.log('Owner jetton balance:', userBalance.toString());
-        writeDeploymentData(network, deploymentData);
+        writeFullDeploymentData(deploymentData);
 
         // Deploy Ship
         const ownerShip = provider.open(
@@ -807,20 +923,18 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, ownerShip, toNano('0.5'))
         );
         
-        deploymentData.games!.ton_race_game!.ownerShip = formatAddress(ownerShip.address, isTestnet);
-        console.log('Owner Ship (bounceable):', deploymentData.games!.ton_race_game!.ownerShip.bounceable);
-        console.log('Owner Ship (non-bounceable):', deploymentData.games!.ton_race_game!.ownerShip.nonBounceable);
-        writeDeploymentData(network, deploymentData);
+        console.log('Owner Ship (bounceable):', networkData.games!.ton_race_game!.ownerShip!.bounceable);
+        console.log('Owner Ship (non-bounceable):', networkData.games!.ton_race_game!.ownerShip!.nonBounceable);
+        writeFullDeploymentData(deploymentData);
 
-        // Deploy Ship Station (Subcontract with id from --id parameter, default 1)
-        const shipStationId = parseId();
+        // Deploy Ship Station (Subcontract with id already parsed)
         console.log(`Deploying Ship Station with id: ${shipStationId.toString()}`);
         const shipStation = provider.open(
             Subcontract.createFromConfig(
                 {
                     ownerAddress: ownerAddress,
                     id: shipStationId,
-                    ownerPublicKey: loadOwnerPublicKey(),
+                    ownerPublicKey,
                 },
                 subcontractCode
             )
@@ -837,57 +951,63 @@ export async function run(provider: NetworkProvider) {
             async () => await deployWithStateInit(provider, shipStation, deployAmount)
         );
         
-        deploymentData.ship_station = formatAddress(shipStation.address, isTestnet);
-        console.log('Ship Station (bounceable):', deploymentData.ship_station.bounceable);
-        console.log('Ship Station (non-bounceable):', deploymentData.ship_station.nonBounceable);
+        console.log('Ship Station (bounceable):', networkData.ship_station!.bounceable);
+        console.log('Ship Station (non-bounceable):', networkData.ship_station!.nonBounceable);
 
         // Mark deployment as completed
-        deploymentData.status = 'completed';
-        deploymentData.deployed = true;
-        writeDeploymentData(network, deploymentData);
+        networkData.status = 'completed';
+        networkData.deployed = true;
+        writeFullDeploymentData(deploymentData);
         
         console.log('\n=== Deployment Summary ===');
         console.log('Network:', network);
-        console.log('Owner address (bounceable):', deploymentData.ownerAddress?.bounceable);
-        console.log('Owner address (non-bounceable):', deploymentData.ownerAddress?.nonBounceable);
-        if (deploymentData.gameManager) {
-            console.log('GameManager (bounceable):', deploymentData.gameManager.bounceable);
-            console.log('GameManager (non-bounceable):', deploymentData.gameManager.nonBounceable);
+        console.log('Owner address (bounceable):', networkData.ownerAddress?.bounceable);
+        console.log('Owner address (non-bounceable):', networkData.ownerAddress?.nonBounceable);
+        if (networkData.gameManager) {
+            console.log('GameManager (bounceable):', networkData.gameManager.bounceable);
+            console.log('GameManager (non-bounceable):', networkData.gameManager.nonBounceable);
         }
-        if (deploymentData.games?.ton_race_game?.game) {
-            console.log('TON Race Game (bounceable):', deploymentData.games.ton_race_game.game.bounceable);
-            console.log('TON Race Game (non-bounceable):', deploymentData.games.ton_race_game.game.nonBounceable);
+        if (networkData.games?.ton_race_game?.game) {
+            console.log('TON Race Game (bounceable):', networkData.games.ton_race_game.game.bounceable);
+            console.log('TON Race Game (non-bounceable):', networkData.games.ton_race_game.game.nonBounceable);
         }
-        if (deploymentData.games?.soulless_slot_machine?.ssm) {
-            console.log('Soulless Slot Machine (bounceable):', deploymentData.games.soulless_slot_machine.ssm.bounceable);
-            console.log('Soulless Slot Machine (non-bounceable):', deploymentData.games.soulless_slot_machine.ssm.nonBounceable);
+        if (networkData.games?.soulless_slot_machine?.ssm) {
+            console.log('Soulless Slot Machine (bounceable):', networkData.games.soulless_slot_machine.ssm.bounceable);
+            console.log('Soulless Slot Machine (non-bounceable):', networkData.games.soulless_slot_machine.ssm.nonBounceable);
         }
-        if (deploymentData.jettonMinter) {
-            console.log('JettonMinter (bounceable):', deploymentData.jettonMinter.bounceable);
-            console.log('JettonMinter (non-bounceable):', deploymentData.jettonMinter.nonBounceable);
+        if (networkData.jettonMinter) {
+            console.log('JettonMinter (bounceable):', networkData.jettonMinter.bounceable);
+            console.log('JettonMinter (non-bounceable):', networkData.jettonMinter.nonBounceable);
         }
-        if (deploymentData.ownerJettonWallet) {
-            console.log('Owner JettonWallet (bounceable):', deploymentData.ownerJettonWallet.bounceable);
-            console.log('Owner JettonWallet (non-bounceable):', deploymentData.ownerJettonWallet.nonBounceable);
+        if (networkData.ownerJettonWallet) {
+            console.log('Owner JettonWallet (bounceable):', networkData.ownerJettonWallet.bounceable);
+            console.log('Owner JettonWallet (non-bounceable):', networkData.ownerJettonWallet.nonBounceable);
         }
-        if (deploymentData.games?.ton_race_game?.ownerShip) {
-            console.log('Owner Ship (bounceable):', deploymentData.games.ton_race_game.ownerShip.bounceable);
-            console.log('Owner Ship (non-bounceable):', deploymentData.games.ton_race_game.ownerShip.nonBounceable);
+        if (networkData.games?.ton_race_game?.ownerShip) {
+            console.log('Owner Ship (bounceable):', networkData.games.ton_race_game.ownerShip.bounceable);
+            console.log('Owner Ship (non-bounceable):', networkData.games.ton_race_game.ownerShip.nonBounceable);
         }
-        if (deploymentData.ship_station) {
-            console.log('Ship Station (bounceable):', deploymentData.ship_station.bounceable);
-            console.log('Ship Station (non-bounceable):', deploymentData.ship_station.nonBounceable);
+        if (networkData.ship_station) {
+            console.log('Ship Station (bounceable):', networkData.ship_station.bounceable);
+            console.log('Ship Station (non-bounceable):', networkData.ship_station.nonBounceable);
         }
-        if (deploymentData.ownerJettonBalance) {
-            console.log('Owner jetton balance:', deploymentData.ownerJettonBalance);
+        if (networkData.ownerJettonBalance) {
+            console.log('Owner jetton balance:', networkData.ownerJettonBalance);
         }
         console.log('\nDeployment info saved to: deployment_info/deployment_latest.json');
         console.log('========================\n');
     } catch (error: any) {
-        deploymentData.status = 'failed';
-        deploymentData.error = error.message || String(error);
-        deploymentData.deployed = false;
-        writeDeploymentData(network, deploymentData);
+        // Try to update deployment data with error status
+        try {
+            const existingData = readDeploymentData();
+            const errorNetworkData = network === 'testnet' ? existingData.testnet : existingData.mainnet;
+            errorNetworkData.status = 'failed';
+            errorNetworkData.error = error.message || String(error);
+            errorNetworkData.deployed = false;
+            writeFullDeploymentData(existingData);
+        } catch {
+            // Ignore errors when writing error state
+        }
         console.error('\n=== Deployment Failed ===');
         console.error('Error:', error.message || error);
         console.error('Deployment info saved to: deployment_info/deployment_latest.json');
