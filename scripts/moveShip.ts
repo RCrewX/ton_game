@@ -10,6 +10,7 @@ import {
     readNetworkDeploymentData,
     getDeploymentLatestPath,
 } from '../lib/buildOutput';
+import { logChainstackConfig } from '../lib/chainstack';
 
 // Load environment variables
 dotenv.config();
@@ -39,8 +40,26 @@ function loadDeploymentData(network: Network): { data: NetworkDeploymentData; ne
 }
 
 function parseDirection(): MoveMode {
+    // First check environment variable (set by runWithChainstack.ts)
+    const envDir = process.env.SCRIPT_DIRECTION;
+    if (envDir) {
+        switch (envDir.toLowerCase()) {
+            case 'exit':
+                return MoveMode.EXIT;
+            case 'left':
+                return MoveMode.LEFT;
+            case 'right':
+                return MoveMode.RIGHT;
+            case 'up':
+                return MoveMode.UP;
+            case 'down':
+                return MoveMode.EXIT; // down is alias for exit
+        }
+    }
+
+    // Fall back to CLI args (for direct blueprint run)
     const args = process.argv.slice(2);
-    
+
     if (args.includes('--exit')) {
         return MoveMode.EXIT;
     } else if (args.includes('--left')) {
@@ -56,8 +75,21 @@ function parseDirection(): MoveMode {
 }
 
 function parseMoveCount(): number {
+    // First check environment variable (set by runWithChainstack.ts)
+    const envCount = process.env.SCRIPT_COUNT;
+    if (envCount) {
+        const count = parseInt(envCount, 10);
+        if (!isNaN(count) && count > 0 && count < 11) {
+            return count;
+        } else {
+            console.warn(`Warning: Invalid SCRIPT_COUNT "${envCount}". Must be between 1 and 10. Using default: 5`);
+            return 5;
+        }
+    }
+
+    // Fall back to CLI args (for direct blueprint run)
     const args = process.argv.slice(2);
-    
+
     // Find --moves or --count argument
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -71,7 +103,7 @@ function parseMoveCount(): number {
             }
         }
     }
-    
+
     // Default to 5
     return 5;
 }
@@ -225,6 +257,9 @@ export async function run(provider: NetworkProvider) {
     const network: Network = (networkLower.includes('testnet') || networkLower.includes('test') || networkLower.includes('sandbox'))
         ? 'testnet'
         : 'mainnet';
+
+    // Log Chainstack configuration
+    logChainstackConfig(network);
 
     // Load deployment data
     const { data: deploymentData } = loadDeploymentData(network);

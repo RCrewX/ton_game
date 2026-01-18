@@ -14,244 +14,38 @@ import {
     ExternalTestResult,
     ExternalTestGasCost,
 } from '../lib/buildOutput';
+import {
+    getChainstackEndpoints,
+    logChainstackConfig,
+    isChainstackConfigured,
+    getAddressState,
+    getAddressBalance,
+    getAddressInfo,
+    runGetMethod,
+    sendExternalMessage,
+    waitForConfirmation as chainstackWaitForConfirmation,
+    sleep,
+    toV2Base,
+    stackItemToBigInt,
+} from '../lib/chainstack';
 
 function hexToBigInt(hex: string): bigint {
     const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
     return BigInt('0x' + clean);
 }
 
-function toV2Base(endpointAny: string): string {
-    const v2 = endpointAny
-        .replace(/\/api\/v3\b/, '/api/v2')
-        .replace(/\/api\/v2\/?$/, '/api/v2');
-    return v2;
-}
-
-/**
- * Unwrap TON API responses that may be in wrapped format { ok: true, result: ... }
- * or direct format { balance: ..., state: ... }
- */
-function unwrapTonApi(json: any): any {
-    if (json && typeof json === 'object' && 'ok' in json) {
-        if (json.ok !== true) {
-            const errorMsg = json.error || json.description || 'Unknown error';
-            throw new Error(`TON API returned ok=false: ${errorMsg} (${JSON.stringify(json)})`);
-        }
-        return json.result ?? json;
-    }
-    return json;
-}
-
-/**
- * Extract bigint from TON stack item (handles both array and object formats)
- */
-function stackItemToBigInt(item: any): bigint {
-    if (Array.isArray(item) && item.length >= 2) {
-        return BigInt(item[1]);
-    }
-    if (item && typeof item === 'object' && typeof item.value === 'string') {
-        return BigInt(item.value);
-    }
-    throw new Error(`Unknown stack item format: ${JSON.stringify(item)}`);
-}
-
-async function getAddressState(endpointAny: string, address: Address): Promise<string> {
-    const baseV2 = toV2Base(endpointAny);
-    const url = `${baseV2}/getAddressState?address=${encodeURIComponent(address.toString())}`;
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    const text = await res.text();
-
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`getAddressState non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
-
-    if (!res.ok) {
-        throw new Error(`getAddressState failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const data = unwrapTonApi(json);
-    // Handle case where unwrapped result is directly the state string
-    if (typeof data === 'string') {
-        return data;
-    }
-    // Handle case where state is in an object
-    if (data && typeof data === 'object' && typeof data.state === 'string') {
-        return data.state;
-    }
-    console.error('Unexpected getAddressState payload:', JSON.stringify(json, null, 2));
-    throw new Error('getAddressState payload missing or invalid state field');
-}
-
-async function getAddressBalance(endpointAny: string, address: Address): Promise<bigint> {
-    const baseV2 = toV2Base(endpointAny);
-    const url = `${baseV2}/getAddressBalance?address=${encodeURIComponent(address.toString())}`;
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    const text = await res.text();
-
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`getAddressBalance non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
-
-    if (!res.ok) {
-        throw new Error(`getAddressBalance failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const data = unwrapTonApi(json);
-    // Handle case where unwrapped result is directly the balance string
-    if (typeof data === 'string') {
-        return BigInt(data);
-    }
-    // Handle case where balance is a number
-    if (typeof data === 'number') {
-        return BigInt(data);
-    }
-    // Handle case where balance is in an object
-    if (data && typeof data === 'object') {
-        if (data.balance !== undefined) {
-            return BigInt(String(data.balance));
-        }
-    }
-    console.error('Unexpected getAddressBalance payload:', JSON.stringify(json, null, 2));
-    throw new Error('getAddressBalance payload missing or invalid balance field');
-}
-
-async function getAddressInfo(endpointAny: string, address: Address) {
-    const baseV2 = toV2Base(endpointAny);
-    const url = `${baseV2}/getAddressInformation?address=${encodeURIComponent(address.toString())}`;
-
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    const text = await res.text();
-
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`getAddressInformation non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
-
-    if (!res.ok) {
-        throw new Error(`getAddressInformation failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const data = unwrapTonApi(json);
-
-    if (data.state === undefined || data.balance === undefined) {
-        console.error('Unexpected getAddressInformation payload:', JSON.stringify(json, null, 2));
-        console.log('Attempting fallback: calling getAddressState and getAddressBalance separately...');
-
-        try {
-            const state = await getAddressState(endpointAny, address);
-            const balance = await getAddressBalance(endpointAny, address);
-            return {
-                state,
-                balance: balance.toString(),
-                last_transaction_id: data.last_transaction_id,
-            };
-        } catch (fallbackError: any) {
-            throw new Error(
-                `getAddressInformation payload missing required fields (state/balance). Fallback also failed: ${fallbackError.message}`
-            );
-        }
-    }
-
-    return data;
-}
-
-async function runGetMethod(endpointAny: string, address: Address, method: string, stack: any[] = []) {
-    const baseV2 = toV2Base(endpointAny);
-    const url = `${baseV2}/runGetMethod`;
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({
-            address: address.toString(),
-            method,
-            stack,
-        }),
-    });
-
-    const text = await res.text();
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`runGetMethod non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
-
-    if (!res.ok) {
-        throw new Error(`runGetMethod failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const data = unwrapTonApi(json);
-    if (data.exit_code === undefined) {
-        console.error('Unexpected runGetMethod payload:', JSON.stringify(json, null, 2));
-        throw new Error('runGetMethod payload missing exit_code field');
-    }
-
-    return data;
-}
-
-async function sendExternalViaChainstackSendQuery(args: {
-    endpointAny: string;
-    address: Address;
-    body: Cell;
-    timeoutMs?: number;
-}): Promise<void> {
-    const baseV2 = toV2Base(args.endpointAny);
-    const url = `${baseV2}/sendQuery`;
-    const bodyBase64 = args.body.toBoc().toString('base64');
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), args.timeoutMs ?? 30000);
-
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                address: args.address.toString(),
-                body: bodyBase64,
-            }),
-            signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        const text = await res.text();
-        let json: any;
-        try {
-            json = JSON.parse(text);
-        } catch {
-            throw new Error(`sendQuery non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-        }
-
-        if (!res.ok) {
-            console.error('Full sendQuery response:', JSON.stringify(json, null, 2));
-            throw new Error(`sendQuery failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-        }
-
-        const data = unwrapTonApi(json);
-        return;
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            throw new Error(`sendQuery timeout after ${args.timeoutMs ?? 30000}ms`);
-        }
-        throw error;
-    }
-}
-
-function sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function parseId(): bigint {
+    // First check environment variable (set by runWithChainstack.ts)
+    const envId = process.env.SCRIPT_ID;
+    if (envId) {
+        const parsed = BigInt(envId);
+        if (parsed < 1n) {
+            throw new Error('SCRIPT_ID must be >= 1');
+        }
+        return parsed;
+    }
+
+    // Fall back to CLI args (for direct blueprint run)
     const args = process.argv.slice(2);
     const idIndex = args.indexOf('--id');
     if (idIndex !== -1 && idIndex + 1 < args.length) {
@@ -265,6 +59,10 @@ function parseId(): bigint {
     return 1n; // Default to 1
 }
 
+/**
+ * Local waitForConfirmation wrapper that uses the shared utility.
+ * This wrapper is kept for backwards compatibility with the existing code structure.
+ */
 async function waitForConfirmation(
     endpointAny: string,
     address: Address,
@@ -272,24 +70,7 @@ async function waitForConfirmation(
     maxAttempts: number = 30,
     pollDelay: number = 2000
 ): Promise<void> {
-    for (let i = 0; i < maxAttempts; i++) {
-        await sleep(pollDelay);
-
-        try {
-            const confirmed = await checkFn();
-            if (confirmed) {
-                return;
-            }
-        } catch (err) {
-            // Ignore errors during polling
-        }
-
-        if (i < maxAttempts - 1) {
-            process.stdout.write(`\rPolling... (${i + 1}/${maxAttempts})`);
-        }
-    }
-    console.log(''); // New line after polling
-    throw new Error('Confirmation timeout: operation not confirmed on-chain');
+    return chainstackWaitForConfirmation(checkFn, maxAttempts, pollDelay);
 }
 
 export async function run(provider: NetworkProvider) {
@@ -357,19 +138,21 @@ export async function run(provider: NetworkProvider) {
         console.log(`Game: ${gameAddress.toString()}`);
         console.log(`Owner: ${ownerAddress.toString()}`);
 
-        // Resolve endpoint
-        const endpointAny =
-            process.env.CHAINSTACK_API_V3 ||
-            process.env.CHAINSTACK_API_V2 ||
-            (provider as any)?.api?.endpoint ||
-            '';
-        if (!endpointAny) {
-            throw new Error('No Chainstack endpoint found (set CHAINSTACK_API_V3 or CHAINSTACK_API_V2)');
+        // Log Chainstack configuration
+        logChainstackConfig(network);
+
+        // Resolve endpoint using shared utilities
+        const endpoints = getChainstackEndpoints(network);
+        const endpointAny = endpoints.v2;
+        
+        if (!isChainstackConfigured(network)) {
+            console.warn('⚠ Warning: Chainstack API not configured, using public endpoints');
+            console.warn('  For better performance, set CHAINSTACK_API_V2 and/or CHAINSTACK_API_V3 in .env');
         }
 
         const baseV2 = toV2Base(endpointAny);
         console.log(`\n--- Endpoint Configuration ---`);
-        console.log(`Original endpoint: ${endpointAny}`);
+        console.log(`Using endpoint: ${endpointAny}`);
         console.log(`Computed v2 base: ${baseV2}`);
 
         // Derive key pair from PRIVATE_KEY
@@ -596,12 +379,7 @@ export async function run(provider: NetworkProvider) {
         });
 
         console.log(`Sending external ForwardWithInit message...`);
-        await sendExternalViaChainstackSendQuery({
-            endpointAny,
-            address: subcontractAddress,
-            body: envelope,
-            timeoutMs: 30000,
-        });
+        await sendExternalMessage(endpointAny, subcontractAddress, envelope, 30000);
         console.log('✓ External message sent');
 
         // Wait for confirmation (extSeqno increment)
@@ -670,12 +448,7 @@ export async function run(provider: NetworkProvider) {
         });
 
         console.log('Sending external Forward message for UP move...');
-        await sendExternalViaChainstackSendQuery({
-            endpointAny,
-            address: subcontractAddress,
-            body: envelopeUp,
-            timeoutMs: 30000,
-        });
+        await sendExternalMessage(endpointAny, subcontractAddress, envelopeUp, 30000);
         console.log('✓ External message sent');
 
         await waitForConfirmation(endpointAny, subcontractAddress, async () => {
@@ -751,12 +524,7 @@ export async function run(provider: NetworkProvider) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 // Increase timeout for EXIT move as it may take longer to process
-                await sendExternalViaChainstackSendQuery({
-                    endpointAny,
-                    address: subcontractAddress,
-                    body: envelopeExit,
-                    timeoutMs: 60000, // Increased to 60 seconds
-                });
+                await sendExternalMessage(endpointAny, subcontractAddress, envelopeExit, 60000);
                 console.log('✓ External message sent');
                 break; // Success, exit retry loop
             } catch (error: any) {

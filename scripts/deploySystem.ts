@@ -22,6 +22,11 @@ import {
     writeDeploymentData,
     readDeploymentData,
 } from '../lib/buildOutput';
+import {
+    getChainstackEndpoints,
+    logChainstackConfig,
+    isChainstackConfigured,
+} from '../lib/chainstack';
 
 // Load environment variables
 dotenv.config();
@@ -53,6 +58,17 @@ function getNetworkFromProvider(provider: NetworkProvider): Network {
 }
 
 function parseId(): bigint {
+    // First check environment variable (set by runWithChainstack.ts)
+    const envId = process.env.SCRIPT_ID;
+    if (envId) {
+        const parsed = BigInt(envId);
+        if (parsed < 1n) {
+            throw new Error('SCRIPT_ID must be >= 1');
+        }
+        return parsed;
+    }
+
+    // Fall back to CLI args (for direct blueprint run)
     const args = process.argv.slice(2);
     const idIndex = args.indexOf('--id');
     if (idIndex !== -1 && idIndex + 1 < args.length) {
@@ -450,6 +466,9 @@ export async function run(provider: NetworkProvider) {
     };
 
     try {
+        // Log Chainstack configuration
+        logChainstackConfig(network);
+
         // Get owner address from the wallet (for contract configuration)
         const ownerAddress = provider.sender().address!;
         deploymentData.ownerAddress = formatAddress(ownerAddress, isTestnet);
