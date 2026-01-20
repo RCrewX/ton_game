@@ -31,6 +31,48 @@ export class GameManager implements Contract {
         return new GameManager(contractAddress(workchain, init), init);
     }
 
+    // ========================================================================
+    // Static Message Builders (for use without ContractProvider)
+    // ========================================================================
+
+    /**
+     * Build deployJetton message body
+     */
+    static deployJettonMessage(deployJetton: DeployJetton): Cell {
+        return encodeDeployJetton(deployJetton);
+    }
+
+    /**
+     * Build setGamesInfo message body
+     */
+    static setGamesInfoMessage(gamesInfo: GamesInfo): Cell {
+        const gamesInfoCell = encodeGamesInfo(gamesInfo);
+        return encodeSetGamesInfo({ gamesInfo: gamesInfoCell });
+    }
+
+    /**
+     * Build redirectMessage body
+     */
+    static redirectMessage(
+        destination: Address,
+        messageBody: Cell,
+        forwardTonAmount: bigint = toNano('0.1'),
+        queryId: bigint = 0n
+    ): Cell {
+        return encodeRedirectMessage({ queryId, destination, messageBody, forwardTonAmount });
+    }
+
+    /**
+     * Build setAllowBurn message body
+     */
+    static setAllowBurnMessage(allow_burn: boolean): Cell {
+        return encodeSetAllowBurn({ allow_burn });
+    }
+
+    // ========================================================================
+    // Provider-based Send Methods
+    // ========================================================================
+
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
         await provider.internal(via, {
             value,

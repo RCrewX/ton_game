@@ -8,14 +8,21 @@
         "test": "NODE_OPTIONS='--max-old-space-size=8192 --expose-gc' jest --verbose --detectOpenHandles",
         "test:single": "NODE_OPTIONS='--max-old-space-size=8192 --expose-gc' jest --verbose --runInBand",
         "deploy": "ts-node scripts/deploySystem.ts",
+        "deploy:testnet": "ts-node scripts/deploySystem.ts --testnet",
+        "deploy:mainnet": "ts-node scripts/deploySystem.ts --mainnet",
         "release": "blueprint pack && npm publish --access public",
         "generate-key": "ts-node scripts/generatePrivateKey.ts",
         "move-ship": "blueprint run moveShip",
         "check-connection": "ts-node scripts/checkConnection.ts",
-        "chainstack": "ts-node scripts/runWithChainstack.ts"
+        "chainstack": "ts-node scripts/runWithChainstack.ts",
+        "test:providers": "ts-node provider_system/test.ts",
+        "test:providers:quick": "ts-node provider_system/test.ts --quick",
+        "test:providers:verbose": "ts-node provider_system/test.ts --verbose"
     },
     "dependencies": {
-        "@ton/core": "~0.62.0"
+        "@orbs-network/ton-access": "^2.3.3",
+        "@ton/core": "~0.62.0",
+        "zod": "^3.23.8"
     },
     "devDependencies": {
         "@tact-lang/compiler": "^1.6.13",

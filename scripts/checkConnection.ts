@@ -1,194 +1,49 @@
 /**
  * Check Connection Script
  *
- * Tests connectivity to all configured TON API providers:
- * - Chainstack API (testnet and mainnet if configured)
- * - Public toncenter endpoints (testnet and mainnet)
+ * Tests connectivity to all configured TON API providers using the unified provider system.
+ * Provider definitions are loaded from provider_system/rpc.json.
+ * API keys are read from environment variables (.env).
  *
  * Usage:
  *   pnpm check-connection
  *   pnpm blueprint run checkConnection
  */
 
-import { Address } from '@ton/core';
 import * as dotenv from 'dotenv';
 import {
-    Network,
-    getChainstackEndpoints,
-    isChainstackConfigured,
-    getAddressState,
-    getAddressBalance,
-    runGetMethod,
-    toV2Base,
-} from '../lib/chainstack';
+    createRegistry,
+    createHealthChecker,
+    type Network,
+    type ProviderHealthResult,
+} from '../provider_system';
 
 // Load environment variables
 dotenv.config();
 
-// Well-known addresses for testing (system contracts that always exist)
-const TEST_ADDRESSES: Record<Network, string> = {
-    testnet: 'EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2', // Testnet elector
-    mainnet: 'Ef8zMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM0vF', // Mainnet elector
-};
-
-// Public endpoints (fallback)
-const PUBLIC_ENDPOINTS: Record<Network, { v2: string; v3: string }> = {
-    testnet: {
-        v2: 'https://testnet.toncenter.com/api/v2',
-        v3: 'https://testnet.toncenter.com/api/v3',
-    },
-    mainnet: {
-        v2: 'https://toncenter.com/api/v2',
-        v3: 'https://toncenter.com/api/v3',
-    },
-};
-
 interface ConnectionResult {
     provider: string;
+    providerId: string;
     network: Network;
     endpoint: string;
     status: 'ok' | 'error' | 'not_configured';
     latencyMs?: number;
+    seqno?: number;
+    blocksBehind?: number;
     error?: string;
-    details?: {
-        addressState?: string;
-        balance?: string;
-        getMethodWorks?: boolean;
-    };
-}
-
-async function testEndpoint(
-    providerName: string,
-    network: Network,
-    endpoint: string
-): Promise<ConnectionResult> {
-    const testAddress = Address.parse(TEST_ADDRESSES[network]);
-    const startTime = Date.now();
-
-    try {
-        // Test 1: getAddressState
-        const state = await getAddressState(endpoint, testAddress);
-        const stateLatency = Date.now() - startTime;
-
-        // Test 2: getAddressBalance
-        const balanceStart = Date.now();
-        const balance = await getAddressBalance(endpoint, testAddress);
-        const balanceLatency = Date.now() - balanceStart;
-
-        // Test 3: runGetMethod (call a simple method on elector)
-        const getMethodStart = Date.now();
-        let getMethodWorks = false;
-        try {
-            // Try to call 'seqno' or 'get_public_key' - common methods
-            await runGetMethod(endpoint, testAddress, 'active_election_id', []);
-            getMethodWorks = true;
-        } catch {
-            // Some methods may not exist, but if we got a response, the endpoint works
-            getMethodWorks = false;
-        }
-        const getMethodLatency = Date.now() - getMethodStart;
-
-        const totalLatency = Date.now() - startTime;
-
-        return {
-            provider: providerName,
-            network,
-            endpoint: toV2Base(endpoint),
-            status: 'ok',
-            latencyMs: totalLatency,
-            details: {
-                addressState: state,
-                balance: balance.toString(),
-                getMethodWorks,
-            },
-        };
-    } catch (error: any) {
-        return {
-            provider: providerName,
-            network,
-            endpoint: toV2Base(endpoint),
-            status: 'error',
-            latencyMs: Date.now() - startTime,
-            error: error.message || String(error),
-        };
-    }
-}
-
-async function checkAllConnections(): Promise<ConnectionResult[]> {
-    const results: ConnectionResult[] = [];
-
-    console.log('=== TON API Connection Check ===\n');
-
-    // Check Chainstack testnet
-    console.log('Checking Chainstack Testnet...');
-    if (isChainstackConfigured('testnet')) {
-        const endpoints = getChainstackEndpoints('testnet');
-        const result = await testEndpoint('Chainstack', 'testnet', endpoints.v2);
-        results.push(result);
-        printResult(result);
-    } else {
-        results.push({
-            provider: 'Chainstack',
-            network: 'testnet',
-            endpoint: '-',
-            status: 'not_configured',
-        });
-        console.log('  ⚠ Not configured (set CHAINSTACK_API_V2 in .env)\n');
-    }
-
-    // Check Chainstack mainnet
-    console.log('Checking Chainstack Mainnet...');
-    if (isChainstackConfigured('mainnet')) {
-        const endpoints = getChainstackEndpoints('mainnet');
-        const result = await testEndpoint('Chainstack', 'mainnet', endpoints.v2);
-        results.push(result);
-        printResult(result);
-    } else {
-        results.push({
-            provider: 'Chainstack',
-            network: 'mainnet',
-            endpoint: '-',
-            status: 'not_configured',
-        });
-        console.log('  ⚠ Not configured (set CHAINSTACK_API_MAINNET_V2 in .env)\n');
-    }
-
-    // Check public toncenter testnet
-    console.log('Checking Toncenter Testnet (public)...');
-    const toncenterTestnet = await testEndpoint(
-        'Toncenter',
-        'testnet',
-        PUBLIC_ENDPOINTS.testnet.v2
-    );
-    results.push(toncenterTestnet);
-    printResult(toncenterTestnet);
-
-    // Check public toncenter mainnet
-    console.log('Checking Toncenter Mainnet (public)...');
-    const toncenterMainnet = await testEndpoint(
-        'Toncenter',
-        'mainnet',
-        PUBLIC_ENDPOINTS.mainnet.v2
-    );
-    results.push(toncenterMainnet);
-    printResult(toncenterMainnet);
-
-    return results;
 }
 
 function printResult(result: ConnectionResult): void {
     if (result.status === 'ok') {
-        console.log(`  ✓ Connected (${result.latencyMs}ms)`);
+        console.log(`  ✓ ${result.provider} (${result.latencyMs}ms)`);
         console.log(`    Endpoint: ${result.endpoint}`);
-        if (result.details) {
-            console.log(`    State: ${result.details.addressState}`);
-            console.log(`    Balance: ${result.details.balance} nanoTON`);
-            console.log(`    GetMethod: ${result.details.getMethodWorks ? 'works' : 'limited'}`);
-        }
+        console.log(`    Seqno: ${result.seqno}, Blocks behind: ${result.blocksBehind}`);
     } else if (result.status === 'error') {
-        console.log(`  ✗ Failed (${result.latencyMs}ms)`);
+        console.log(`  ✗ ${result.provider}`);
         console.log(`    Endpoint: ${result.endpoint}`);
         console.log(`    Error: ${result.error}`);
+    } else {
+        console.log(`  ⚠ ${result.provider} - Not configured`);
     }
     console.log('');
 }
@@ -197,70 +52,171 @@ function printSummary(results: ConnectionResult[]): void {
     console.log('=== Connection Summary ===\n');
 
     const table: string[] = [];
-    table.push('Provider      | Network  | Status         | Latency');
-    table.push('------------- | -------- | -------------- | -------');
+    table.push('Provider              | Network  | Status         | Latency  | Seqno');
+    table.push('--------------------- | -------- | -------------- | -------- | -----');
 
     for (const result of results) {
-        const provider = result.provider.padEnd(13);
+        const provider = result.provider.substring(0, 21).padEnd(21);
         const network = result.network.padEnd(8);
         let status: string;
         let latency: string;
+        let seqno: string;
 
         switch (result.status) {
             case 'ok':
                 status = '✓ OK'.padEnd(14);
-                latency = `${result.latencyMs}ms`;
+                latency = result.latencyMs ? `${result.latencyMs}ms`.padEnd(8) : '-'.padEnd(8);
+                seqno = result.seqno?.toString() || '-';
                 break;
             case 'error':
                 status = '✗ Error'.padEnd(14);
-                latency = '-';
+                latency = '-'.padEnd(8);
+                seqno = '-';
                 break;
             case 'not_configured':
                 status = '⚠ Not Config'.padEnd(14);
-                latency = '-';
+                latency = '-'.padEnd(8);
+                seqno = '-';
                 break;
         }
 
-        table.push(`${provider} | ${network} | ${status} | ${latency}`);
+        table.push(`${provider} | ${network} | ${status} | ${latency} | ${seqno}`);
     }
 
     console.log(table.join('\n'));
     console.log('');
+}
 
-    // Recommendations
-    const chainstackConfigured = results.some(
-        (r) => r.provider === 'Chainstack' && r.status !== 'not_configured'
-    );
-    const chainstackWorking = results.some(
-        (r) => r.provider === 'Chainstack' && r.status === 'ok'
-    );
-    const toncenterWorking = results.some(
-        (r) => r.provider === 'Toncenter' && r.status === 'ok'
-    );
+async function checkAllConnections(): Promise<ConnectionResult[]> {
+    const results: ConnectionResult[] = [];
 
+    console.log('=== TON Provider System Connection Check ===\n');
+    console.log('Loading providers from provider_system/rpc.json...\n');
+
+    // Load registry (from provider_system/rpc.json)
+    const registry = await createRegistry();
+    const healthChecker = createHealthChecker({
+        timeoutMs: 15000,
+        maxBlocksBehind: 10,
+    });
+
+    // Test testnet providers
+    console.log('--- Testing Testnet Providers ---\n');
+    const testnetProviders = registry.getProvidersForNetwork('testnet');
+
+    if (testnetProviders.length === 0) {
+        console.log('  No testnet providers configured.\n');
+    } else {
+        for (const provider of testnetProviders) {
+            console.log(`Testing ${provider.name}...`);
+            const healthResult = await healthChecker.testProvider(provider);
+
+            const result: ConnectionResult = {
+                provider: provider.name,
+                providerId: provider.id,
+                network: 'testnet',
+                endpoint: healthResult.cachedEndpoint || provider.endpointV2,
+                status: healthResult.success ? 'ok' : 'error',
+                latencyMs: healthResult.latencyMs || undefined,
+                seqno: healthResult.seqno || undefined,
+                blocksBehind: healthResult.blocksBehind,
+                error: healthResult.error,
+            };
+
+            results.push(result);
+            printResult(result);
+        }
+    }
+
+    // Test mainnet providers
+    console.log('--- Testing Mainnet Providers ---\n');
+    const mainnetProviders = registry.getProvidersForNetwork('mainnet');
+
+    if (mainnetProviders.length === 0) {
+        console.log('  No mainnet providers configured.\n');
+    } else {
+        for (const provider of mainnetProviders) {
+            console.log(`Testing ${provider.name}...`);
+            const healthResult = await healthChecker.testProvider(provider);
+
+            const result: ConnectionResult = {
+                provider: provider.name,
+                providerId: provider.id,
+                network: 'mainnet',
+                endpoint: healthResult.cachedEndpoint || provider.endpointV2,
+                status: healthResult.success ? 'ok' : 'error',
+                latencyMs: healthResult.latencyMs || undefined,
+                seqno: healthResult.seqno || undefined,
+                blocksBehind: healthResult.blocksBehind,
+                error: healthResult.error,
+            };
+
+            results.push(result);
+            printResult(result);
+        }
+    }
+
+    return results;
+}
+
+function printRecommendations(results: ConnectionResult[]): void {
     console.log('=== Recommendations ===\n');
 
-    if (!chainstackConfigured) {
-        console.log('💡 Configure Chainstack for better reliability:');
-        console.log('   Add to .env:');
-        console.log('   CHAINSTACK_API_V2=https://ton-testnet.core.chainstack.com/<key>/api/v2');
-        console.log('   CHAINSTACK_API_V3=https://ton-testnet.core.chainstack.com/<key>/api/v3');
-        console.log('');
+    const testnetWorking = results.filter((r) => r.network === 'testnet' && r.status === 'ok');
+    const mainnetWorking = results.filter((r) => r.network === 'mainnet' && r.status === 'ok');
+
+    // Find best providers (lowest latency)
+    const bestTestnet = testnetWorking.sort((a, b) => (a.latencyMs || Infinity) - (b.latencyMs || Infinity))[0];
+    const bestMainnet = mainnetWorking.sort((a, b) => (a.latencyMs || Infinity) - (b.latencyMs || Infinity))[0];
+
+    if (testnetWorking.length === 0) {
+        console.log('⚠ No working testnet providers found!');
+        console.log('  Configure API keys in .env file');
+        console.log('  Recommended: Set CHAINSTACK_KEY_TESTNET for best performance\n');
+    } else {
+        console.log(`✓ Testnet: ${testnetWorking.length} provider(s) working`);
+        if (bestTestnet) {
+            console.log(`  Best: ${bestTestnet.provider} (${bestTestnet.latencyMs}ms)\n`);
+        }
     }
 
-    if (chainstackWorking) {
-        console.log('✓ Chainstack is configured and working - this is the recommended provider.');
-    } else if (chainstackConfigured) {
-        console.log('⚠ Chainstack is configured but not working. Check your API key.');
+    if (mainnetWorking.length === 0) {
+        console.log('⚠ No working mainnet providers found!');
+        console.log('  Configure API keys in .env file');
+        console.log('  Recommended: Set CHAINSTACK_KEY_MAINNET or QUICKNODE_KEY_MAINNET\n');
+    } else {
+        console.log(`✓ Mainnet: ${mainnetWorking.length} provider(s) working`);
+        if (bestMainnet) {
+            console.log(`  Best: ${bestMainnet.provider} (${bestMainnet.latencyMs}ms)\n`);
+        }
     }
 
-    if (toncenterWorking && !chainstackWorking) {
-        console.log('✓ Public Toncenter is working as fallback.');
-        console.log('  Note: Public endpoints may have rate limits.');
+    // Show env var hints
+    const missingKeys: string[] = [];
+    const envVars = [
+        'CHAINSTACK_KEY_TESTNET',
+        'CHAINSTACK_KEY_MAINNET',
+        'QUICKNODE_KEY_MAINNET',
+        'GETBLOCK_KEY_MAINNET',
+        'ONFINALITY_KEY_TESTNET',
+        'TATUM_API_KEY_TESTNET',
+        'TONCENTER_API_KEY',
+    ];
+
+    for (const envVar of envVars) {
+        if (!process.env[envVar]) {
+            missingKeys.push(envVar);
+        }
     }
 
-    if (!chainstackWorking && !toncenterWorking) {
-        console.log('✗ No working endpoints found! Check your network connection.');
+    if (missingKeys.length > 0) {
+        console.log('💡 Configure these env vars in .env for more providers:');
+        for (const key of missingKeys.slice(0, 3)) {
+            console.log(`   ${key}`);
+        }
+        if (missingKeys.length > 3) {
+            console.log(`   ... and ${missingKeys.length - 3} more`);
+        }
     }
 
     console.log('');
@@ -271,6 +227,7 @@ async function main() {
     try {
         const results = await checkAllConnections();
         printSummary(results);
+        printRecommendations(results);
 
         // Exit with error code if no connections work
         const anyWorking = results.some((r) => r.status === 'ok');

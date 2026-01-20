@@ -4,6 +4,19 @@
  * This module provides utilities for interacting with TON blockchain via Chainstack API.
  * It supports both API v2 and v3 endpoints and provides fallback to other public endpoints.
  *
+ * NOTE: This module is kept for backward compatibility.
+ * For new code, use the unified provider_system instead:
+ *
+ * ```typescript
+ * import { ProviderManager, NodeAdapter } from '../provider_system';
+ *
+ * const pm = ProviderManager.getInstance();
+ * await pm.init('testnet');
+ *
+ * const adapter = new NodeAdapter(pm);
+ * const state = await adapter.getAddressState(address);
+ * ```
+ *
  * Environment Variables:
  * - CHAINSTACK_API_V2: Chainstack API v2 endpoint (e.g., https://ton-testnet.core.chainstack.com/xxx/api/v2)
  * - CHAINSTACK_API_V3: Chainstack API v3 endpoint (e.g., https://ton-testnet.core.chainstack.com/xxx/api/v3)
@@ -129,7 +142,7 @@ export function logChainstackConfig(network: Network): void {
     const endpoints = getChainstackEndpoints(network);
     const isConfigured = isChainstackConfigured(network);
 
-    console.log(`\n--- Chainstack API Configuration (${network}) ---`);
+    console.log(`\n--- Provider Configuration (${network}) ---`);
     if (isConfigured) {
         console.log('✓ Chainstack API is configured');
         console.log(`  API v2: ${endpoints.v2}`);
@@ -139,6 +152,7 @@ export function logChainstackConfig(network: Network): void {
         console.log(`  API v2: ${endpoints.v2}`);
         console.log(`  API v3: ${endpoints.v3}`);
         console.log('  To use Chainstack, set CHAINSTACK_API_V2 and/or CHAINSTACK_API_V3 in .env');
+        console.log('  Or configure providers in provider_system/rpc.json');
     }
     console.log('');
 }

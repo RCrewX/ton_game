@@ -1,9 +1,11 @@
 #!/usr/bin/env ts-node
 /**
- * Helper script to run Blueprint commands with Chainstack endpoints.
+ * Helper script to run Blueprint commands with the best available provider.
  *
- * This script loads environment variables and runs Blueprint with the correct
- * --custom flags for Chainstack API usage.
+ * This script uses the unified provider system to automatically select
+ * the best provider based on availability and latency.
+ * Provider definitions are loaded from provider_system/rpc.json.
+ * API keys are read from environment variables (.env).
  *
  * Usage:
  *   ts-node scripts/runWithChainstack.ts <script> [--mainnet] [options]
@@ -28,18 +30,75 @@
 
 import { spawn } from 'child_process';
 import * as dotenv from 'dotenv';
+import {
+    createRegistry,
+    createHealthChecker,
+    type Network,
+} from '../provider_system';
 
 // Load environment variables
 dotenv.config();
 
-function getEndpoint(isMainnet: boolean): string | undefined {
-    if (isMainnet) {
-        return process.env.CHAINSTACK_API_MAINNET_V2 || process.env.CHAINSTACK_API_MAINNET_V3;
+async function getBestEndpoint(network: Network): Promise<string | null> {
+    try {
+        // Load registry (from provider_system/rpc.json) and health checker
+        const registry = await createRegistry();
+        const healthChecker = createHealthChecker({ timeoutMs: 10000 });
+
+        // Get providers for network
+        const providers = registry.getDefaultOrderForNetwork(network);
+
+        if (providers.length === 0) {
+            console.error(`No providers configured for ${network}`);
+            return null;
+        }
+
+        console.log(`Testing ${providers.length} providers for ${network}...`);
+
+        // Test providers in order until one works
+        for (const provider of providers) {
+            console.log(`  Testing ${provider.name}...`);
+            const result = await healthChecker.testProvider(provider);
+
+            if (result.success && result.cachedEndpoint) {
+                console.log(`  ✓ ${provider.name} available (${result.latencyMs}ms)`);
+                return result.cachedEndpoint;
+            } else {
+                console.log(`  ✗ ${provider.name}: ${result.error || 'Failed'}`);
+            }
+        }
+
+        return null;
+    } catch (error: any) {
+        console.error(`Error getting best endpoint: ${error.message}`);
+        return null;
     }
-    return process.env.CHAINSTACK_API_V2 || process.env.CHAINSTACK_API_V3;
 }
 
-function main() {
+function getFallbackEndpoint(network: Network): string {
+    // Try environment variables first (backward compatibility)
+    if (network === 'mainnet') {
+        const mainnetEndpoint = process.env.CHAINSTACK_API_MAINNET_V2 ||
+            process.env.CHAINSTACK_API_MAINNET_V3;
+        if (mainnetEndpoint) {
+            return mainnetEndpoint.endsWith('/jsonRPC')
+                ? mainnetEndpoint
+                : `${mainnetEndpoint}/jsonRPC`;
+        }
+        return 'https://toncenter.com/api/v2/jsonRPC';
+    }
+
+    const testnetEndpoint = process.env.CHAINSTACK_API_V2 ||
+        process.env.CHAINSTACK_API_V3;
+    if (testnetEndpoint) {
+        return testnetEndpoint.endsWith('/jsonRPC')
+            ? testnetEndpoint
+            : `${testnetEndpoint}/jsonRPC`;
+    }
+    return 'https://testnet.toncenter.com/api/v2/jsonRPC';
+}
+
+async function main() {
     const args = process.argv.slice(2);
 
     // Parse arguments
@@ -91,37 +150,36 @@ function main() {
         process.exit(1);
     }
 
-    const networkType = isMainnet ? 'mainnet' : 'testnet';
-    const endpoint = getEndpoint(isMainnet);
+    const network: Network = isMainnet ? 'mainnet' : 'testnet';
+
+    console.log(`\n=== Provider Selection for ${network} ===\n`);
+
+    // Get best endpoint
+    let endpoint = await getBestEndpoint(network);
 
     if (!endpoint) {
-        console.error(`Error: Chainstack API not configured for ${networkType}.`);
-        console.error('');
-        console.error('Please set the following in your .env file:');
-        if (isMainnet) {
-            console.error('  CHAINSTACK_API_MAINNET_V2=https://ton-mainnet.core.chainstack.com/<key>/api/v2');
-        } else {
-            console.error('  CHAINSTACK_API_V2=https://ton-testnet.core.chainstack.com/<key>/api/v2');
-        }
-        process.exit(1);
+        console.warn('\nNo providers available, trying fallback...');
+        endpoint = getFallbackEndpoint(network);
+        console.log(`Using fallback: ${endpoint}`);
     }
+
+    console.log(`\nSelected endpoint: ${endpoint}\n`);
 
     // Construct blueprint command
     const blueprintArgs = [
         'run',
         scriptName,
         '--custom',
-        `${endpoint}/jsonRPC`,
+        endpoint,
         '--custom-version',
         'v2',
         '--custom-type',
-        networkType,
+        network,
         '--mnemonic',
     ];
 
     console.log(`Running: blueprint ${blueprintArgs.join(' ')}`);
-    console.log(`Network: ${networkType}`);
-    console.log(`Endpoint: ${endpoint}`);
+    console.log(`Network: ${network}`);
     if (Object.keys(envVars).length > 0) {
         console.log(`Script options: ${JSON.stringify(envVars)}`);
     }
