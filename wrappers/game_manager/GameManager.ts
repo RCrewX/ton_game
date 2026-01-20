@@ -5,11 +5,13 @@ export type GameManagerConfig = {
     ownerAddress: Address;
 };
 
+export const DEFAULT_MY_LITTLE_TAX = toNano('0.02');
+
 export function gameManagerConfigToCell(config: GameManagerConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
         .storeBit(false) // allow_burn: bool (default false)
-        .storeCoins(toNano('0.01')) // my_little_tax: coins (0.01 by default)
+        .storeCoins(DEFAULT_MY_LITTLE_TAX) // my_little_tax: coins (0.01 by default)
         .storeMaybeRef(null) // jettonInfo: Cell<JettonInfo>?
         .storeMaybeRef(null) // gamesInfo: Cell<GamesInfo>?
         .storeMaybeRef(null) // config: cell?

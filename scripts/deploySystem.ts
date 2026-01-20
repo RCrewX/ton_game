@@ -40,6 +40,11 @@ const VERIFICATION_TIMEOUT = 120000; // 120 seconds for verification after timeo
 const TRANSACTION_WAIT_TIME = 5000; // 5 seconds between transactions
 const RETRY_DELAY = 10000; // 10 seconds base delay before retry (exponential backoff)
 
+
+// BASE_MINT_AMOUNT: amount of jettons to mint for the owner
+const BASE_MINT_AMOUNT = 5000n;
+
+
 function getNetworkFromProvider(provider: NetworkProvider): Network {
     // Try to detect network from provider
     // Check various possible properties
@@ -843,7 +848,7 @@ export async function run(provider: NetworkProvider) {
             API_TIMEOUT,
             'Getting owner jetton balance'
         );
-        const mintAmount = toNano('1000');
+        const mintAmount = BASE_MINT_AMOUNT;
         
         let userBalance: bigint;
         
