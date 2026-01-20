@@ -854,12 +854,20 @@ async function main(): Promise<void> {
         console.error('\n=== Deployment Failed ===');
         console.error('Error:', error.message || error);
         console.error('========================\n');
-        process.exit(1);
+        // Re-throw to let the bottom handler clean up and exit
+        throw error;
     }
 }
 
 // Run main
-main().catch((error) => {
-    console.error('Fatal error:', error);
-    process.exit(1);
-});
+main()
+    .then(() => {
+        // Cleanup provider system to allow process exit
+        ProviderManager.resetInstance();
+        process.exit(0);
+    })
+    .catch(() => {
+        // Error already logged in main(), just cleanup and exit
+        ProviderManager.resetInstance();
+        process.exit(1);
+    });
