@@ -175,15 +175,12 @@ fun onInternalMessage(in: InMessage) {
             reserveValue(in.valueCoins);
 
             val xy = msg.xy;
-            val moveDataCell = MoveData {
-                ship_hp: gameFields.hp,
-                xy: xy,
-            }.toCell();
-
-
             val bodyCell = TravelToCC {
                 user: in.senderAddress,
-                moveData: moveDataCell,
+                moveData: MoveData {
+                    ship_hp: gameFields.hp,
+                    xy: xy,
+                },
             }.toCell();
 
 

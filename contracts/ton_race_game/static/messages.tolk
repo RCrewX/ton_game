@@ -39,7 +39,7 @@ struct (0x0a1b2c3d) LiteralyAnything {
 // To Coordinate Cell
 struct (0x4b13d2f0) TravelToCC {
     user: address
-    moveData: Cell<MoveData> 
+    moveData: MoveData 
 }
 
 struct (0xeafb35a2) MoveShipToCC {
@@ -51,7 +51,7 @@ struct (0xeafb35a2) MoveShipToCC {
 struct (0x6ecc3df6) Move {
     user: address
     mode: MoveMode
-    moveData: Cell<MoveData>
+    moveData: MoveData
 }
 
 struct (0xe06f1de3) WithdrawTON {
@@ -77,10 +77,17 @@ struct (0x09e971a8) WithdrawNFT {
     customPayload: cell?
 }
 
-struct LaunchHardTravel {
+struct (0x7dbcd1dc) LaunchHardTravel {
     user: address
     ship_hp: HP_TYPE
     info: HardTravelInfo
+}
+
+struct (0x2f168b85) HardTravel {
+    user: address
+    ship_hp: HP_TYPE
+    info: HardTravelInfo
+    moveData: MoveData
 }
 
 

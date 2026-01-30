@@ -10,6 +10,8 @@ type AllowedMessagesToCoordinateCell =
     | Move 
     | MoveShipToCC 
     | TravelToCC
+    | LaunchHardTravel
+    | HardTravel
     | WithdrawTON
     | WithdrawJetton
     | WithdrawNFT
@@ -31,7 +33,7 @@ fun onInternalMessage(in: InMessage) {
     match (msg) {
         Move => {
             var storage = lazy CoordinateCellStorage.load();
-            var moveData: MoveData = lazy msg.moveData.load();
+            val moveData = msg.moveData;
             assert (in.senderAddress == calcAddressOfCoordinateCell(storage.gameAddress, moveData.xy.x, moveData.xy.y, contract.getCode(), storage.shipCode)) throw ERR_INVALID_COORDINATE_CELL_SENDER_FOR_MOVE;
             val shipAddress: address = calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode());
             var firstTimeOpened = !storage.opened;
@@ -126,7 +128,7 @@ fun onInternalMessage(in: InMessage) {
                     moveData: MoveData {
                         xy: storage.xy,
                         ship_hp: msg.ship_hp,
-                    }.toCell()
+                    }
                 }
             });
             // Use send_mode=128 to carry all remaining balance (excesses)
@@ -138,7 +140,7 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_INVALID_SHIP_SENDER_FOR_MOVE;
             reserveValue(in.valueCoins);
             
-            var moveData: MoveData = lazy msg.moveData.load();
+            val moveData = msg.moveData;
 
             var targetXY: XY = moveData.xy;
             val moveEndMsg = createMessage({
@@ -151,7 +153,7 @@ fun onInternalMessage(in: InMessage) {
                     moveData: MoveData {
                         xy: storage.xy,
                         ship_hp: moveData.ship_hp,
-                    }.toCell()
+                    }
                 }
             });
             // Use send_mode=128 to carry all remaining balance (excesses)
@@ -240,6 +242,27 @@ fun onInternalMessage(in: InMessage) {
             });
             // Use send_mode=128 to carry all remaining balance (excesses)
             nftTransferMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+        }
+        LaunchHardTravel => {
+            var storage = lazy CoordinateCellStorage.load();
+            assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            var ccStorage: CCStorage = lazy storage.ccStorage!.load();
+            assert (ccStorage.firstExplorer != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
+
+
+
+
+        }
+        HardTravel => {
+            var storage = lazy CoordinateCellStorage.load();
+            assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            var ccStorage: CCStorage = lazy storage.ccStorage!.load();
+            assert (ccStorage.firstExplorer != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
+
+
+
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}

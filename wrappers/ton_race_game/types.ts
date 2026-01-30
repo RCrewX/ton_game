@@ -30,7 +30,6 @@ export const GAS_COST_TRANSFER_NOTIFICATION = toNano("0.06"); // JettonWallet ->
 // messages.ts
 import { Address, Cell, beginCell } from '@ton/core';
 import {
-    // Эти типы и store-функции должны быть реализованы в твоём ./structs.ts
     MoveMode,
     storeMoveMode,
     MoveData,
@@ -137,8 +136,7 @@ export type MoveShipToCC = {
 export type Move = {
     user: Address;
     mode: MoveMode;
-    // В Tolk: Cell<MoveData> — здесь просто готовый Cell с сериализованным MoveData
-    moveData: Cell;
+    moveData: MoveData;
 };
 
 export type TravelToCC = {
@@ -279,8 +277,7 @@ export function encodeMove(msg: Move): Cell {
     b.storeUint(Opcodes.OP_MOVE, 32);
     b.storeAddress(msg.user);
     storeMoveMode(b, msg.mode);
-    // Cell<MoveData> — считаем, что это ref на сериализованный MoveData
-    b.storeRef(msg.moveData);
+    storeMoveData(b, msg.moveData);
     return b.endCell();
 }
 
@@ -288,10 +285,7 @@ export function encodeTravelToCC(msg: TravelToCC): Cell {
     const b = beginCell();
     b.storeUint(Opcodes.OP_TRAVEL_TO_CC, 32);
     b.storeAddress(msg.user);
-    b.storeUint(msg.ship_hp, 256);
-    const xyCell = beginCell();
-    storeXY(xyCell, msg.xy);
-    b.storeRef(xyCell.endCell());
+    storeMoveData(b, { ship_hp: msg.ship_hp, xy: msg.xy });
     return b.endCell();
 }
 

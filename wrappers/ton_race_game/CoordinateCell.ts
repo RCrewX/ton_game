@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
-import { XY, MoveMode, MoveData, storeMoveData, X_TYPE_BITS, Y_TYPE_BITS } from './structs';
+import { XY, MoveMode, MoveData, X_TYPE_BITS, Y_TYPE_BITS } from './structs';
 import { encodeMove, encodeMoveShipToCC, encodeWithdrawTON, encodeWithdrawJetton, encodeWithdrawNFT } from './types';
 
 export type CoordinateCellConfig = {
@@ -34,12 +34,10 @@ export class CoordinateCell implements Contract {
     }
 
     async sendMove(provider: ContractProvider, via: Sender, value: bigint, user: Address, mode: MoveMode, moveData: MoveData) {
-        const moveDataCell = beginCell();
-        storeMoveData(moveDataCell, moveData);
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeMove({ user, mode, moveData: moveDataCell.endCell() }),
+            body: encodeMove({ user, mode, moveData }),
         });
     }
 
