@@ -75,7 +75,7 @@ fun onInternalMessage(in: InMessage) {
 
             if (jettonUsageModeRaw == (JettonUsageMode.SHIP_UPGRADE as uint8)) {
                     random.initialize();
-                    var hpIncrease = generateSpecialRandomUint(msg.jettonAmount as uint256, 3) as HP_TYPE;
+                    var hpIncrease = generateSpecialRandomUint(msg.jettonAmount as HP_TYPE, 3);
                     
                     // Minimum HP increase is 1 (Minimum jetton amount is MIN_JETTON_USAGE_AMOUNT)
                     if (hpIncrease < 1) {

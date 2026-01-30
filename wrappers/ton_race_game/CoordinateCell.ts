@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
-import { XY, MoveMode, MoveData, storeMoveData } from './structs';
+import { XY, MoveMode, MoveData, storeMoveData, X_TYPE_BITS, Y_TYPE_BITS } from './structs';
 import { encodeMove, encodeMoveShipToCC, encodeWithdrawTON, encodeWithdrawJetton, encodeWithdrawNFT } from './types';
 
 export type CoordinateCellConfig = {
@@ -9,7 +9,7 @@ export type CoordinateCellConfig = {
 };
 
 export function coordinateCellConfigToCell(config: CoordinateCellConfig): Cell {
-    return beginCell().storeAddress(config.gameAddress).storeInt(config.xy.x, 256).storeUint(config.xy.y, 256).storeBit(false).storeMaybeRef(null).storeRef(config.shipCode).endCell();
+    return beginCell().storeAddress(config.gameAddress).storeInt(config.xy.x, X_TYPE_BITS).storeUint(config.xy.y, Y_TYPE_BITS).storeBit(false).storeMaybeRef(null).storeRef(config.shipCode).endCell();
 }
 
 export class CoordinateCell implements Contract {

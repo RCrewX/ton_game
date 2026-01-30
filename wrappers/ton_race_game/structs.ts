@@ -1,5 +1,9 @@
 // structs.ts
 import { Address, Cell, Builder } from '@ton/core';
+// Types 
+export const Y_TYPE_BITS: number = 64
+export const X_TYPE_BITS: number = 64
+export const HP_TYPE_BITS: number = 64
 
 // =======================
 // Типы
@@ -52,10 +56,10 @@ export type GameFields = {
 // =======================
 
 // XY.toSlice:
-// beginCell().storeInt(x, 256).storeUint(y, 256)
+// beginCell().storeInt(x, X_TYPE_BITS).storeUint(y, Y_TYPE_BITS)
 export function storeXY(builder: Builder, src: XY) {
-    builder.storeInt(src.x, 256);
-    builder.storeUint(src.y, 256);
+    builder.storeInt(src.x, X_TYPE_BITS);
+    builder.storeUint(src.y, Y_TYPE_BITS);
 }
 
 // MoveData {
@@ -63,7 +67,7 @@ export function storeXY(builder: Builder, src: XY) {
 //   xy: XY
 // }
 export function storeMoveData(builder: Builder, src: MoveData) {
-    builder.storeUint(src.ship_hp, 256);
+    builder.storeUint(src.ship_hp, HP_TYPE_BITS);
     storeXY(builder, src.xy);
 }
 
@@ -74,7 +78,7 @@ export function storeMoveData(builder: Builder, src: MoveData) {
 // }
 export function storeGameFields(builder: Builder, src: GameFields) {
     storeXY(builder, src.xy);
-    builder.storeUint(src.hp, 256);
+    builder.storeUint(src.hp, HP_TYPE_BITS);
     builder.storeCoins(src.jettonAmount);
 }
 

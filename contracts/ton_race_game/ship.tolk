@@ -7,7 +7,8 @@ import "static/constants"
 
 type AllowedMessagesToShip = 
     | MoveEnd 
-    | RequestToMove 
+    | RequestToMove
+    | RequestToHardTravel 
     | ShipUpgrade
     | RequestToFastTravel
     | AnyMessage
@@ -256,6 +257,9 @@ fun onInternalMessage(in: InMessage) {
             storage.movement_in_process = false;
             storage.save();
         },
+        RequestToHardTravel => {
+            
+        }
         ReturnExcessesBack => {}
         LiteralyAnything => {}
         else => {

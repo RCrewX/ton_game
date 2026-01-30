@@ -158,7 +158,7 @@ fun generateSpecialType(): SpecialType {
     }
 }
 
-fun generateSpecialRandomUint(base: uint256, k: uint16 = 10): uint256 {
+fun generateSpecialRandomUint(base: HP_TYPE, k: uint16 = 10): HP_TYPE {
     // Generate random type (4 types: empty, low, high, extra)
     // Based on type generate random uint
     // EMPTY: 0
@@ -177,7 +177,7 @@ fun generateSpecialRandomUint(base: uint256, k: uint16 = 10): uint256 {
 
 }
 
-fun generateRandomResult(base: uint256): RandomResult {
+fun generateRandomResult(base: HP_TYPE): RandomResult {
     random.initialize();
 
     val randomResult: RandomResult = {
@@ -191,7 +191,7 @@ fun generateRandomResult(base: uint256): RandomResult {
 
 fun buildGameFields(max_hp: HP_TYPE): Cell<GameFields> {
     // Dirty hack: using storeUint(0, 256) for X because of the way the compiler optimizes the code
-    val gameFields: Cell<GameFields> = beginCell().storeUint(0, 256).storeUint(0, 256).storeUint(max_hp, 256).storeCoins(0).endCell() as Cell<GameFields>;
+    val gameFields: Cell<GameFields> = beginCell().storeUint(0, X_TYPE_BITS).storeUint(0, Y_TYPE_BITS).storeUint(max_hp, HP_TYPE_BITS).storeCoins(0).endCell() as Cell<GameFields>;
     return gameFields;
 }
 

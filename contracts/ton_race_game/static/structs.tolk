@@ -1,16 +1,24 @@
-// TODO Use special types for HP and X and Y Coordinates (example: RemainingBitsAndRefs)
-type Y_TYPE = uint256
-type X_TYPE = int256
+import "constants"
+
+type Y_TYPE = uint64
+type X_TYPE = int64
 type HP_TYPE = Y_TYPE
+
+const Y_TYPE_BITS: int = 64
+const X_TYPE_BITS: int = 64
+const HP_TYPE_BITS: int = 64
 
 // DOES NOT WORK YET, WAIT TOLK 1.3
 // 
 // Error: fatal: Assertion failed at /Users/inv/ton-wasm/ton/tolk/optimize.cpp:62: p_ > 0 && p_ <= l_ && q_ >= 0 && q_ <= optimize_depth && l_ <= optimize_depth
 // 
 // Use (x-x) for zero
-
 const x_zero: X_TYPE = 0 as X_TYPE;
 const y_zero: Y_TYPE = 0 as Y_TYPE;
+
+
+
+
 
 struct XY {
     x: X_TYPE
@@ -18,14 +26,21 @@ struct XY {
 }
 
 fun XY.toSlice(self): slice {
-    return beginCell().storeInt(self.x, 256).storeUint(self.y, 256).toSlice();
+    return beginCell().storeInt(self.x, X_TYPE_BITS).storeUint(self.y, Y_TYPE_BITS).toSlice();
 }
 
 fun XY.load(slice: slice): XY {
     return XY {
-        x: slice.loadInt(256),
-        y: slice.loadUint(256),
+        x: slice.loadInt(X_TYPE_BITS),
+        y: slice.loadUint(Y_TYPE_BITS),
     }
+}
+
+struct HardTravelInfo {
+    mode: MoveMode
+    gasLimit: coins // always > 1 TON
+    hpLimit: HP_TYPE // always > 0
+    maxTurns: uint64 // TODO: Think about limit
 }
 
 struct FastTravelInfo {

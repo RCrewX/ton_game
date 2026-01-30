@@ -1,6 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 import { encodeRequestToMove, encodeRequestToFastTravel, loadGameFieldsOpt } from './types';
-import { MoveMode, XY } from './structs';
+import { MoveMode, XY, HP_TYPE_BITS } from './structs';
 import { Coins, loadCoins } from '@ton/sandbox/dist/config/config.tlb-gen';
 
 export type ShipConfig = {
@@ -13,7 +13,7 @@ export function shipConfigToCell(config: ShipConfig): Cell {
     return beginCell()
         .storeAddress(config.userAddress)
         .storeAddress(config.gameAddress)
-        .storeUint(0, 256) // max_hp: 0 (will be set when gameFields are initialized)
+        .storeUint(0, HP_TYPE_BITS) // max_hp: 0 (will be set when gameFields are initialized)
         .storeMaybeRef(null) // gameFields: null
         .storeMaybeRef(null) // fastTravelInfo: null
         .storeRef(config.coordinateCellCode)

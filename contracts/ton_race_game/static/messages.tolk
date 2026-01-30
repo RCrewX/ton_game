@@ -39,13 +39,12 @@ struct (0x0a1b2c3d) LiteralyAnything {
 // To Coordinate Cell
 struct (0x4b13d2f0) TravelToCC {
     user: address
-    moveData: Cell<MoveData>  // same error
-    // moveData: cell
+    moveData: Cell<MoveData> 
 }
 
 struct (0xeafb35a2) MoveShipToCC {
     user: address
-    ship_hp: uint256
+    ship_hp: HP_TYPE
     mode: MoveMode
 }
 
@@ -78,6 +77,12 @@ struct (0x09e971a8) WithdrawNFT {
     customPayload: cell?
 }
 
+struct LaunchHardTravel {
+    user: address
+    ship_hp: HP_TYPE
+    info: HardTravelInfo
+}
+
 
 //  To Ship
 
@@ -94,8 +99,15 @@ struct (0x8d2f1ca4) RequestToFastTravel {
     xy: XY
 }
 
+struct (0x18dd41ae) RequestToHardTravel {
+    info: HardTravelInfo
+}
+
+
+
+
 struct (0x7d37523d) ShipUpgrade {
-    hpIncrease: uint256
+    hpIncrease: HP_TYPE
 }
 
 struct (0x5a1f0b21) FastTravelUpgrade {

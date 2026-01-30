@@ -85,9 +85,9 @@ export function loadGameFieldsOpt(stack: TupleReader): GameFields | null {
 
     // Читаем поля как "optional" числа,
     // потому что в случае null там реально будут NULL.
-    const x = stack.readBigNumberOpt();      // xy.x (int256)
-    const y = stack.readBigNumberOpt();      // xy.y (uint256)
-    const hp = stack.readBigNumberOpt();     // hp (uint256)
+    const x = stack.readBigNumberOpt();      // xy.x (X_TYPE)
+    const y = stack.readBigNumberOpt();      // xy.y (Y_TYPE)
+    const hp = stack.readBigNumberOpt();     // hp (HP_TYPE)
     const jettonAmount = stack.readBigNumberOpt(); // jettonAmount (coins/int)
     const typeId = stack.readBigNumber();    // последний слот — typeid
 
