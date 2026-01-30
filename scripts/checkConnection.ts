@@ -1,8 +1,8 @@
 /**
  * Check Connection Script
  *
- * Tests connectivity to all configured TON API providers using the unified provider system.
- * Provider definitions are loaded from provider_system/rpc.json.
+ * Tests connectivity to all configured TON API providers using the ton-provider-system package.
+ * Provider definitions are loaded from node_modules/ton-provider-system/rpc.json.
  * API keys are read from environment variables (.env).
  *
  * Usage:
@@ -16,7 +16,7 @@ import {
     createHealthChecker,
     type Network,
     type ProviderHealthResult,
-} from '../provider_system';
+} from 'ton-provider-system';
 
 // Load environment variables
 dotenv.config();
@@ -91,9 +91,9 @@ async function checkAllConnections(): Promise<ConnectionResult[]> {
     const results: ConnectionResult[] = [];
 
     console.log('=== TON Provider System Connection Check ===\n');
-    console.log('Loading providers from provider_system/rpc.json...\n');
+    console.log('Loading providers from ton-provider-system package...\n');
 
-    // Load registry (from provider_system/rpc.json)
+    // Load registry (from ton-provider-system package)
     const registry = await createRegistry();
     const healthChecker = createHealthChecker({
         timeoutMs: 15000,

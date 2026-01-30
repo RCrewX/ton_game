@@ -15,13 +15,12 @@
         "move-ship": "blueprint run moveShip",
         "check-connection": "ts-node scripts/checkConnection.ts",
         "chainstack": "ts-node scripts/runWithChainstack.ts",
-        "test:providers": "ts-node provider_system/test.ts",
-        "test:providers:quick": "ts-node provider_system/test.ts --quick",
-        "test:providers:verbose": "ts-node provider_system/test.ts --verbose"
+        "get_op": "ts-node scripts/getOpcode.ts"
     },
     "dependencies": {
         "@orbs-network/ton-access": "^2.3.3",
         "@ton/core": "~0.62.0",
+        "ton-provider-system": "^0.2.4",
         "zod": "^3.23.8"
     },
     "devDependencies": {

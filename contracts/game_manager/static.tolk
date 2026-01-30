@@ -1,5 +1,6 @@
 // Constants
 const BASIC_STORAGE_TAX = ton("0.01");
+const MY_LITTLE_TAX = ton("0.011");
 const MINT_TON_AMOUNT: coins = ton("0.1");
 
 // Gas costs from gas consumption tests (in TON)
@@ -230,7 +231,7 @@ fun calcDeployedGameManager(
         jettonInfo: null,
         gamesInfo: null,
         allow_burn: false,
-        my_little_tax: BASIC_STORAGE_TAX,
+        my_little_tax: MY_LITTLE_TAX,
         config: null,
     };
     return {

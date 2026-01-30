@@ -2,9 +2,9 @@
 /**
  * Helper script to run Blueprint commands with the best available provider.
  *
- * This script uses the unified provider system to automatically select
+ * This script uses the ton-provider-system package to automatically select
  * the best provider based on availability and latency.
- * Provider definitions are loaded from provider_system/rpc.json.
+ * Provider definitions are loaded from node_modules/ton-provider-system/rpc.json.
  * API keys are read from environment variables (.env).
  *
  * Usage:
@@ -34,14 +34,14 @@ import {
     createRegistry,
     createHealthChecker,
     type Network,
-} from '../provider_system';
+} from 'ton-provider-system';
 
 // Load environment variables
 dotenv.config();
 
 async function getBestEndpoint(network: Network): Promise<string | null> {
     try {
-        // Load registry (from provider_system/rpc.json) and health checker
+        // Load registry (from ton-provider-system package) and health checker
         const registry = await createRegistry();
         const healthChecker = createHealthChecker({ timeoutMs: 10000 });
 

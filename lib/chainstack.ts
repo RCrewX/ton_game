@@ -5,10 +5,10 @@
  * It supports both API v2 and v3 endpoints and provides fallback to other public endpoints.
  *
  * NOTE: This module is kept for backward compatibility.
- * For new code, use the unified provider_system instead:
+ * For new code, use the ton-provider-system package instead:
  *
  * ```typescript
- * import { ProviderManager, NodeAdapter } from '../provider_system';
+ * import { ProviderManager, NodeAdapter } from 'ton-provider-system';
  *
  * const pm = ProviderManager.getInstance();
  * await pm.init('testnet');
@@ -152,7 +152,7 @@ export function logChainstackConfig(network: Network): void {
         console.log(`  API v2: ${endpoints.v2}`);
         console.log(`  API v3: ${endpoints.v3}`);
         console.log('  To use Chainstack, set CHAINSTACK_API_V2 and/or CHAINSTACK_API_V3 in .env');
-        console.log('  Or configure providers in provider_system/rpc.json');
+        console.log('  Or configure providers in node_modules/ton-provider-system/rpc.json');
     }
     console.log('');
 }

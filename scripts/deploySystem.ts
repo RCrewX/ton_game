@@ -2,7 +2,7 @@
 /**
  * Deploy System Script (Standalone)
  *
- * Deploys the complete game system using the unified provider_system.
+ * Deploys the complete game system using the ton-provider-system package.
  * Does NOT require Blueprint - uses TonClient directly.
  *
  * Usage:
@@ -45,9 +45,9 @@ import {
 } from '../lib/buildOutput';
 import {
     ProviderManager,
-    getTonClient,
+    getTonClientWithRateLimit,
     type Network as ProviderNetwork,
-} from '../provider_system';
+} from 'ton-provider-system';
 
 // Load environment variables
 dotenv.config();
@@ -60,7 +60,7 @@ const API_TIMEOUT = 30000;
 const DEPLOYMENT_TIMEOUT = 120000;
 const TRANSACTION_WAIT_TIME = 5000;
 const RETRY_DELAY = 10000;
-const BASE_MINT_AMOUNT = 5000n;
+const BASE_MINT_AMOUNT = 5500n;
 
 // ============================================================================
 // CLI Argument Parsing
@@ -209,10 +209,14 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation:
     ]);
 }
 
-async function isContractDeployed(client: TonClient, address: Address): Promise<boolean> {
+async function isContractDeployed(
+    client: TonClient,
+    address: Address,
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>
+): Promise<boolean> {
     try {
         const state = await withTimeout(
-            client.getContractState(address),
+            withRateLimit(() => client.getContractState(address)),
             API_TIMEOUT,
             `Checking deployment status for ${address.toString()}`
         );
@@ -229,10 +233,11 @@ async function isContractDeployed(client: TonClient, address: Address): Promise<
 async function waitForDeploy(
     client: TonClient,
     address: Address,
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>,
     maxRetries: number = 30
 ): Promise<boolean> {
     for (let i = 0; i < maxRetries; i++) {
-        if (await isContractDeployed(client, address)) {
+        if (await isContractDeployed(client, address, withRateLimit)) {
             return true;
         }
         await sleep(2000);
@@ -240,13 +245,17 @@ async function waitForDeploy(
     return false;
 }
 
-async function getSeqno(client: TonClient, walletAddress: Address): Promise<number> {
+async function getSeqno(
+    client: TonClient,
+    walletAddress: Address,
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>
+): Promise<number> {
     try {
-        const state = await client.getContractState(walletAddress);
+        const state = await withRateLimit(() => client.getContractState(walletAddress));
         if (state.state !== 'active') {
             return 0;
         }
-        const result = await client.runMethod(walletAddress, 'seqno');
+        const result = await withRateLimit(() => client.runMethod(walletAddress, 'seqno'));
         return result.stack.readNumber();
     } catch {
         return 0;
@@ -259,6 +268,7 @@ async function sendTransaction(
     keyPair: { publicKey: Buffer; secretKey: Buffer },
     to: Address,
     value: bigint,
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>,
     body?: Cell,
     stateInit?: { code: Cell; data: Cell },
     maxRetries: number = 3
@@ -268,7 +278,7 @@ async function sendTransaction(
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             // Get fresh seqno before each attempt
-            const seqno = await getSeqno(client, wallet.address);
+            const seqno = await getSeqno(client, wallet.address, withRateLimit);
 
             const transfer = wallet.createTransfer({
                 seqno,
@@ -284,7 +294,7 @@ async function sendTransaction(
                 ],
             });
 
-            await client.sendExternalMessage(wallet, transfer);
+            await withRateLimit(() => client.sendExternalMessage(wallet, transfer));
             return; // Success
         } catch (error: any) {
             lastError = error;
@@ -323,10 +333,11 @@ async function checkAndDeploy(
     contractAddress: Address,
     contractName: string,
     value: bigint,
-    stateInit: { code: Cell; data: Cell }
+    stateInit: { code: Cell; data: Cell },
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>
 ): Promise<void> {
     // Check if already deployed
-    if (await isContractDeployed(client, contractAddress)) {
+    if (await isContractDeployed(client, contractAddress, withRateLimit)) {
         console.log(`${contractName} is already deployed at ${contractAddress.toString()}`);
         return;
     }
@@ -335,7 +346,7 @@ async function checkAndDeploy(
 
     // Send deployment transaction
     await withTimeout(
-        sendTransaction(client, wallet, keyPair, contractAddress, value, undefined, stateInit),
+        sendTransaction(client, wallet, keyPair, contractAddress, value, withRateLimit, undefined, stateInit),
         DEPLOYMENT_TIMEOUT,
         `Deploying ${contractName}`
     );
@@ -343,7 +354,7 @@ async function checkAndDeploy(
     console.log(`Deployment transaction sent for ${contractName}`);
 
     // Wait for deployment confirmation
-    const deployed = await waitForDeploy(client, contractAddress, 30);
+    const deployed = await waitForDeploy(client, contractAddress, withRateLimit, 30);
     if (!deployed) {
         throw new Error(`${contractName} deployment not confirmed after 60 seconds`);
     }
@@ -358,9 +369,10 @@ async function sendContractMessage(
     keyPair: { publicKey: Buffer; secretKey: Buffer },
     to: Address,
     value: bigint,
-    body: Cell
+    body: Cell,
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>
 ): Promise<void> {
-    await sendTransaction(client, wallet, keyPair, to, value, body, undefined, 3);
+    await sendTransaction(client, wallet, keyPair, to, value, withRateLimit, body, undefined, 3);
 }
 
 /**
@@ -370,12 +382,13 @@ async function waitForSeqnoChange(
     client: TonClient,
     walletAddress: Address,
     currentSeqno: number,
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>,
     maxWaitMs: number = 60000
 ): Promise<boolean> {
     const startTime = Date.now();
     while (Date.now() - startTime < maxWaitMs) {
         try {
-            const newSeqno = await getSeqno(client, walletAddress);
+            const newSeqno = await getSeqno(client, walletAddress, withRateLimit);
             if (newSeqno > currentSeqno) {
                 return true;
             }
@@ -397,15 +410,16 @@ async function sendAndWait(
     to: Address,
     value: bigint,
     body: Cell,
-    operationName: string
+    operationName: string,
+    withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>
 ): Promise<void> {
-    const seqnoBefore = await getSeqno(client, wallet.address);
+    const seqnoBefore = await getSeqno(client, wallet.address, withRateLimit);
 
-    await sendContractMessage(client, wallet, keyPair, to, value, body);
+    await sendContractMessage(client, wallet, keyPair, to, value, body, withRateLimit);
     console.log(`${operationName} transaction sent`);
 
     // Wait for seqno to change (transaction processed)
-    const processed = await waitForSeqnoChange(client, wallet.address, seqnoBefore, 60000);
+    const processed = await waitForSeqnoChange(client, wallet.address, seqnoBefore, withRateLimit, 60000);
     if (!processed) {
         console.warn(`Warning: ${operationName} may not have been processed yet`);
     } else {
@@ -510,7 +524,7 @@ async function main(): Promise<void> {
     const pm = ProviderManager.getInstance();
     await pm.init(network as ProviderNetwork);
 
-    const client = await getTonClient(pm);
+    const { client, withRateLimit } = await getTonClientWithRateLimit(pm);
     const endpoint = await pm.getEndpoint();
     console.log(`Connected to: ${endpoint}`);
     console.log('');
@@ -524,8 +538,8 @@ async function main(): Promise<void> {
     console.log('Owner address (non-bounceable):', ownerAddress.toString({ bounceable: false }));
     console.log('');
 
-    // Check wallet balance
-    const walletBalance = await client.getBalance(ownerAddress);
+    // Check wallet balance (with rate limiting)
+    const walletBalance = await withRateLimit(() => client.getBalance(ownerAddress));
     console.log(`Wallet balance: ${(Number(walletBalance) / 1e9).toFixed(4)} TON`);
     if (walletBalance < toNano('1')) {
         console.error('ERROR: Wallet balance too low. Need at least 1 TON for deployment.');
@@ -642,7 +656,8 @@ async function main(): Promise<void> {
             client, wallet, keyPair,
             gameManager.address, 'GameManager',
             toNano('1'),
-            { code: gameManagerCode, data: gameManager.init!.data }
+            { code: gameManagerCode, data: gameManager.init!.data },
+            withRateLimit
         );
         console.log('GameManager:', gameManager.address.toString());
         writeFullDeploymentData(deploymentData);
@@ -652,7 +667,8 @@ async function main(): Promise<void> {
             client, wallet, keyPair,
             game.address, 'TON Race Game',
             toNano('0.5'),
-            { code: gameCode, data: game.init!.data }
+            { code: gameCode, data: game.init!.data },
+            withRateLimit
         );
         console.log('TON Race Game:', game.address.toString());
         writeFullDeploymentData(deploymentData);
@@ -662,7 +678,8 @@ async function main(): Promise<void> {
             client, wallet, keyPair,
             ssm.address, 'Soulless Slot Machine',
             toNano('0.5'),
-            { code: ssmCode, data: ssm.init!.data }
+            { code: ssmCode, data: ssm.init!.data },
+            withRateLimit
         );
         console.log('Soulless Slot Machine:', ssm.address.toString());
         writeFullDeploymentData(deploymentData);
@@ -672,7 +689,8 @@ async function main(): Promise<void> {
             client, wallet, keyPair,
             jettonMinter.address, 'JettonMinter',
             toNano('0.5'),
-            { code: jettonMinterCode, data: jettonMinter.init!.data }
+            { code: jettonMinterCode, data: jettonMinter.init!.data },
+            withRateLimit
         );
         console.log('JettonMinter:', jettonMinter.address.toString());
         writeFullDeploymentData(deploymentData);
@@ -682,7 +700,8 @@ async function main(): Promise<void> {
             client, wallet, keyPair,
             ownerJettonWallet.address, 'Owner JettonWallet',
             toNano('0.5'),
-            { code: jettonWalletCode, data: ownerJettonWallet.init!.data }
+            { code: jettonWalletCode, data: ownerJettonWallet.init!.data },
+            withRateLimit
         );
         console.log('Owner JettonWallet:', ownerJettonWallet.address.toString());
         writeFullDeploymentData(deploymentData);
@@ -690,7 +709,7 @@ async function main(): Promise<void> {
         // 6. Configure GameManager: Deploy Jetton
         console.log('Configuring GameManager jetton...');
         const openedGameManager = client.open(gameManager);
-        let jettonInfo = await openedGameManager.getJettonInfo().catch(() => null);
+        let jettonInfo = await withRateLimit(() => openedGameManager.getJettonInfo()).catch(() => null);
 
         if (!jettonInfo?.jettonMinterAddress?.equals(jettonMinter.address)) {
             const jettonContent = jettonContentToCell({ type: 1, uri: jettonContentUri });
@@ -703,7 +722,8 @@ async function main(): Promise<void> {
                     jettonWalletCode,
                     jettonContent,
                 }),
-                'Deploy jetton'
+                'Deploy jetton',
+                withRateLimit
             );
         } else {
             console.log('Jetton already configured');
@@ -711,7 +731,7 @@ async function main(): Promise<void> {
 
         // 7. Configure GameManager: Set games info
         console.log('Setting games info...');
-        const gamesInfo = await openedGameManager.getGamesInfo().catch(() => null);
+        const gamesInfo = await withRateLimit(() => openedGameManager.getGamesInfo()).catch(() => null);
 
         if (!gamesInfo?.active_game?.equals(game.address)) {
             let allGamesBuilder = beginCell();
@@ -730,7 +750,8 @@ async function main(): Promise<void> {
                     active_game: game.address,
                     all_games: allGamesBuilder.endCell(),
                 }),
-                'Set games info'
+                'Set games info',
+                withRateLimit
             );
         } else {
             console.log('Games info already configured');
@@ -740,14 +761,14 @@ async function main(): Promise<void> {
         console.log('Verifying configurations...');
         await sleep(TRANSACTION_WAIT_TIME);
 
-        const verifyJettonInfo = await openedGameManager.getJettonInfo().catch(() => null);
+        const verifyJettonInfo = await withRateLimit(() => openedGameManager.getJettonInfo()).catch(() => null);
         if (verifyJettonInfo?.jettonMinterAddress?.equals(jettonMinter.address)) {
             console.log('✓ JettonMinter address verified');
         } else {
             console.warn('⚠ JettonMinter address not yet set (may still be processing)');
         }
 
-        const verifyGamesInfo = await openedGameManager.getGamesInfo().catch(() => null);
+        const verifyGamesInfo = await withRateLimit(() => openedGameManager.getGamesInfo()).catch(() => null);
         if (verifyGamesInfo?.active_game?.equals(game.address)) {
             console.log('✓ Active game address verified');
         } else {
@@ -759,7 +780,7 @@ async function main(): Promise<void> {
         const openedOwnerJettonWallet = client.open(ownerJettonWallet);
         let currentBalance = 0n;
         try {
-            currentBalance = await openedOwnerJettonWallet.getJettonBalance();
+            currentBalance = await withRateLimit(() => openedOwnerJettonWallet.getJettonBalance());
         } catch {
             // Wallet may not be initialized yet
         }
@@ -778,12 +799,13 @@ async function main(): Promise<void> {
                 gameManager.address,
                 toNano('1'),
                 GameManager.redirectMessage(jettonMinter.address, redirectMessage, toNano('0.1')),
-                'Mint jettons'
+                'Mint jettons',
+                withRateLimit
             );
 
             // Check balance
             try {
-                currentBalance = await openedOwnerJettonWallet.getJettonBalance();
+                currentBalance = await withRateLimit(() => openedOwnerJettonWallet.getJettonBalance());
             } catch {
                 currentBalance = 0n;
             }
@@ -797,7 +819,8 @@ async function main(): Promise<void> {
             client, wallet, keyPair,
             ownerShip.address, 'Owner Ship',
             toNano('0.5'),
-            { code: shipCode, data: ownerShip.init!.data }
+            { code: shipCode, data: ownerShip.init!.data },
+            withRateLimit
         );
         console.log('Owner Ship:', ownerShip.address.toString());
         writeFullDeploymentData(deploymentData);
@@ -808,7 +831,8 @@ async function main(): Promise<void> {
             client, wallet, keyPair,
             shipStation.address, 'Ship Station',
             deployAmount,
-            { code: subcontractCode, data: shipStation.init!.data }
+            { code: subcontractCode, data: shipStation.init!.data },
+            withRateLimit
         );
         console.log('Ship Station:', shipStation.address.toString());
         writeFullDeploymentData(deploymentData);
