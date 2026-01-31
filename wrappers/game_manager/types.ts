@@ -3,7 +3,7 @@ import { Address, beginCell, Cell, toNano } from '@ton/core';
 // Gas costs from gas consumption tests (in TON)
 // These match the constants in contracts/game_manager/static.tolk
 export const GAS_COST_DEPLOY_JETTON = toNano("0.025"); // Estimated gas cost for DeployJetton
-export const GAS_COST_SET_GAMES_INFO = toNano("0.020"); // Estimated gas cost for SetGamesInfo
+export const GAS_COST_SET_GAMES_INFO = toNano("0.8"); // 0.8 is enough for 2 games (SSM and game) + cashback will be returned
 export const GAS_COST_REDIRECT_MESSAGE = toNano("0.009"); // 0.0081816 + buffer
 export const GAS_COST_SET_ALLOW_BURN = toNano("0.015"); // Estimated gas cost for SetAllowBurn
 export const GAS_COST_REQUEST_BURN = toNano("0.015"); // Estimated gas cost for RequestBurn
