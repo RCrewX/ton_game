@@ -2,7 +2,7 @@ import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_MOVE, GAS_COST_MOVE_END, GAS_COST_REQUEST_MINT, MINT_TON_AMOUNT, BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
+import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_MOVE, GAS_COST_MOVE_END, GAS_COST_REQUEST_MINT, MINT_TON_AMOUNT, TODO_TOTAL_GAS_TO_MOVE } from '../../wrappers/ton_race_game/types';
 import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
 import { Ship } from '../../wrappers/ton_race_game/Ship';
 import { writeGasCosts } from '../../lib/buildOutput';
@@ -27,7 +27,6 @@ describe("Gas Prices - Game Movement", () => {
     });
 
     it("RequestToMove", async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + toNano('0.1');
         const currentBalance = await SC_System.ownerShip.getTonBalance();
         if (currentBalance < minRequiredBalance) {
@@ -66,7 +65,6 @@ describe("Gas Prices - Game Movement", () => {
     });
 
     it("MoveShipToCC", async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + toNano('0.1');
         const currentBalance = await SC_System.ownerShip.getTonBalance();
         if (currentBalance < minRequiredBalance) {
@@ -119,7 +117,6 @@ describe("Gas Prices - Game Movement", () => {
     });
 
     it("Move", async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + toNano('0.1');
         const currentBalance = await SC_System.ownerShip.getTonBalance();
         if (currentBalance < minRequiredBalance) {
@@ -177,7 +174,6 @@ describe("Gas Prices - Game Movement", () => {
     });
 
     it("MoveEnd without jettons minting", async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + toNano('0.1');
         const currentBalance = await SC_System.ownerShip.getTonBalance();
         if (currentBalance < minRequiredBalance) {
@@ -237,7 +233,6 @@ describe("Gas Prices - Game Movement", () => {
     });
 
     it("MoveEnd with jettons minting (may Fail)", async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         const minRequiredBalance = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + MINT_TON_AMOUNT + toNano('0.2');
         const currentBalance = await SC_System.ownerShip.getTonBalance();
         if (currentBalance < minRequiredBalance) {
@@ -296,21 +291,23 @@ describe("Gas Prices - Game Movement", () => {
             op: Opcodes.OP_MOVE_END,
         });
 
+        // After EXIT, RequestMint is NOT sent in same round (stored in pending_mint_amount; owner triggers via RequestShipToMint)
         const requestMintTx = SC_System.messageResult.transactions.find((tx: any) => 
             tx.from === SC_System.ownerShip.address && 
             tx.to === SC_System.game.address &&
             tx.op === Opcodes.OP_REQUEST_MINT
         );
-        if (!requestMintTx) {
-            console.log('MoveEnd with jettons test - RequestMint not sent, ship may have crashed');
-            return;
-        }
+        expect(requestMintTx).toBeUndefined();
 
         const moveEndTx = SC_System.messageResult.transactions.find((tx: any) => 
             tx.from === cc_new.address && 
             tx.to === SC_System.ownerShip.address &&
             tx.op === Opcodes.OP_MOVE_END
         );
+        if (!moveEndTx) {
+            console.log('MoveEnd with jettons test - MoveEnd not found');
+            return;
+        }
         
         const cost = moveEndTx?.totalFees || toNano('0.05');
         const costStr = fromNano(cost);

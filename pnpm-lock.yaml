@@ -15,8 +15,8 @@ importers:
         specifier: ~0.62.0
         version: 0.62.0(@ton/crypto@3.3.0)
       ton-provider-system:
-        specifier: ^0.1.7
-        version: 0.1.7(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0))
+        specifier: ^0.2.4
+        version: 0.2.4(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0))
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -1933,8 +1933,8 @@ packages:
     peerDependencies:
       '@ton/core': '>=0.56.0'
 
-  ton-provider-system@0.1.7:
-    resolution: {integrity: sha512-GVRB+JrwEDTAcTYp79HtPaFxg5S/4inzpneAH94uessdbXYLccsUD8my5c7wXgxa9m7AvwtN7VhVoTB15f2pgQ==}
+  ton-provider-system@0.2.4:
+    resolution: {integrity: sha512-uj2q2l5kM6xuBbOaRpEvA8Z6yY/6T5t44NI2hBzIcrJVxRYPKBj3iZTh/7hpStJQTaqY9ZhVeRxfW6gJN9bgng==}
     peerDependencies:
       '@orbs-network/ton-access': ^2.3.0
       '@ton/core': ^0.59.0
@@ -4303,7 +4303,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  ton-provider-system@0.1.7(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0)):
+  ton-provider-system@0.2.4(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0)):
     dependencies:
       '@orbs-network/ton-access': 2.3.3
       '@ton/core': 0.62.0(@ton/crypto@3.3.0)

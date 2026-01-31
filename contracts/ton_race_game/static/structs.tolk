@@ -40,7 +40,7 @@ struct HardTravelInfo {
     mode: MoveMode
     gasLimit: coins // always > 1 TON
     hpLimit: HP_TYPE // always > 0
-    maxTurns: uint64 // TODO: Think about limit
+    maxTurns: uint64 // must be < 100; enforced in Ship on RequestToHardTravel
 }
 
 struct FastTravelInfo {

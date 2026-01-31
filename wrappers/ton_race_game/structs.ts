@@ -40,6 +40,14 @@ export type MoveData = {
     xy: XY;
 };
 
+// HardTravelInfo: mode, gasLimit (> 1 TON), hpLimit (> 0), maxTurns (< 100)
+export type HardTravelInfo = {
+    mode: MoveMode;
+    gasLimit: bigint;
+    hpLimit: bigint;
+    maxTurns: number; // 0..99
+};
+
 // GameFields {
 //   xy: XY
 //   hp: HP_TYPE
@@ -92,4 +100,12 @@ export function storeMoveMode(builder: Builder, src: MoveMode) {
 // Сейчас считаем, что это просто Cell (отдельная ячейка).
 export function storeUniqueResult(builder: Builder, src: UniqueResult) {
     builder.storeUint(src, 8);
+}
+
+// HardTravelInfo: mode (8), gasLimit (coins), hpLimit (64), maxTurns (64)
+export function storeHardTravelInfo(builder: Builder, src: HardTravelInfo) {
+    storeMoveMode(builder, src.mode);
+    builder.storeCoins(src.gasLimit);
+    builder.storeUint(src.hpLimit, HP_TYPE_BITS);
+    builder.storeUint(src.maxTurns, 64);
 }

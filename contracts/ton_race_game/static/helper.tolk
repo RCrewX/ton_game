@@ -59,6 +59,7 @@ fun calcDeployedShip(
         fastTravelInfo: null,
         coordinateCellCode: coordinateCellCode,
         movement_in_process: false,
+        pending_mint_amount: 0,
     };
 
     val dataCell: cell = initStorage.toCell();

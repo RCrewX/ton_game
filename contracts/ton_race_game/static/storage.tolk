@@ -30,6 +30,7 @@ struct ShipStorage {
     fastTravelInfo: Cell<FastTravelInfo>?
     coordinateCellCode: cell
     movement_in_process: bool
+    pending_mint_amount: coins
 }
 
 

@@ -29,6 +29,7 @@ const ERR_MOVEMENT_ALREADY_IN_PROCESS = 910  // Movement is already in process w
 const ERR_INVALID_COORDINATE_CELL_SENDER = 911  // Sender is not the expected coordinate cell address
 const ERR_INVALID_USER_SENDER = 912  // Sender is not the ship's user address
 const ERR_INVALID_GAME_SENDER = 913  // Sender is not the ship's game address
+const ERR_NO_PENDING_MINT = 936  // Ship has no pending mint amount (RequestShipToMint when pending_mint_amount == 0)
 
 // Game-specific errors
 const ERR_INVALID_GAME_MANAGER_SENDER = 914  // Sender is not the game's manager address
@@ -50,5 +51,8 @@ const ERR_FAST_TRAVEL_NOT_ALLOWED_TO_CLOSED_CELLS = 927  // Fast travel not allo
 const ERR_FAST_TRAVEL_Y_TOO_LOW = 933  // Fast travel y coordinate must be > 2
 const ERR_FAST_TRAVEL_NEGATIVE_X_INVALID = 934  // Fast travel: when x < 0, must have -x <= y
 const ERR_FAST_TRAVEL_POSITIVE_X_INVALID = 935  // Fast travel: when x >= 0, must have x <= y
+const ERR_HARD_TRAVEL_EXIT_MODE = 937  // HardTravel: EXIT mode not allowed
+const ERR_HARD_TRAVEL_MAX_TURNS_INVALID = 938  // HardTravel: maxTurns must be < 100
+const ERR_HARD_TRAVEL_VALUE_TOO_LOW = 939  // HardTravel: message value below HARD_TRAVEL_MIN_VALUE
 const ERR_UNKNOWN_MESSAGE = 0xFFFF  // Unknown message type (body not empty but doesn't match any known message)
 // Helper-specific errors

@@ -6,7 +6,7 @@ import { Subcontract, subcontractConfigToCell } from '../../wrappers/subcontract
 import { GAS_COST_FORWARD } from '../../wrappers/subcontract/types';
 import { Ship, shipConfigToCell } from '../../wrappers/ton_race_game/Ship';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
-import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
+import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, TODO_TOTAL_GAS_TO_MOVE } from '../../wrappers/ton_race_game/types';
 import { Opcodes } from '../../wrappers/ton_race_game/types';
 
 describe('Subcontract - Excess Handling', () => {
@@ -263,7 +263,6 @@ describe('Subcontract - Excess Handling', () => {
         // Send move request through subcontract to ship
         const moveMessage = encodeRequestToMove({ mode: MoveMode.UP });
         const forwardAmount = toNano('1');
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
 
         // Send move with enough TON to trigger excess
         const moveValue = GAS_COST_FORWARD + forwardAmount + toNano('0.5'); // Extra to create excess

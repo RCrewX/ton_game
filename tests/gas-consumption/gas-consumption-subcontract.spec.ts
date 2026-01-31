@@ -6,7 +6,7 @@ import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, GAS_COST_MANUAL_DEPLOY, O
 import { encodeRequestToMove, Opcodes } from '../../wrappers/ton_race_game/types';
 import { Ship, shipConfigToCell } from '../../wrappers/ton_race_game/Ship';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
-import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_MOVE_SHIP_TO_CC, BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
+import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, TODO_TOTAL_GAS_TO_MOVE } from '../../wrappers/ton_race_game/types';
 import { writeGasCosts } from '../../lib/buildOutput';
 
 describe("Gas Prices - Subcontract", () => {
@@ -196,7 +196,7 @@ describe("Gas Prices - Subcontract", () => {
 
         let little_less_than_gas_needed = toNano('0.002');
         const moveMessage = encodeRequestToMove({ mode: MoveMode.UP });
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + toNano('0.01');
+        // TODO_TOTAL_GAS_TO_MOVE from types (move no longer triggers mint)
         const forwardAmount = TODO_TOTAL_GAS_TO_MOVE;
         const totalAmount = GAS_COST_FORWARD + forwardAmount;
         let gas_sent = toNano('0.05'); // Expected gas cost (much less than totalAmount)

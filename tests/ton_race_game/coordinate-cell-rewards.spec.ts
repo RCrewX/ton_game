@@ -3,7 +3,7 @@ import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
-import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE, Opcodes } from '../../wrappers/ton_race_game/types';
+import { GAS_COST_REQUEST_TO_MOVE, TODO_TOTAL_GAS_TO_MOVE, GAS_COST_ANY_MESSAGE, Opcodes } from '../../wrappers/ton_race_game/types';
 import { Ship } from '../../wrappers/ton_race_game/Ship';
 
 describe('Coordinate Cell Rewards - Minimal Reward Logic', () => {
@@ -19,7 +19,6 @@ describe('Coordinate Cell Rewards - Minimal Reward Logic', () => {
     });
 
     it('First visit to cell should give full jettonAmount reward', async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         
         // Get initial jettonAmount (should be 0 before first move)
         let gameDataBefore = await SC_System.ownerShip.getCurrentGameData();
@@ -52,7 +51,6 @@ describe('Coordinate Cell Rewards - Minimal Reward Logic', () => {
     });
 
     it('Second visit to already-opened cell should apply minimal reward logic (jettonAmount / 10, minimum 1)', async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         
         // Create first ship to open the cell
         const firstShip = SC_System.blockchain.openContract(Ship.createFromConfig({
@@ -116,7 +114,6 @@ describe('Coordinate Cell Rewards - Minimal Reward Logic', () => {
         // This test verifies the specific edge case where jettonAmount / 10 < 1
         // but jettonAmount > 0, so reward should be 1
         
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         
         // Test multiple moves to find cells with jettonAmount in range 1-9
         let foundTestCase = false;
@@ -160,7 +157,6 @@ describe('Coordinate Cell Rewards - Minimal Reward Logic', () => {
     });
 
     it('Should handle case: cell with jettonAmount >= 10 gives reward = jettonAmount / 10', async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         
         // Test multiple moves to find cells with jettonAmount >= 10
         let foundTestCase = false;
@@ -198,7 +194,6 @@ describe('Coordinate Cell Rewards - Minimal Reward Logic', () => {
     });
 
     it('Should handle case: cell with jettonAmount = 0 gives reward = 0 on revisit', async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         
         // Test multiple moves to verify logic for cells with jettonAmount = 0
         let foundTestCase = false;

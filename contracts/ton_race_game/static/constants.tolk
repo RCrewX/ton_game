@@ -10,7 +10,7 @@ const MINT_TON_AMOUNT: coins = ton("0.2");
 const GAS_COST_REQUEST_SHIP_ADDRESS: coins = ton("0.015"); // From gas consumption test
 const GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS: coins = ton("0.015"); // From gas consumption test
 const GAS_COST_REQUEST_TO_MOVE: coins = ton("0.06"); // 0.0589864 + buffer
-const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
+const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + BASIC_STORAGE_TAX;
 // Internal message gas costs (from test results, with buffer)
 const GAS_COST_MOVE_SHIP_TO_CC: coins = ton("0.12"); // Ship -> CoordinateCell (MoveShipToCC) - includes storage + gas for Move (estimated from move flow)
 const GAS_COST_MOVE: coins = ton("0.12"); // CoordinateCell -> CoordinateCell (Move) - includes storage (if new) + gas for MoveEnd (estimated from move flow)
@@ -23,6 +23,9 @@ const GAS_COST_RESET_SHIP: coins = ton("0.05"); // ResetShip handler gas buffer
 const GAS_COST_TRANSFER_NOTIFICATION: coins = ton("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - just gas (estimated)
 const GAS_COST_WITHDRAW_JETTON: coins = ton("0.05"); // Gas for jetton wallet operations during withdrawal
 const GAS_COST_WITHDRAW_NFT: coins = ton("0.05"); // Gas for NFT operations during withdrawal
+
+// HardTravel: user must send > 1 TON; minimum = 1 TON + gas for first hop (Ship -> current CC)
+const HARD_TRAVEL_MIN_VALUE: coins = ton("1") + GAS_COST_MOVE_SHIP_TO_CC;
 
 // Note: SEND_MODE constants from stdlib:
 // SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE = 64 (carry remaining message value)

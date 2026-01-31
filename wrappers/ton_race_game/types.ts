@@ -18,14 +18,19 @@ export const GAS_COST_SEND_MOVE = toNano("1");
 
 // Internal message gas costs (from test results, with buffer)
 export const GAS_COST_MOVE_SHIP_TO_CC = toNano("0.12"); // Ship -> CoordinateCell (MoveShipToCC) - estimated from move flow
+/** Minimum value for RequestToMove (move execution; mint via RequestShipToMint). */
+export const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC + BASIC_STORAGE_TAX;
 export const GAS_COST_MOVE = toNano("0.12"); // CoordinateCell -> CoordinateCell (Move) - estimated from move flow
 export const GAS_COST_MOVE_END = toNano("0.06"); // CoordinateCell -> Ship (MoveEnd) - estimated
 export const GAS_COST_REQUEST_MINT = toNano("0.22"); // Ship -> Game (RequestMint) - includes MINT_TON_AMOUNT (0.2) + gas
+export const GAS_COST_REQUEST_SHIP_TO_MINT = toNano("0.22"); // Owner -> Ship (RequestShipToMint) - same as GAS_COST_REQUEST_MINT
 export const GAS_COST_FORWARD_MINT_REQUEST = toNano("0.06"); // Game -> GameManager (ForwardMintRequest) - estimated
 export const GAS_COST_JETTON_USED = toNano("0.06"); // GameManager -> Game (JettonUsed) - estimated
 export const GAS_COST_SHIP_UPGRADE = toNano("0.06"); // Game -> Ship (ShipUpgrade) - estimated
 export const GAS_COST_RESET_SHIP = toNano("0.05"); // Ship reset
 export const GAS_COST_TRANSFER_NOTIFICATION = toNano("0.06"); // JettonWallet -> GameManager (TransferNotificationForRecipient) - estimated
+/** Minimum value for RequestToHardTravel (user must send > 1 TON + gas for first hop). */
+export const HARD_TRAVEL_MIN_VALUE = toNano("1") + GAS_COST_MOVE_SHIP_TO_CC;
 
 // messages.ts
 import { Address, Cell, beginCell } from '@ton/core';
@@ -40,6 +45,8 @@ import {
     storeGameFields,
     XY,
     storeXY,
+    HardTravelInfo,
+    storeHardTravelInfo,
 } from './structs';
 
 export enum JettonUsageMode {
@@ -65,6 +72,7 @@ export const Opcodes = {
     OP_REQUEST_TO_MOVE: 0xf2a70b07,
 
     OP_REQUEST_MINT: 0xf5cc90ff,
+    OP_REQUEST_SHIP_TO_MINT: 0x53035644,
     OP_REQUEST_SHIP_ADDRESS: 0xf0469aee,
     OP_REQUEST_COORDINATE_CELL_ADDRESS: 0x213f6f8a,
     OP_RESPONSE_ADDRESS: 0x33226fce,
@@ -75,6 +83,10 @@ export const Opcodes = {
     OP_REQUEST_TO_FAST_TRAVEL: 0x8d2f1ca4,
     OP_FAST_TRAVEL_UPGRADE: 0x5a1f0b21,
     OP_RESET_SHIP: 0x6a3b8fdd,
+    OP_LAUNCH_HARD_TRAVEL: 0x7dbcd1dc,
+    OP_HARD_TRAVEL: 0x2f168b85,
+    OP_REQUEST_TO_HARD_TRAVEL: 0x18dd41ae,
+    OP_HARD_TRAVEL_MOVE_END: 0x8e7f9a0b,
 } as const;
 
 export function loadGameFieldsOpt(stack: TupleReader): GameFields | null {
@@ -175,12 +187,37 @@ export type MoveEnd = {
     gameFields: GameFields;
 };
 
+/** From CoordinateCell to Ship when HardTravel ends (CRASH or CONTINUE). Carries accumulated jettons for correct 10% on CRASH. */
+export type HardTravelMoveEnd = {
+    result: UniqueResult;
+    gameFields: GameFields;
+};
+
 export type RequestToMove = {
     mode: MoveMode;
 };
 
 export type RequestToFastTravel = {
     xy: XY;
+};
+
+export type LaunchHardTravel = {
+    user: Address;
+    ship_hp: bigint;
+    info: HardTravelInfo;
+};
+
+export type HardTravel = {
+    user: Address;
+    ship_hp: bigint;
+    info: HardTravelInfo;
+    moveData: MoveData;
+    turnIndex: number; // uint8
+    accumulatedJettonAmount: bigint;
+};
+
+export type RequestToHardTravel = {
+    info: HardTravelInfo;
 };
 
 // To Game
@@ -217,6 +254,8 @@ export type FastTravelUpgrade = {
 
 export type ResetShip = {};
 
+export type RequestShipToMint = Record<string, never>; // empty body
+
 // Удобный union, если захочешь матчить по $$type
 export type AnyMessage =
     | ({ $$type: 'ReturnExcessesBack' } & ReturnExcessesBack)
@@ -228,9 +267,14 @@ export type AnyMessage =
     | ({ $$type: 'WithdrawJetton' } & WithdrawJetton)
     | ({ $$type: 'WithdrawNFT' } & WithdrawNFT)
     | ({ $$type: 'MoveEnd' } & MoveEnd)
+    | ({ $$type: 'HardTravelMoveEnd' } & HardTravelMoveEnd)
     | ({ $$type: 'RequestToMove' } & RequestToMove)
     | ({ $$type: 'RequestToFastTravel' } & RequestToFastTravel)
+    | ({ $$type: 'LaunchHardTravel' } & LaunchHardTravel)
+    | ({ $$type: 'HardTravel' } & HardTravel)
+    | ({ $$type: 'RequestToHardTravel' } & RequestToHardTravel)
     | ({ $$type: 'RequestMint' } & RequestMint)
+    | ({ $$type: 'RequestShipToMint' } & RequestShipToMint)
     | ({ $$type: 'RequestShipAddress' } & RequestShipAddress)
     | ({ $$type: 'RequestCoordinateCellAddress' } & RequestCoordinateCellAddress)
     | ({ $$type: 'ResponseAddress' } & ResponseAddress)
@@ -331,6 +375,14 @@ export function encodeMoveEnd(msg: MoveEnd): Cell {
     return b.endCell();
 }
 
+export function encodeHardTravelMoveEnd(msg: HardTravelMoveEnd): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_HARD_TRAVEL_MOVE_END, 32);
+    storeUniqueResult(b, msg.result);
+    storeGameFields(b, msg.gameFields);
+    return b.endCell();
+}
+
 export function encodeRequestToMove(msg: RequestToMove): Cell {
     const b = beginCell();
     b.storeUint(Opcodes.OP_REQUEST_TO_MOVE, 32);
@@ -343,6 +395,38 @@ export function encodeRequestToFastTravel(msg: RequestToFastTravel): Cell {
     b.storeUint(Opcodes.OP_REQUEST_TO_FAST_TRAVEL, 32);
     storeXY(b, msg.xy);
     return b.endCell();
+}
+
+export function encodeLaunchHardTravel(msg: LaunchHardTravel): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_LAUNCH_HARD_TRAVEL, 32);
+    b.storeAddress(msg.user);
+    b.storeUint(msg.ship_hp, 256);
+    storeHardTravelInfo(b, msg.info);
+    return b.endCell();
+}
+
+export function encodeHardTravel(msg: HardTravel): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_HARD_TRAVEL, 32);
+    b.storeAddress(msg.user);
+    b.storeUint(msg.ship_hp, 256);
+    storeHardTravelInfo(b, msg.info);
+    storeMoveData(b, msg.moveData);
+    b.storeUint(msg.turnIndex, 8);
+    b.storeCoins(msg.accumulatedJettonAmount);
+    return b.endCell();
+}
+
+export function encodeRequestToHardTravel(msg: RequestToHardTravel): Cell {
+    const b = beginCell();
+    b.storeUint(Opcodes.OP_REQUEST_TO_HARD_TRAVEL, 32);
+    storeHardTravelInfo(b, msg.info);
+    return b.endCell();
+}
+
+export function encodeRequestShipToMint(): Cell {
+    return beginCell().storeUint(Opcodes.OP_REQUEST_SHIP_TO_MINT, 32).endCell();
 }
 
 // To Game
@@ -426,10 +510,20 @@ export function encodeAnyMessage(msg: AnyMessage): Cell {
             return encodeWithdrawNFT(msg);
         case 'MoveEnd':
             return encodeMoveEnd(msg);
+        case 'HardTravelMoveEnd':
+            return encodeHardTravelMoveEnd(msg);
         case 'RequestToMove':
             return encodeRequestToMove(msg);
         case 'RequestToFastTravel':
             return encodeRequestToFastTravel(msg);
+        case 'LaunchHardTravel':
+            return encodeLaunchHardTravel(msg);
+        case 'HardTravel':
+            return encodeHardTravel(msg);
+        case 'RequestToHardTravel':
+            return encodeRequestToHardTravel(msg);
+        case 'RequestShipToMint':
+            return encodeRequestShipToMint();
         case 'RequestMint':
             return encodeRequestMint(msg);
         case 'RequestShipAddress':

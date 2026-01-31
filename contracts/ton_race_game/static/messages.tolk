@@ -88,12 +88,19 @@ struct (0x2f168b85) HardTravel {
     ship_hp: HP_TYPE
     info: HardTravelInfo
     moveData: MoveData
+    turnIndex: uint8 // 0-based; move we are about to process
+    accumulatedJettonAmount: coins // rewards collected so far
 }
-
 
 //  To Ship
 
 struct (0xb2a06139) MoveEnd {
+    result: UniqueResult
+    gameFields: GameFields
+}
+
+// From CoordinateCell to Ship when HardTravel ends (CRASH or CONTINUE). Carries accumulated jettons for correct 10% on CRASH.
+struct (0x8e7f9a0b) HardTravelMoveEnd {
     result: UniqueResult
     gameFields: GameFields
 }
@@ -122,6 +129,8 @@ struct (0x5a1f0b21) FastTravelUpgrade {
 }
 
 struct (0x6a3b8fdd) ResetShip {}
+
+struct (0x53035644) RequestShipToMint {}
 // To Game
 
 struct (0xf5cc90ff) RequestMint {

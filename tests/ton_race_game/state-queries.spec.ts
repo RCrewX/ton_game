@@ -3,7 +3,7 @@ import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
-import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE, BASIC_SHIP_HP, Opcodes } from '../../wrappers/ton_race_game/types';
+import { GAS_COST_REQUEST_TO_MOVE, TODO_TOTAL_GAS_TO_MOVE, GAS_COST_ANY_MESSAGE, BASIC_SHIP_HP, Opcodes } from '../../wrappers/ton_race_game/types';
 import { Ship } from '../../wrappers/ton_race_game/Ship';
 
 describe('State Queries', () => {
@@ -36,7 +36,6 @@ describe('State Queries', () => {
     });
 
     it('Test Ship getCurrentGameData - verify after first move', async () => {
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         const gameData = await SC_System.ownerShip.getCurrentGameData();
@@ -51,7 +50,6 @@ describe('State Queries', () => {
 
     it('Test Ship getCurrentGameData - verify after multiple moves (CONTINUE)', async () => {
         // Move 1: UP from (0,0) to (0,1)
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         let gameData = await SC_System.ownerShip.getCurrentGameData();
         expect(gameData).not.toBeNull();
@@ -82,7 +80,6 @@ describe('State Queries', () => {
 
     it('Test Ship getCurrentGameData - verify after SAFE_EXIT', async () => {
         // First move to get into game
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         // Get initial jetton amount
@@ -113,7 +110,6 @@ describe('State Queries', () => {
 
     it('Test Ship getCurrentGameData - verify after CRASH', async () => {
         // First move to get into game
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         // Move to a high Y coordinate where cell HP might be high
@@ -135,7 +131,6 @@ describe('State Queries', () => {
 
     it('Test Ship getCurrentGameData - verify jetton accumulation on CONTINUE', async () => {
         // First move
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         let gameData = await SC_System.ownerShip.getCurrentGameData();
@@ -155,7 +150,6 @@ describe('State Queries', () => {
 
     it('Test Ship getCurrentGameData - verify HP changes on CONTINUE', async () => {
         // First move
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         let gameData = await SC_System.ownerShip.getCurrentGameData();
@@ -186,7 +180,6 @@ describe('State Queries', () => {
         expect(initialBalance).toBeGreaterThan(0n);
 
         // Perform a move (should consume some TON)
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         const balanceAfterMove = await SC_System.ownerShip.getTonBalance();
@@ -196,7 +189,6 @@ describe('State Queries', () => {
 
     it('Test CoordinateCell getTonBalance', async () => {
         // First move to create a coordinate cell
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         const cc = SC_System.blockchain.openContract(CoordinateCell.createFromConfig({ 
@@ -216,7 +208,6 @@ describe('State Queries', () => {
 
     it('Test Ship getMovementInProcess - during movement', async () => {
         // Start a move
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         
         // Check movement_in_process is true (before MoveEnd)

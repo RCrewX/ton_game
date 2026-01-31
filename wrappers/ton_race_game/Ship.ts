@@ -1,6 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
-import { encodeRequestToMove, encodeRequestToFastTravel, loadGameFieldsOpt } from './types';
-import { MoveMode, XY, HP_TYPE_BITS } from './structs';
+import { encodeRequestToMove, encodeRequestToFastTravel, encodeRequestToHardTravel, encodeRequestShipToMint, loadGameFieldsOpt } from './types';
+import { MoveMode, XY, HP_TYPE_BITS, HardTravelInfo } from './structs';
 import { Coins, loadCoins } from '@ton/sandbox/dist/config/config.tlb-gen';
 
 export type ShipConfig = {
@@ -18,6 +18,7 @@ export function shipConfigToCell(config: ShipConfig): Cell {
         .storeMaybeRef(null) // fastTravelInfo: null
         .storeRef(config.coordinateCellCode)
         .storeBit(false) // movement_in_process: false
+        .storeCoins(0) // pending_mint_amount: 0
         .endCell();
 }
 
@@ -60,6 +61,14 @@ export class Ship implements Contract {
         });
     }
 
+    async sendHardTravel(provider: ContractProvider, via: Sender, value: bigint, info: HardTravelInfo) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeRequestToHardTravel({ info }),
+        });
+    }
+
     async getCurrentGameData(provider: ContractProvider) {
         const result = await provider.get('currentGameData', []);
         return loadGameFieldsOpt(result.stack);
@@ -78,5 +87,18 @@ export class Ship implements Contract {
     async getMaxHp(provider: ContractProvider): Promise<bigint> {
         const result = await provider.get('get_max_hp', []);
         return result.stack.readBigNumber();
+    }
+
+    async getPendingMintAmount(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('get_pending_mint_amount', []);
+        return result.stack.readBigNumber();
+    }
+
+    async sendRequestShipToMint(provider: ContractProvider, via: Sender, value: bigint) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeRequestShipToMint(),
+        });
     }
 }

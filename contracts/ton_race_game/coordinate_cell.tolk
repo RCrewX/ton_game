@@ -245,24 +245,132 @@ fun onInternalMessage(in: InMessage) {
         }
         LaunchHardTravel => {
             var storage = lazy CoordinateCellStorage.load();
-            assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
-            var ccStorage: CCStorage = lazy storage.ccStorage!.load();
-            assert (ccStorage.firstExplorer != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
-            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
-
-
-
-
+            assert (in.senderAddress == calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode())) throw ERR_INVALID_SHIP_SENDER_FOR_MOVE;
+            assert (msg.info.mode != MoveMode.EXIT) throw ERR_HARD_TRAVEL_EXIT_MODE;
+            // Start cell (0,0) may not be "opened" yet; other cells must be opened (ship standing there)
+            if (storage.xy.x != x_zero || storage.xy.y != y_zero) {
+                assert (storage.opened) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+                assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
+            }
+            reserveValue(in.valueCoins);
+            val nextX = coordinate_plus_mode(storage.xy.x, msg.info.mode);
+            val nextY = storage.xy.y + 1;
+            val hardTravelMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: calcDeployedCoordinateCell(storage.gameAddress, nextX, nextY, contract.getCode(), storage.shipCode),
+                value: GAS_COST_MOVE,
+                body: HardTravel {
+                    user: msg.user,
+                    ship_hp: msg.ship_hp,
+                    info: msg.info,
+                    moveData: MoveData { xy: storage.xy, ship_hp: msg.ship_hp },
+                    turnIndex: 0,
+                    accumulatedJettonAmount: 0,
+                }
+            });
+            hardTravelMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         HardTravel => {
             var storage = lazy CoordinateCellStorage.load();
+            assert (in.senderAddress == calcAddressOfCoordinateCell(storage.gameAddress, msg.moveData.xy.x, msg.moveData.xy.y, contract.getCode(), storage.shipCode)) throw ERR_INVALID_COORDINATE_CELL_SENDER_FOR_MOVE;
+            val shipAddress: address = calcAddressOfShip(msg.user, storage.gameAddress, storage.shipCode, contract.getCode());
+
+            var firstTimeOpened = !storage.opened;
+            var totalReward: coins;
+            if (firstTimeOpened && storage.ccStorage == null) {
+                var ccStorage: CCStorage = {hp: 0, jettonAmount: 0, firstExplorer: msg.user};
+                val randomResult: RandomResult = generateRandomResult(storage.xy.y);
+                ccStorage.hp = randomResult.hp;
+                ccStorage.jettonAmount = randomResult.jettonAmount;
+                ccStorage.firstExplorer = msg.user;
+                storage.opened = true;
+                storage.ccStorage = ccStorage.toCell();
+                storage.save();
+            }
+            var result: UniqueResult = UniqueResult.CRASH;
+            var ship_hp: HP_TYPE = 0;
             assert (storage.ccStorage != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
             var ccStorage: CCStorage = lazy storage.ccStorage!.load();
-            assert (ccStorage.firstExplorer != null) throw ERR_COORDINATE_CELL_STORAGE_NOT_INITIALIZED;
-            assert (in.senderAddress == ccStorage.firstExplorer!) throw ERR_NOT_FIRST_EXPLORER;
+            if (firstTimeOpened) {
+                totalReward = ccStorage.jettonAmount;
+            } else {
+                val smallAmount = ccStorage.jettonAmount / 10;
+                if (smallAmount < 1 && ccStorage.jettonAmount > 0) {
+                    totalReward = 1;
+                } else {
+                    totalReward = smallAmount;
+                }
+            }
+            if (msg.moveData.ship_hp <= ccStorage.hp) {
+                result = UniqueResult.CRASH;
+                ship_hp = 0;
+                totalReward = 0;
+            } else {
+                result = UniqueResult.CONTINUE;
+                ship_hp = msg.moveData.ship_hp - ccStorage.hp;
+            }
 
+            if (result == UniqueResult.CRASH) {
+                if (!firstTimeOpened) {
+                    reserveValue(in.valueCoins);
+                }
+                val hardTravelMoveEndMsg = createMessage({
+                    bounce: BounceMode.NoBounce,
+                    dest: shipAddress,
+                    value: 0,
+                    body: HardTravelMoveEnd {
+                        result,
+                        gameFields: GameFields {
+                            xy: storage.xy,
+                            hp: ship_hp,
+                            jettonAmount: msg.accumulatedJettonAmount,
+                        }
+                    }
+                });
+                hardTravelMoveEndMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+                return;
+            }
 
+            val accJettons: coins = msg.accumulatedJettonAmount + totalReward;
+            if (in.valueCoins < msg.info.gasLimit || msg.turnIndex >= msg.info.maxTurns || ship_hp < msg.info.hpLimit) {
+                if (!firstTimeOpened) {
+                    reserveValue(in.valueCoins);
+                }
+                val endGameFields = GameFields {
+                    xy: storage.xy,
+                    hp: ship_hp,
+                    jettonAmount: accJettons,
+                };
+                val hardTravelMoveEndMsg = createMessage({
+                    bounce: BounceMode.NoBounce,
+                    dest: shipAddress,
+                    value: 0,
+                    body: HardTravelMoveEnd {
+                        result: UniqueResult.CONTINUE,
+                        gameFields: endGameFields,
+                    }
+                });
+                hardTravelMoveEndMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+                return;
+            }
 
+            reserveValue(in.valueCoins);
+            val nextX = coordinate_plus_mode(storage.xy.x, msg.info.mode);
+            val nextY = storage.xy.y + 1;
+            val hardTravelMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: calcDeployedCoordinateCell(storage.gameAddress, nextX, nextY, contract.getCode(), storage.shipCode),
+                value: GAS_COST_MOVE,
+                body: HardTravel {
+                    user: msg.user,
+                    ship_hp: ship_hp,
+                    info: msg.info,
+                    moveData: MoveData { xy: storage.xy, ship_hp: ship_hp },
+                    turnIndex: msg.turnIndex + 1,
+                    accumulatedJettonAmount: accJettons,
+                }
+            });
+            hardTravelMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}

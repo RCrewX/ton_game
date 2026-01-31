@@ -2,7 +2,7 @@ import { toNano } from '@ton/core';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
-import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX, GAS_COST_ANY_MESSAGE } from '../../wrappers/ton_race_game/types';
+import { Opcodes, TODO_TOTAL_GAS_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_ANY_MESSAGE } from '../../wrappers/ton_race_game/types';
 import { Opcodes as GameManagerOpcodes } from '../../wrappers/game_manager/types';
 import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
@@ -45,7 +45,6 @@ describe('Jetton Minting', () => {
         // });
 
         // Do several moves to accumulate rewards
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         // Move 1: UP from (0,0) to (0,1)
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         let gameData = await SC_System.ownerShip.getCurrentGameData();
@@ -115,11 +114,19 @@ describe('Jetton Minting', () => {
         const initialJettonBalance = await userJettonWallet.getJettonBalance();
         // expect(initialJettonBalance).toBe(0n);
 
-        // Do safe exit to trigger minting
-        // From (1,3), EXIT mode goes to (1,4)
+        // Do safe exit (stores reward in ship's pending_mint_amount; no RequestMint yet)
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_ANY_MESSAGE, MoveMode.EXIT);
+        // After EXIT, RequestMint is NOT sent in same round; owner must trigger mint via RequestShipToMint
+        const pendingAfterExit = await SC_System.ownerShip.getPendingMintAmount();
+        expect(pendingAfterExit).toBe(accumulatedAmount);
 
-        // Verify the complete message flow
+        // Owner triggers mint via RequestShipToMint
+        SC_System.messageResult = await SC_System.ownerShip.sendRequestShipToMint(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REQUEST_MINT
+        );
+
+        // Verify the complete message flow (from RequestShipToMint)
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerShip.address,
             to: SC_System.game.address,
@@ -153,6 +160,10 @@ describe('Jetton Minting', () => {
         const shipJettonBalance = await shipJettonWallet.getJettonBalance();
         expect(shipJettonBalance).toBe(0n); // Ship should have 0 jettons
 
+        // Pending mint should be zero after RequestShipToMint
+        const pendingAfterMint = await SC_System.ownerShip.getPendingMintAmount();
+        expect(pendingAfterMint).toBe(0n);
+
         // Verify TransferNotification was sent to user (receiver)
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: userJettonWalletAddress,
@@ -172,7 +183,6 @@ describe('Jetton Minting', () => {
 
     it('Test mint flow - verify jettons go to user wallet and excesses to receiver (may Fail)', async () => {
         // Do a few moves to accumulate some rewards
-        const TODO_TOTAL_GAS_TO_MOVE = GAS_COST_REQUEST_TO_MOVE + GAS_COST_REQUEST_MINT + BASIC_STORAGE_TAX;
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), TODO_TOTAL_GAS_TO_MOVE, MoveMode.UP);
@@ -201,10 +211,15 @@ describe('Jetton Minting', () => {
         // Get initial user TON balance to verify excesses
         const initialUserTonBalance = await SC_System.ownerAccount.getBalance();
 
-        // Trigger safe exit to mint
+        // Safe exit (stores pending_mint_amount; no RequestMint in same round)
         SC_System.messageResult = await SC_System.ownerShip.sendMove(SC_System.ownerAccount.getSender(), GAS_COST_ANY_MESSAGE, MoveMode.EXIT);
+        // Owner triggers mint via RequestShipToMint
+        SC_System.messageResult = await SC_System.ownerShip.sendRequestShipToMint(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_REQUEST_MINT
+        );
 
-        // Verify complete message chain
+        // Verify complete message chain (from RequestShipToMint)
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.ownerShip.address,
             to: SC_System.game.address,

@@ -7,10 +7,12 @@ import "static/constants"
 
 type AllowedMessagesToShip = 
     | MoveEnd 
+    | HardTravelMoveEnd
     | RequestToMove
     | RequestToHardTravel 
     | ShipUpgrade
     | RequestToFastTravel
+    | RequestShipToMint
     | AnyMessage
     | ResetShip
     | FastTravelUpgrade
@@ -33,6 +35,10 @@ get fun get_movement_in_process(): bool {
 get fun get_max_hp(): HP_TYPE {
     var storage: ShipStorage = lazy ShipStorage.load();
     return storage.max_hp;
+}
+get fun get_pending_mint_amount(): coins {
+    var storage: ShipStorage = lazy ShipStorage.load();
+    return storage.pending_mint_amount;
 }
 fun onInternalMessage(in: InMessage) {
     val msg = lazy AllowedMessagesToShip.fromSlice(in.body);
@@ -72,22 +78,11 @@ fun onInternalMessage(in: InMessage) {
             }
             storage.gameFields = gameFields.toCell();
             storage.movement_in_process = false;
+            if (totalReward > 0) {
+                storage.pending_mint_amount += totalReward;
+            }
             storage.save();
 
-            if (totalReward > 0) {
-                
-                
-                val requestMintMsg = createMessage({
-                    bounce: BounceMode.NoBounce,
-                    dest: storage.gameAddress,
-                    value: MINT_TON_AMOUNT,
-                    body: RequestMint {
-                        receiver: storage.userAddress,
-                        amount: totalReward,
-                    }
-                });
-                requestMintMsg.send(0);
-            }
             reserveValue(in.valueCoins);
             val cashbackMsg = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -96,6 +91,42 @@ fun onInternalMessage(in: InMessage) {
                 body: ReturnExcessesBack {queryId:0},
             });
             // Use send_mode=128 to carry all remaining balance (excesses)
+            cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+        }
+        HardTravelMoveEnd => {
+            var storage: ShipStorage = lazy ShipStorage.load();
+            assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
+            assert (storage.movement_in_process) throw ERR_MOVEMENT_NOT_IN_PROCESS;
+            var gameFields: GameFields = lazy storage.gameFields!.load();
+            var msgGameFields: GameFields = msg.gameFields;
+            assert (in.senderAddress == calcAddressOfCoordinateCell(storage.gameAddress, msgGameFields.xy.x, msgGameFields.xy.y, storage.coordinateCellCode, contract.getCode())) throw ERR_INVALID_COORDINATE_CELL_SENDER;
+            var totalReward: coins = 0;
+            if (msg.result == UniqueResult.CRASH) {
+                gameFields.xy.x = 0;
+                gameFields.xy.y = 0;
+                gameFields.hp = storage.max_hp;
+                totalReward = msgGameFields.jettonAmount / 10;
+                gameFields.jettonAmount = 0;
+            }
+            if (msg.result == UniqueResult.CONTINUE) {
+                gameFields.xy.x = msgGameFields.xy.x;
+                gameFields.xy.y = msgGameFields.xy.y;
+                gameFields.hp = msgGameFields.hp;
+                gameFields.jettonAmount += msgGameFields.jettonAmount;
+            }
+            storage.gameFields = gameFields.toCell();
+            storage.movement_in_process = false;
+            if (totalReward > 0) {
+                storage.pending_mint_amount += totalReward;
+            }
+            storage.save();
+            reserveValue(in.valueCoins);
+            val cashbackMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: storage.userAddress,
+                value: 0,
+                body: ReturnExcessesBack {queryId:0},
+            });
             cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         RequestToMove => {
@@ -251,11 +282,68 @@ fun onInternalMessage(in: InMessage) {
 
             // storage.gameFields = gameFields.toCell();
             storage.fastTravelInfo = fastTravelInfo.toCell();
+            storage.pending_mint_amount = 0;
             storage.movement_in_process = false;
             storage.save();
         },
+        RequestShipToMint => {
+            var storage = lazy ShipStorage.load();
+            assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
+            assert (storage.pending_mint_amount > 0) throw ERR_NO_PENDING_MINT;
+            assert (in.valueCoins >= GAS_COST_REQUEST_MINT) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            val amountToMint: coins = storage.pending_mint_amount;
+            storage.pending_mint_amount = 0;
+            storage.save();
+            reserveValue(in.valueCoins);
+            val requestMintMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: storage.gameAddress,
+                value: MINT_TON_AMOUNT,
+                body: RequestMint {
+                    receiver: storage.userAddress,
+                    amount: amountToMint,
+                }
+            });
+            requestMintMsg.send(0);
+            val cashbackMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: storage.userAddress,
+                value: 0,
+                body: ReturnExcessesBack {queryId:0},
+            });
+            cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+        },
         RequestToHardTravel => {
-            
+            var storage = lazy ShipStorage.load();
+            assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
+            assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
+            assert (msg.info.mode != MoveMode.EXIT) throw ERR_HARD_TRAVEL_EXIT_MODE;
+            assert (msg.info.maxTurns < 100) throw ERR_HARD_TRAVEL_MAX_TURNS_INVALID;
+            assert (in.valueCoins >= HARD_TRAVEL_MIN_VALUE) throw ERR_HARD_TRAVEL_VALUE_TOO_LOW;
+            assert (contract.getOriginalBalance() >= GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
+
+            if (storage.gameFields == null) {
+                var gameFields = buildGameFields(BASIC_SHIP_HP);
+                storage.gameFields = gameFields;
+                storage.max_hp = BASIC_SHIP_HP;
+                storage.movement_in_process = false;
+                storage.save();
+            }
+            storage.movement_in_process = true;
+            storage.save();
+            var gameFields: GameFields = lazy storage.gameFields!.load();
+            reserveValue(in.valueCoins);
+            val launchMsg = createMessage({
+                bounce: BounceMode.NoBounce,
+                dest: calcDeployedCoordinateCell(storage.gameAddress, gameFields.xy.x, gameFields.xy.y, storage.coordinateCellCode, contract.getCode()),
+                value: GAS_COST_MOVE_SHIP_TO_CC,
+                body: LaunchHardTravel {
+                    user: in.senderAddress,
+                    ship_hp: gameFields.hp,
+                    info: msg.info,
+                }
+            });
+            launchMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         ReturnExcessesBack => {}
         LiteralyAnything => {}
