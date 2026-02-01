@@ -88,6 +88,9 @@ export interface ContractCodes {
         ton_race_game: TonRaceGameCodes;
         soulless_slot_machine: SoullessSlotMachineCodes;
     };
+    /** Optional: NFT collection/item code hashes (TEP-62) */
+    nftCollection?: ContractCodeInfo;
+    nftItem?: ContractCodeInfo;
 }
 
 /**

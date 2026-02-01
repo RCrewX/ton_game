@@ -6,8 +6,8 @@ import { Ship } from "../wrappers/ton_race_game/Ship";
 import { CoordinateCell } from "../wrappers/ton_race_game/CoordinateCell";
 import { GameManager } from "../wrappers/game_manager/GameManager";
 import { MoveMode } from "../wrappers/ton_race_game/structs";
-import { jettonContentToCell, JettonMinter } from "../wrappers/jetton/JettonMinter";
-import { JettonWallet } from "../wrappers/jetton/JettonWallet";
+import { jettonContentToCell, JettonMinter } from "../wrappers/tep/jetton/JettonMinter";
+import { JettonWallet } from "../wrappers/tep/jetton/JettonWallet";
 import { Opcodes, GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, GAS_COST_REDIRECT_MESSAGE, encodeGamesInfo } from "../wrappers/game_manager/types";
 import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, TODO_TOTAL_GAS_TO_MOVE, JettonUsageMode, GAS_COST_SEND_MOVE, Opcodes as GameOpcodes } from "../wrappers/ton_race_game/types";
 

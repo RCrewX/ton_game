@@ -5,11 +5,11 @@ import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonU
 import { Opcodes, GAS_COST_REQUEST_TO_MOVE, TODO_TOTAL_GAS_TO_MOVE, BASIC_SHIP_HP, GAS_COST_SEND_MOVE, JettonUsageMode } from '../../wrappers/ton_race_game/types';
 import { Opcodes as GameManagerOpcodes, GAS_COST_REDIRECT_MESSAGE } from '../../wrappers/game_manager/types';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
-import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
-import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { JettonMinter } from '../../wrappers/tep/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
+import { jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 import { Ship } from '../../wrappers/ton_race_game/Ship';
-import { Op } from '../../wrappers/jetton/JettonConstants';
+import { Op } from '../../wrappers/tep/jetton/JettonConstants';
 
 describe('Ship Upgrade', () => {
     let SC_System: ContractSystem;

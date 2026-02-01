@@ -10,7 +10,7 @@ export const compile: CompilerConfig = {
     //     'jetton-minter-discoverable.fc'
     // ],
     lang: 'tolk',
-    entrypoint: 'contracts/jetton/jetton-minter-contract.tolk',
+    entrypoint: 'contracts/tep/jetton/jetton-minter-contract.tolk',
     withSrcLineComments: true,
     withStackComments: true,
 };

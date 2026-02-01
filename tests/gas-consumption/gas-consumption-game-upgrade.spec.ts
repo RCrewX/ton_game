@@ -3,7 +3,7 @@ import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonUsageForwardPayload } from '../test_utils';
 import { Opcodes, GAS_COST_JETTON_USED, GAS_COST_SHIP_UPGRADE, GAS_COST_TRANSFER_NOTIFICATION, BASIC_STORAGE_TAX, TODO_TOTAL_GAS_TO_MOVE, JettonUsageMode } from '../../wrappers/ton_race_game/types';
 import { Opcodes as GameManagerOpcodes } from '../../wrappers/game_manager/types';
-import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
+import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
 import { writeGasCosts } from '../../lib/buildOutput';
 import { MoveMode } from "../../wrappers/ton_race_game/structs";
 

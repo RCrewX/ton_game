@@ -2,9 +2,9 @@ import { beginCell, fromNano, toNano } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Opcodes as GameManagerOpcodes, GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_ALLOW_BURN, GAS_COST_REQUEST_BURN } from '../../wrappers/game_manager/types';
-import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
-import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { JettonMinter } from '../../wrappers/tep/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
+import { jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 import { writeGasCosts } from '../../lib/buildOutput';
 
 describe("Gas Prices - GameManager", () => {

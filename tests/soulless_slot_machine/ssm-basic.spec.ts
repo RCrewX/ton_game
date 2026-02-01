@@ -4,8 +4,8 @@ import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import { SoullessSlotMachine } from '../../wrappers/soulless_slot_machine/SoullessSlotMachine';
 import { GameManager } from '../../wrappers/game_manager/GameManager';
-import { JettonMinter, jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
+import { JettonMinter, jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
 import { GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO } from '../../wrappers/game_manager/types';
 import { 
     TRY_LUCK_REQUIRED_AMOUNT, 

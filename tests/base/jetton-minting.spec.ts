@@ -4,9 +4,9 @@ import { ContractSystem, initContractSystem, cleanupContractSystem } from '../te
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import { Opcodes, TODO_TOTAL_GAS_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_ANY_MESSAGE } from '../../wrappers/ton_race_game/types';
 import { Opcodes as GameManagerOpcodes } from '../../wrappers/game_manager/types';
-import { JettonMinter } from '../../wrappers/jetton/JettonMinter';
-import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
-import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { JettonMinter } from '../../wrappers/tep/jetton/JettonMinter';
+import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
+import { jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 
 describe('Jetton Minting', () => {
     let SC_System: ContractSystem;

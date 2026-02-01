@@ -4,7 +4,7 @@ import { ContractSystem, initContractSystem, cleanupContractSystem, buildJettonU
 import { MoveMode, type HardTravelInfo } from '../../wrappers/ton_race_game/structs';
 import { Opcodes, HARD_TRAVEL_MIN_VALUE, JettonUsageMode, BASIC_SHIP_HP } from '../../wrappers/ton_race_game/types';
 import { Opcodes as GameManagerOpcodes } from '../../wrappers/game_manager/types';
-import { JettonWallet } from '../../wrappers/jetton/JettonWallet';
+import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
 
 describe('Hard Travel - Limits', () => {
     let SC_System: ContractSystem;

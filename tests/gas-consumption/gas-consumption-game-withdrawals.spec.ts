@@ -2,7 +2,7 @@ import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from '../test_utils';
 import { Opcodes } from '../../wrappers/ton_race_game/types';
-import { JettonMinter, jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { JettonMinter, jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
 import { writeGasCosts } from '../../lib/buildOutput';
 
