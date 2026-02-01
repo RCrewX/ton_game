@@ -65,7 +65,7 @@ export class NFTItem implements Contract {
             .storeUint(Number(queryId), 64)
             .storeAddress(params.to)
             .storeAddress(params.responseTo ?? null)
-            .storeBit(0) // empty customPayload dict
+            .storeBit(0) // TEP-62 custom_payload: Maybe ^Cell (0 = nothing)
             .storeCoins(forwardAmount);
         if (params.forwardBody !== undefined) {
             if (params.forwardBody instanceof Cell) {

@@ -56,11 +56,12 @@ struct (0xd53276db) ReturnExcessesBack {
     queryId: uint64
 }
 
+// TEP-62 transfer: custom_payload is (Maybe ^Cell)
 struct (0x5fcc3d14) AskToChangeOwnership {
     queryId: uint64
     newOwnerAddress: address
     sendExcessesTo: address?
-    customPayload: dict
+    customPayload: cell?
     forwardTonAmount: coins
     forwardPayload: RemainingBitsAndRefs
 }
