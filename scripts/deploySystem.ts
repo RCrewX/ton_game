@@ -561,6 +561,8 @@ async function main(): Promise<void> {
         const jettonWalletCode = await compile('JettonWallet');
         const jettonMinterCode = await compile('JettonMinter');
         const subcontractCode = await compile('Subcontract');
+        const sbtItemCode = await compile('SBTItem');
+        const sbtCollectionCode = await compile('SBTCollection');
         console.log('Contracts compiled successfully');
         console.log('');
 
@@ -583,6 +585,8 @@ async function main(): Promise<void> {
                     soullessSlotMachine: getContractCodeData(ssmCode),
                 },
             },
+            sbtCollection: getContractCodeData(sbtCollectionCode),
+            sbtItem: getContractCodeData(sbtItemCode),
         };
 
         // Calculate addresses for both networks

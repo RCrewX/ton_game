@@ -91,6 +91,9 @@ export interface ContractCodes {
     /** Optional: NFT collection/item code hashes (TEP-62) */
     nftCollection?: ContractCodeInfo;
     nftItem?: ContractCodeInfo;
+    /** Optional: SBT collection/item code hashes (TEP-85) */
+    sbtCollection?: ContractCodeInfo;
+    sbtItem?: ContractCodeInfo;
 }
 
 /**
