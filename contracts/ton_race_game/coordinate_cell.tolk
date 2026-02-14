@@ -4,7 +4,6 @@ import "static/helper"
 import "static/errors"
 import "static/structs"
 import "static/constants"
-import "@stdlib/gas-payments"
 
 type AllowedMessagesToCoordinateCell = 
     | Move 

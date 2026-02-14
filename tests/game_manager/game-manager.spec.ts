@@ -1,5 +1,4 @@
 import { beginCell, toNano } from '@ton/core';
-import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { GAS_COST_REDIRECT_MESSAGE } from '../../wrappers/game_manager/types';

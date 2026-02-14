@@ -1,4 +1,4 @@
-import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
+import { fromNano, toNano } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Opcodes, GAS_COST_REQUEST_SHIP_ADDRESS, GAS_COST_REQUEST_COORDINATE_CELL_ADDRESS } from '../../wrappers/ton_race_game/types';

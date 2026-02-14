@@ -60,7 +60,7 @@ fun onInternalMessage(in: InMessage) {
         }
 
         else => {
-            assert (in.body.isEmpty()) throw 0xFFFF
+            assert (in.body.isEmpty()) throw ERROR_UNKNOWN_MESSAGE
         }
     }
 }

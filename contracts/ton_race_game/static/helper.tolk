@@ -2,7 +2,6 @@ import "storage"
 import "structs"
 import "constants"
 import "errors"
-import "@stdlib/gas-payments"
 
 fun empty_cell() : cell {
     return beginCell().endCell();

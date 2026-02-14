@@ -61,7 +61,7 @@ fun onInternalMessage(in: InMessage) {
 
             var contentCell: cell? = null;
             if (msg.withContent) {
-                contentCell = storage.individualContent.toCell();
+                contentCell = storage.individualContent;
             }
             val infoMsg = createMessage({
                 bounce: BounceMode.NoBounce,
@@ -81,36 +81,29 @@ fun onInternalMessage(in: InMessage) {
         }
 
         Destroy => {
-            // TODO Correct "Destroy"
             assert (storage.active == true) throw ERROR_NOT_INITIALIZED;
             assert (in.senderAddress == storage.ownerAddress) throw ERROR_NOT_FROM_OWNER;
 
             storage.active = false;
-            // storage.ownerAddress = null;
-            
             storage.save();
-            
-            // val restAmount = contract.getOriginalBalance() - MIN_TONS_FOR_STORAGE;
+
+            val restAmount = contract.getOriginalBalance() - MIN_TONS_FOR_STORAGE;
             val excessesMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: in.senderAddress,
-                value: 0,
+                value: restAmount,
                 body: Excesses { queryId: msg.queryId }
             });
-            // TODO Correct "Destroy" mode 
             excessesMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
 
         Revoke => {
             assert (storage.active == true) throw ERROR_NOT_INITIALIZED;
-            assert (in.senderAddress == storage.collectionAddress) throw ERROR_NOT_AUTHORITY;
             assert (storage.revokedAt == 0) throw ERROR_ALREADY_REVOKED;
+            assert (in.senderAddress == storage.collectionAddress) throw ERROR_NOT_AUTHORITY;
 
-
-            storage.active = false;
             storage.revokedAt = blockchain.now() as uint64;
             storage.save();
-        
         }
 
         RequestStaticData => {
@@ -130,7 +123,7 @@ fun onInternalMessage(in: InMessage) {
         }
 
         else => {
-            assert (in.body.isEmpty()) throw 0xFFFF
+            assert (in.body.isEmpty()) throw ERROR_UNKNOWN_MESSAGE
         }
     }
 }
@@ -139,9 +132,9 @@ struct SbtnDataReply {
     isInitialized: bool
     itemIndex: int
     collectionAddress: address
-    ownerAddress: address? = null
+    ownerAddress: address
     content: cell? = null
-    authority: address? = null
+    authority: address
     revokedAt: uint64 = 0
 }
 
@@ -159,9 +152,9 @@ get fun get_nft_data(): SbtnDataReply {
 }
 
 get fun get_authority_address(): address {
-    
     var storage = lazy SbtnItemStorage.load();
     return storage.collectionAddress;
+    // return beginCell().storeAddress(storage.collectionAddress).endCell().beginParse();
 }
 
 get fun get_revoked_time(): int {

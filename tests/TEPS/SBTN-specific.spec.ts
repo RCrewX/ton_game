@@ -97,7 +97,6 @@ describe('SBTN-specific', () => {
                 body: beginCell()
                     .storeUint(Op.SbtnInit, 32)
                     .storeUint(0, 64)
-                    .storeUint(0, 2)
                     .storeRef(beginCell().endCell())
                     .endCell(),
             });

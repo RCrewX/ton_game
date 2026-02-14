@@ -1,14 +1,12 @@
 import { beginCell, toNano, SendMode } from '@ton/core';
-import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
-import { Subcontract, subcontractConfigToCell } from '../../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, GAS_COST_MANUAL_DEPLOY, encodeForward } from '../../wrappers/subcontract/types';
-import { Ship, shipConfigToCell } from '../../wrappers/ton_race_game/Ship';
+import { Subcontract } from '../../wrappers/subcontract/Subcontract';
+import { GAS_COST_FORWARD, GAS_COST_MANUAL_DEPLOY } from '../../wrappers/subcontract/types';
+import { Ship } from '../../wrappers/ton_race_game/Ship';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
-import { encodeRequestToMove, GAS_COST_REQUEST_TO_MOVE, GAS_COST_REQUEST_MINT, BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
+import { encodeRequestToMove } from '../../wrappers/ton_race_game/types';
 import { Opcodes } from '../../wrappers/ton_race_game/types';
-import { JettonMinter, jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
 
 describe('Subcontract - Basic Operations', () => {

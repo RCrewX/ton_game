@@ -1,6 +1,5 @@
 
 import "structs"
-import "constants"
 
 struct GameV1Storage {
     managerAddress: address

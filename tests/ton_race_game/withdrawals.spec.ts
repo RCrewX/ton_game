@@ -1,11 +1,10 @@
 import { beginCell, Cell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
 import '@ton/test-utils';
 import { Opcodes } from '../../wrappers/ton_race_game/types';
 import { JettonMinter } from '../../wrappers/tep/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
-import { jettonContentToCell } from '../../wrappers/jetton/JettonMinter';
+import { jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 import { ContractSystem, initContractSystem, setupCoordinateCellWithFirstExplorer, cleanupContractSystem } from '../test_utils';
 import { BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
 

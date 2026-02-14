@@ -1,10 +1,9 @@
-import { beginCell, fromNano, toNano, SendMode } from "@ton/core";
+import { beginCell, fromNano, toNano } from "@ton/core";
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import { Opcodes, GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, GAS_COST_MOVE, GAS_COST_MOVE_END, GAS_COST_REQUEST_MINT, MINT_TON_AMOUNT, TODO_TOTAL_GAS_TO_MOVE } from '../../wrappers/ton_race_game/types';
 import { CoordinateCell } from '../../wrappers/ton_race_game/CoordinateCell';
-import { Ship } from '../../wrappers/ton_race_game/Ship';
 import { writeGasCosts } from '../../lib/buildOutput';
 
 describe("Gas Prices - Game Movement", () => {

@@ -18,7 +18,7 @@ export const Op = {
     AskToChangeOwnership: 0x5fcc3d14,
 } as const;
 
-/** SBTN item address (SBTN_02 §2.2): StateInit data = index (uint256), collection_address, owner_address */
+/** SBTN item address: StateInit data = SbtnItemStorage (index, collection, owner, active, revokedAt, individualContent) */
 export function calcSbtnItemAddress(
     ownerAddress: Address,
     collectionAddress: Address,
@@ -30,6 +30,9 @@ export function calcSbtnItemAddress(
         .storeUint(Number(index), 256)
         .storeAddress(collectionAddress)
         .storeAddress(ownerAddress)
+        .storeBit(false)
+        .storeUint(0, 64)
+        .storeRef(beginCell().endCell())
         .endCell();
     const init = { code: sbtnItemCode, data };
     return contractAddress(workchain, init);

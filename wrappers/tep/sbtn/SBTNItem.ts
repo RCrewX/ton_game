@@ -51,11 +51,16 @@ export class SBTNItem implements Contract {
         };
     }
 
-    /** Authority is always the collection address (TEP: only collection can revoke). */
-    async getAuthorityAddress(provider: ContractProvider): Promise<Address> {
+    /** Authority is collection when active; addr_none when destroyed. Returns null for addr_none. */
+    async getAuthorityAddress(provider: ContractProvider): Promise<Address | null> {
         const res = await provider.get('get_authority_address', []);
         const cell = res.stack.readCell();
-        return cell.beginParse().loadAddress();
+        const slice = cell.beginParse();
+        const b0 = slice.loadBit();
+        const b1 = slice.loadBit();
+        if (!b0 && !b1) return null; // addr_none (2 zero bits)
+        const addrSlice = cell.beginParse();
+        return addrSlice.loadAddress();
     }
 
     async getRevokedTime(provider: ContractProvider): Promise<number> {

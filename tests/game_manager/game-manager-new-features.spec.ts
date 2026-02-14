@@ -1,9 +1,8 @@
 import { beginCell, toNano, Address } from '@ton/core';
-import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
-import { GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, encodeGamesInfo } from '../../wrappers/game_manager/types';
-import { jettonContentToCell, JettonMinter } from '../../wrappers/jetton/JettonMinter';
+import { GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO } from '../../wrappers/game_manager/types';
+import { jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 import { compile } from '@ton/blueprint';
 
 describe('GameManager New Features', () => {

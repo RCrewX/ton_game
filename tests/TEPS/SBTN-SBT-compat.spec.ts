@@ -153,6 +153,32 @@ describe('SBTN-SBT-compat', () => {
                 success: true,
             });
         });
+
+        it('request_owner after destroy is rejected (active=false)', async () => {
+            const ownerA = await blockchain.treasury('ownerA');
+            const requester = await blockchain.treasury('requester');
+            const dest = await blockchain.treasury('dest');
+            const sbtnItem = await sbtnFixture(ownerA.address, 13n);
+            await sbtnItem.sendDestroy(ownerA.getSender(), {
+                value: toNano('0.05'),
+                queryId: 50,
+            });
+            const data = await sbtnItem.getNftData();
+            expect(data.ownerAddress).toBeNull();
+            const ERROR_NOT_INITIALIZED = 969;
+            const result = await sbtnItem.sendRequestOwner(requester.getSender(), {
+                value: toNano('0.05'),
+                destination: dest.address,
+                withContent: false,
+            });
+            expect(result.transactions).toHaveTransaction({
+                from: requester.address,
+                to: sbtnItem.address,
+                op: Op.RequestOwner,
+                success: false,
+                exitCode: ERROR_NOT_INITIALIZED,
+            });
+        });
     });
 
     describe('destroy', () => {

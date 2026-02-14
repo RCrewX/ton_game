@@ -1,11 +1,9 @@
 import { beginCell, toNano, SendMode, ContractProvider } from '@ton/core';
-import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
 import { keyPairFromSecretKey } from '@ton/crypto';
 import { ContractSystem, initContractSystem, cleanupContractSystem } from '../test_utils';
 import { Subcontract } from '../../wrappers/subcontract/Subcontract';
-import { GAS_COST_FORWARD, GAS_COST_FORWARD_WITH_INIT, Forward } from '../../wrappers/subcontract/types';
-import { BASIC_STORAGE_TAX } from '../../wrappers/ton_race_game/types';
+import { Forward } from '../../wrappers/subcontract/types';
 
 describe('Subcontract - External Messages', () => {
     let SC_System: ContractSystem;
