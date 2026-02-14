@@ -563,6 +563,8 @@ async function main(): Promise<void> {
         const subcontractCode = await compile('Subcontract');
         const sbtItemCode = await compile('SBTItem');
         const sbtCollectionCode = await compile('SBTCollection');
+        const sbtnItemCode = await compile('SBTNItem');
+        const sbtnCollectionCode = await compile('SBTNCollection');
         console.log('Contracts compiled successfully');
         console.log('');
 
@@ -587,6 +589,8 @@ async function main(): Promise<void> {
             },
             sbtCollection: getContractCodeData(sbtCollectionCode),
             sbtItem: getContractCodeData(sbtItemCode),
+            sbtnCollection: getContractCodeData(sbtnCollectionCode),
+            sbtnItem: getContractCodeData(sbtnItemCode),
         };
 
         // Calculate addresses for both networks

@@ -94,6 +94,9 @@ export interface ContractCodes {
     /** Optional: SBT collection/item code hashes (TEP-85) */
     sbtCollection?: ContractCodeInfo;
     sbtItem?: ContractCodeInfo;
+    /** Optional: SBTN collection/item code hashes (TEP-6666) */
+    sbtnCollection?: ContractCodeInfo;
+    sbtnItem?: ContractCodeInfo;
 }
 
 /**
