@@ -17,98 +17,8 @@ fun onInternalMessage(in: InMessage) {
     val msg = lazy AllowedMessagesToGameManager.fromSlice(in.body);
     var storage = lazy GameManagerStorage.load();
     match (msg) {
-        DeployJetton => {
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
-            assert (in.valueCoins >= GAS_COST_DEPLOY_JETTON) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            assert (storage.jettonInfo == null) throw ERR_JETTON_INFO_ALREADY_SET;
-            
-            // Calculate jetton minter data using GameManager address as admin and content from message
-            val jettonMinterData = createMinterStorage(contract.getAddress(), msg.jettonContent, msg.jettonWalletCode);
-            
-            // Calculate jetton minter address and AutoDeployAddress from code and data
-            val minterDeployed = calcDeployedJettonMinter(msg.jettonMinterCode, jettonMinterData);
-            val jettonMinterAddress = minterDeployed.calculateAddress();
-            
-            // Create and save JettonInfo
-            val jettonInfo: JettonInfo = {
-                jettonMinterAddress: jettonMinterAddress,
-                jettonWalletCode: msg.jettonWalletCode,
-            };
-            storage.jettonInfo = jettonInfo.toCell();
-            storage.save();
-            
-            // Send first Mint message to jettonMinter with initData for deployment
-            // Using AutoDeployAddress as dest will include stateInit for deployment
-            val forwardPayload: RemainingBitsAndRefs = beginCell().toSlice();
-            val forwardTonAmount = ton("0.05");
-            val internalTransferStep = InternalTransferStep {
-                queryId: 0,
-                jettonAmount: 1, // Small amount for initial deployment mint
-                transferInitiator: null,
-                sendExcessesTo: contract.getAddress(), // Send excesses back to GameManager
-                forwardTonAmount: forwardTonAmount,
-                forwardPayload: forwardPayload,
-            };
-            
-            var dif = in.valueCoins - MINT_TON_AMOUNT - BASIC_STORAGE_TAX;
-            val mintNewJettons = MintNewJettons {
-                queryId: 0,
-                mintRecipient: contract.getAddress(), // Mint to GameManager initially
-                tonAmount: MINT_TON_AMOUNT + dif,
-                internalTransferMsg: internalTransferStep.toCell(),
-            };
-            
-            reserveValue(in.valueCoins);
-            val deployMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: minterDeployed, // AutoDeployAddress includes stateInit
-                value: 0,
-                body: mintNewJettons,
-            });
-            deployMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
-        }
-        SetGamesInfo => {
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
-            assert (in.valueCoins >= GAS_COST_SET_GAMES_INFO) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            
-            val gamesInfo = msg.gamesInfo.load();
-            // Validate that first game in all_games is active_game
-            var allGamesSlice = gamesInfo.all_games.beginParse();
-            var firstMode: uint8 = 0;
-            var hasFirstMode = false;
-            try {
-                firstMode = allGamesSlice.loadUint(2);
-                hasFirstMode = true;
-            } catch {
-                hasFirstMode = false;
-            }
-            if (hasFirstMode && firstMode == 1) { // Mode 1 means address follows
-                var firstGameAddress: address = gamesInfo.active_game; // Initialize with active_game
-                var hasAddress = false;
-                try {
-                    firstGameAddress = allGamesSlice.loadAddress();
-                    hasAddress = true;
-                } catch {
-                    hasAddress = false;
-                }
-                if (hasAddress) {
-                    assert (firstGameAddress == gamesInfo.active_game) throw ERR_INVALID_GAMES_INFO;
-                }
-            }
-            
-            storage.gamesInfo = msg.gamesInfo;
-            storage.save();
-            reserveValue(in.valueCoins);
-            val responseMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: in.senderAddress,
-                value: 0,
-                body: ReturnExcessesBack {
-                    queryId: 0
-                }
-            });
-            responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
-        }
+        
+        
         RedirectMessage => {
             assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
             assert (in.valueCoins >= GAS_COST_REDIRECT_MESSAGE) throw ERR_MESSAGE_VALUE_TOO_LOW;
@@ -121,57 +31,7 @@ fun onInternalMessage(in: InMessage) {
             });
             redirectMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
-        ForwardMintRequest => {
-            assert (storage.jettonInfo != null) throw ERR_JETTON_MINTER_NOT_SET;
-            val jettonInfo = storage.jettonInfo!.load();
-            assert (storage.gamesInfo != null) throw ERR_GAMES_NOT_SET;
-            val gamesInfo = storage.gamesInfo!.load();
-            
-            // First check if it is active game
-            val isActiveGame = (in.senderAddress == gamesInfo.active_game);
-            
-            if (!isActiveGame) {
-                // If incoming value is less than 0.2 - check only active game
-                if (in.valueCoins < ton("0.2")) {
-                    assert (false) throw ERR_INVALID_GAME_SENDER;
-                }
-                // Use checkGame function to check if game is in all_games
-                val gameIndex = checkGame(in.senderAddress, gamesInfo.all_games);
-                assert (gameIndex != 0) throw ERR_GAME_NOT_FOUND; // 0 means not found
-            }
-            // Convert ForwardMintRequest to MintNewJettons format
-            // The TransferNotification will be sent to the receiver (user) by the JettonWallet
-            // Note: forwardPayload is empty because GameManager doesn't receive TransferNotificationForRecipient
-            // in the minting flow (it goes to the user, not GameManager)
-            val forwardPayload: RemainingBitsAndRefs = beginCell().toSlice();
-            // Set forwardTonAmount to ensure TransferNotification is sent from JettonWallet to recipient
-            val forwardTonAmount = ton("0.05"); // Enough for notification message
-            // sendExcessesTo should be the receiver (user who will receive jettons), not the ship
-            val internalTransferStep = InternalTransferStep {
-                queryId: 0,
-                jettonAmount: msg.amount,
-                transferInitiator: null, // null when minting
-                sendExcessesTo: msg.receiver, // Send excesses to the receiver (user who gets jettons)
-                forwardTonAmount: forwardTonAmount,
-                forwardPayload: forwardPayload,
-            };
 
-            var dif = in.valueCoins - MINT_TON_AMOUNT - BASIC_STORAGE_TAX;
-            val mintNewJettons = MintNewJettons {
-                queryId: 0,
-                mintRecipient: msg.receiver,
-                tonAmount: MINT_TON_AMOUNT + dif,
-                internalTransferMsg: internalTransferStep.toCell(),
-            };
-            reserveValue(in.valueCoins);
-            val forwardMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: jettonInfo.jettonMinterAddress,
-                value: 0,
-                body: mintNewJettons
-            });
-            forwardMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
-        }
         TransferNotificationForRecipient => {
             var storage = lazy GameManagerStorage.load();
             assert (storage.jettonInfo != null) throw ERR_JETTON_MINTER_NOT_SET;
@@ -232,48 +92,8 @@ fun onInternalMessage(in: InMessage) {
             });
             upgradeRequestMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
-        SetAllowBurn => {
-            assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
-            assert (in.valueCoins >= GAS_COST_SET_ALLOW_BURN) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            storage.allow_burn = msg.allow_burn;
-            storage.save();
-            reserveValue(in.valueCoins);
-            val responseMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: in.senderAddress,
-                value: 0,
-                body: ReturnExcessesBack {
-                    queryId: 0
-                }
-            });
-            responseMsg.send(SEND_MODE_IGNORE_ERRORS + 128);
-        }
-        RequestBurn => {
-            assert (storage.allow_burn) throw ERR_BURN_NOT_ALLOWED;
-            assert (storage.jettonInfo != null) throw ERR_JETTON_MINTER_NOT_SET;
-            val jettonInfo = storage.jettonInfo!.load();
-            assert (in.valueCoins >= GAS_COST_REQUEST_BURN) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            
-            // Calculate GameManager's native jetton wallet address
-            val gameManagerWalletAddress = calcAddressOfJettonWallet(contract.getAddress(), jettonInfo.jettonMinterAddress, jettonInfo.jettonWalletCode);
-            
-            // Create AskToBurn message
-            val askToBurn = AskToBurn {
-                queryId: msg.queryId,
-                jettonAmount: msg.jettonAmount,
-                sendExcessesTo: msg.sendExcessesTo,
-                customPayload: msg.customPayload,
-            };
-            
-            reserveValue(in.valueCoins);
-            val burnMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: gameManagerWalletAddress,
-                value: 0,
-                body: askToBurn
-            });
-            burnMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
-        }
+
+
         ReturnExcessesBack => {
             reserveValue(in.valueCoins);
             val cashbackMessage = createMessage({
