@@ -5,6 +5,8 @@ import { ContractSystem, initContractSystem, cleanupContractSystem } from '../te
 import { Ship } from '../../wrappers/ton_race_game/Ship';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import { Opcodes, TODO_TOTAL_GAS_TO_MOVE, GAS_COST_REQUEST_MINT, GAS_COST_ANY_MESSAGE } from '../../wrappers/ton_race_game/types';
+import { Opcodes as GMOpcodes } from '../../wrappers/game_manager/types';
+import { ROpcodes } from '../../wrappers/game_manager/RetranslatorTypes';
 
 describe('RequestShipToMint', () => {
     const ERR_INVALID_USER_SENDER = 912;
@@ -86,11 +88,32 @@ describe('RequestShipToMint', () => {
             success: true,
             op: Opcodes.OP_REQUEST_MINT,
         });
+        // New architecture: game wraps ForwardMintRequest in R1 to the dumb-pipe GM,
+        // GM forwards as R2 to the Retranslator, R* validates and replies R3, GM emits
+        // the mint (R4) to the jetton minter.
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.game.address,
             to: SC_System.gameManager.address,
             success: true,
-            op: Opcodes.OP_FORWARD_MINT_REQUEST,
+            op: GMOpcodes.OP_R1,
+        });
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.gameManager.address,
+            to: SC_System.retranslator.address,
+            success: true,
+            op: GMOpcodes.OP_R2,
+        });
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.retranslator.address,
+            to: SC_System.gameManager.address,
+            success: true,
+            op: GMOpcodes.OP_R3,
+        });
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.gameManager.address,
+            to: SC_System.jettonMinter.address,
+            success: true,
+            op: ROpcodes.OP_MINT_NEW_JETTONS,
         });
         const pendingAfterMint = await SC_System.ownerShip.getPendingMintAmount();
         expect(pendingAfterMint).toBe(0n);

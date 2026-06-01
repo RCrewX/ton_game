@@ -44,14 +44,19 @@ fun onInternalMessage(in: InMessage) {
             }
             
             if (isWinner) {
-                // Winner! Send ForwardMintRequest to GameManager (owner)
+                // Winner! New architecture: GM is a dumb pipe. Wrap ForwardMintRequest
+                // in R1 so GM forwards it (as R2, attesting this SSM) to the
+                // Retranslator, which verifies and orders the mint.
+                val mintRequestBody = ForwardMintRequest {
+                    receiver: in.senderAddress,
+                    amount: storage.mintAmount,
+                }.toCell();
                 val forwardMsg = createMessage({
                     bounce: BounceMode.NoBounce,
                     dest: storage.ownerAddress,
                     value: 0, // Will use remaining balance
-                    body: ForwardMintRequest {
-                        receiver: in.senderAddress,
-                        amount: storage.mintAmount,
+                    body: R1 {
+                        data: mintRequestBody,
                     }
                 });
                 forwardMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);

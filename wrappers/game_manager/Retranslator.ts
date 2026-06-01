@@ -1,0 +1,132 @@
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
+import {
+    encodeSetJettonInfo,
+    encodeSetGamesInfo,
+    encodeSetAllowBurn,
+    encodeSetToolsInfo,
+    encodeJettonInfo,
+    encodeGamesInfo,
+    encodeToolsInfo,
+    GamesInfo,
+    JettonInfo,
+    ToolsInfo,
+} from './RetranslatorTypes';
+
+// =============================================================================
+// Retranslator (R*) — the swappable brain. Holds the registries and logic; only
+// GM may drive it. Storage (retranslator.tolk RetranslatorStorage):
+//   gameManagerAddress, ownerAddress, version, active, allow_burn,
+//   jettonInfo?, gamesInfo?, toolsInfo?
+// =============================================================================
+
+export type RetranslatorConfig = {
+    gameManagerAddress: Address;
+    ownerAddress: Address;
+    version?: bigint;
+    active?: boolean;
+    allow_burn?: boolean;
+    jettonInfo?: Cell | null; // Cell<JettonInfo>
+    gamesInfo?: Cell | null; // Cell<GamesInfo>
+    toolsInfo?: Cell | null; // Cell<ToolsInfo>
+};
+
+export function retranslatorConfigToCell(config: RetranslatorConfig): Cell {
+    return beginCell()
+        .storeAddress(config.gameManagerAddress)
+        .storeAddress(config.ownerAddress)
+        .storeUint(config.version ?? 1n, 64)
+        .storeBit(config.active ?? true)
+        .storeBit(config.allow_burn ?? false)
+        .storeMaybeRef(config.jettonInfo ?? null)
+        .storeMaybeRef(config.gamesInfo ?? null)
+        .storeMaybeRef(config.toolsInfo ?? null)
+        .endCell();
+}
+
+export class Retranslator implements Contract {
+    constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {}
+
+    static createFromAddress(address: Address) {
+        return new Retranslator(address);
+    }
+
+    static createFromConfig(config: RetranslatorConfig, code: Cell, workchain = 0) {
+        const data = retranslatorConfigToCell(config);
+        const init = { code, data };
+        return new Retranslator(contractAddress(workchain, init), init);
+    }
+
+    // ------------------------------------------------------------------
+    // Config message builders. These are GameManager-gated on-chain, so in
+    // practice they are relayed through GameManager.sendRedirectMessage.
+    // ------------------------------------------------------------------
+    static setJettonInfoMessage(info: JettonInfo): Cell {
+        return encodeSetJettonInfo({ jettonInfo: encodeJettonInfo(info) });
+    }
+    static setGamesInfoMessage(info: GamesInfo): Cell {
+        return encodeSetGamesInfo({ gamesInfo: encodeGamesInfo(info) });
+    }
+    static setAllowBurnMessage(allow_burn: boolean): Cell {
+        return encodeSetAllowBurn({ allow_burn });
+    }
+    static setToolsInfoMessage(info: ToolsInfo): Cell {
+        return encodeSetToolsInfo({ toolsInfo: encodeToolsInfo(info) });
+    }
+
+    async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell().endCell(),
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Get methods
+    // ------------------------------------------------------------------
+    async getVersion(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('get_version', []);
+        return result.stack.readBigNumber();
+    }
+
+    async getActive(provider: ContractProvider): Promise<boolean> {
+        const result = await provider.get('get_active', []);
+        return result.stack.readBoolean();
+    }
+
+    async getGameManager(provider: ContractProvider): Promise<Address> {
+        const result = await provider.get('get_game_manager', []);
+        return result.stack.readAddress();
+    }
+
+    async getOwner(provider: ContractProvider): Promise<Address> {
+        const result = await provider.get('get_owner', []);
+        return result.stack.readAddress();
+    }
+
+    async getAllowBurn(provider: ContractProvider): Promise<boolean> {
+        const result = await provider.get('get_allow_burn', []);
+        return result.stack.readBoolean();
+    }
+
+    async getJettonInfo(provider: ContractProvider): Promise<JettonInfo | null> {
+        const result = await provider.get('get_jetton_info', []);
+        const cell = result.stack.readCellOpt();
+        if (!cell) return null;
+        const s = cell.beginParse();
+        return { jettonMinterAddress: s.loadAddress(), jettonWalletCode: s.loadRef() };
+    }
+
+    async getGamesInfo(provider: ContractProvider): Promise<GamesInfo | null> {
+        const result = await provider.get('get_games_info', []);
+        const cell = result.stack.readCellOpt();
+        if (!cell) return null;
+        const s = cell.beginParse();
+        return { active_game: s.loadAddress(), all_games: s.loadRef() };
+    }
+
+    async getToolsInfo(provider: ContractProvider): Promise<Cell | null> {
+        const result = await provider.get('get_tools_info', []);
+        return result.stack.readCellOpt();
+    }
+}

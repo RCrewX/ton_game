@@ -1,3 +1,12 @@
+// =============================================================================
+// static.tolk — SHARED WIRE PROTOCOL between GameManager (GM) and Retranslator (R*)
+// plus GM's own needs ONLY.
+//
+// Decoupling invariant (see CLAUDE.md): anything R*-private (registries, output
+// bodies, jetton-wallet calc, config msgs that change with R* logic) lives in
+// retranslator.tolk, NOT here. GM must never reference those types.
+// =============================================================================
+
 // Constants
 const BASIC_STORAGE_TAX = ton("0.01");
 const MY_LITTLE_TAX = ton("0.011");
@@ -6,11 +15,14 @@ const MINT_TON_AMOUNT: coins = ton("0.1");
 // Gas costs from gas consumption tests (in TON)
 // These are maximum expected costs for each operation (updated from test results)
 const GAS_COST_SET_JETTON_MINTER_ADDRESS: coins = ton("0.019"); // 0.0184204 + buffer (deprecated, kept for compatibility)
-const GAS_COST_DEPLOY_JETTON: coins = ton("0.025"); // Estimated gas cost for DeployJetton
+const GAS_COST_DEPLOY_JETTON: coins = ton("0.025"); // Estimated gas cost (deprecated, minter deployed off-chain now)
 const GAS_COST_SET_GAMES: coins = ton("0.015"); // 0.0141556 + buffer (deprecated, kept for compatibility)
 const GAS_COST_SET_GAMES_INFO: coins = ton("0.020"); // Estimated gas cost for SetGamesInfo
+const GAS_COST_SET_JETTON_INFO: coins = ton("0.020"); // Estimated gas cost for SetJettonInfo
+const GAS_COST_SET_TOOLS_INFO: coins = ton("0.020"); // Estimated gas cost for SetToolsInfo
 const GAS_COST_REDIRECT_MESSAGE: coins = ton("0.009"); // 0.0081816 + buffer
 const GAS_COST_SET_ALLOW_BURN: coins = ton("0.015"); // Estimated gas cost for SetAllowBurn
+const GAS_COST_SET_RETRANSLATOR: coins = ton("0.015"); // Estimated gas cost for SetRetranslator
 const GAS_COST_REQUEST_BURN: coins = ton("0.015"); // Estimated gas cost for RequestBurn
 
 // Errors
@@ -30,58 +42,141 @@ const ERR_BURN_NOT_ALLOWED = 927;  // Burn is not allowed (allow_burn is false)
 const ERR_JETTON_INFO_ALREADY_SET = 928;  // Jetton info is already set and cannot be changed
 const ERR_INVALID_GAMES_INFO = 929;  // Games info validation failed (first game must be active_game)
 const ERR_GAME_NOT_FOUND = 930;  // Game not found in all_games list
+const ERR_RETRANSLATOR_INACTIVE = 931;  // Retranslator kill-switch is engaged (active == false)
+const ERR_INVALID_RETRANSLATOR_SENDER = 932;  // Sender is not the configured retranslator address
 
 const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
 
 const MIN_JETTON_USAGE_AMOUNT: coins = 5 as coins;
 
-//  Storage
+// =============================================================================
+//  GameManager storage
+// =============================================================================
 
 struct GameManagerStorage {
     ownerAddress: address // multisig will be perfect
 
-    allow_burn: bool // Allow burn operations (default false)
+    // The swappable brain. GM forwards inbound requests here and only sends what
+    // R* tells it to. GM stores NO minter/games/printer addresses anymore.
+    retranslatorAddress: address
+
     my_little_tax: coins // 0.01 by default
-    // config: Cell<ConficInfo>
-
-
-
-    // jettonMinterAddress: address? // jetton minter address
-    // jettonWalletCode: cell? // jetton wallet code for address calculation
-    jettonInfo: Cell<JettonInfo>? // jetton info for address calculation
-
-    // games: cell? // Addresses of games, maybe stored differently
-    gamesInfo: Cell<GamesInfo>?
 
     config: cell?
-    // config is empty for now 
-
+    // config is empty for now
 }
 
-
-struct JettonInfo {
-    jettonMinterAddress: address // jetton minter address
-    jettonWalletCode: cell // jetton wallet code for address calculation
-
+fun GameManagerStorage.load() {
+    return GameManagerStorage.fromCell(contract.getData())
 }
 
-
-struct GamesInfo {
-    active_game: address;
-    all_games: cell;
-    // all_games: list of all games
-    // rules: first comes mode (0,1,2,3) (first expected mode is always 1 for each line)
-    // if mode 1 - next comes address
-    // if mode 0 - end of parse
-    // if mode 2 - first reference parse for next line 
-    // (nothing for mode 3 currently, but we use 2 bits)
-    // examples: [1][:address][1][:address][0] (list of 2)
-    //           [1][:address][1][:address][1][:address][2] (go to ref, expect next mode to be '1') [1][:address][1][:address][0] (total list of 5)
-    // 
-    // First game in all_games is current active_game
-    //
-    // This list is abstract, is just gets parsed during checkGame()
+fun GameManagerStorage.save(self) {
+    contract.setData(self.toCell())
 }
+
+// =============================================================================
+//  Shared wire protocol structs
+//  R1: anyone -> GM    R2: GM -> R*    R3: R* -> GM    R4: GM -> recipient (a send)
+// =============================================================================
+
+struct (0x52310001) R1 {
+    data: cell   // opaque to GM; GM does NOT inspect it
+}
+
+struct (0x52320002) R2 {
+    initiator: address  // GM attests who sent the R1 (or the jetton wallet that notified)
+    data: cell          // opaque to GM
+}
+
+struct (0x52330003) R3 {
+    recipient: address  // GM forwards data here
+    data: cell          // opaque to GM
+}
+
+struct (0x53455452) SetRetranslator {
+    retranslatorAddress: address
+}
+
+// =============================================================================
+//  Structs GM still matches directly
+// =============================================================================
+
+struct (0x83449946) RedirectMessage {
+    queryId: uint64
+    destination: address
+    messageBody: cell
+    forwardTonAmount: coins
+}
+
+// Jetton transfer notification (from a jetton wallet to GM). GM only matches its
+// opcode to wrap the raw body into an R2; GM NEVER reads its fields.
+struct (0x7362d09c) TransferNotificationForRecipient {
+    queryId: uint64
+    jettonAmount: coins
+    transferInitiator: address?
+    forwardPayload: ForwardPayloadRemainder
+}
+
+// Forward-payload remainder used by TransferNotificationForRecipient (here) and
+// by InternalTransferStep (in retranslator.tolk, which imports this).
+type ForwardPayloadRemainder = RemainingBitsAndRefs
+
+type AnyMessage = ReturnExcessesBack | LiteralyAnything
+
+struct (0xd53276db) ReturnExcessesBack {
+    queryId: uint64
+}
+
+struct (0x0a1b2c3d) LiteralyAnything {
+    queryId: uint64
+}
+
+// =============================================================================
+//  Helpers
+// =============================================================================
+
+fun empty_cell() : cell {
+    return beginCell().endCell();
+}
+
+fun reserveValue(msgValue: coins, delta: coins = 0) {
+    val base = (contract.getOriginalBalance() - msgValue) + BASIC_STORAGE_TAX;
+    reserveToncoinsOnBalance(base + delta, RESERVE_MODE_EXACT_AMOUNT);
+}
+
+fun calcDeployedGameManager(
+    ownerAddress: address,
+    gameManagerCode: cell,
+): AutoDeployAddress {
+    val initStorage: GameManagerStorage = {
+        ownerAddress,
+        // Deploy-time placeholder; overwritten by SetRetranslator before use.
+        retranslatorAddress: ownerAddress,
+        my_little_tax: MY_LITTLE_TAX,
+        config: null,
+    };
+    return {
+        stateInit: {
+            code: gameManagerCode,
+            data: initStorage.toCell()
+        }
+    }
+}
+
+fun calcAddressOfGameManager(
+    ownerAddress: address,
+    gameManagerCode: cell,
+): address {
+    val gameManagerDeployed = calcDeployedGameManager(ownerAddress, gameManagerCode);
+    return gameManagerDeployed.calculateAddress();
+}
+
+// -----------------------------------------------------------------------------
+// NOTE: MinterStorage/createMinterStorage and the jetton-minter address calc
+// helpers below are currently UNUSED on-chain (the jetton minter is deployed
+// off-chain with adminAddress = GM). They are kept here as shared utilities and
+// are dead-code-eliminated by the compiler. They are NOT R*-private types.
+// -----------------------------------------------------------------------------
 
 // Jetton MinterStorage struct (copied from jetton project)
 struct MinterStorage {
@@ -104,171 +199,6 @@ fun createMinterStorage(adminAddress: address, content: cell, jettonWalletCode: 
         displayDenominator: 1,
     };
     return minterStorage.toCell();
-}
-
-
-// struct ConfigInfo {
-
-//     // tax:
-//     // 
-//     //
- 
-// }
-
-
-fun GameManagerStorage.load() {
-    return GameManagerStorage.fromCell(contract.getData())
-}
-
-fun GameManagerStorage.save(self) {
-    contract.setData(self.toCell())
-}
-
-// Messages
-
-
-struct (0x5a1b2c3d) DeployJetton {
-    jettonMinterCode: cell
-    jettonWalletCode: cell
-    jettonContent: cell  // content cell for jetton minter
-}
-
-struct (0x7b2c3d4e) SetGamesInfo {
-    gamesInfo: Cell<GamesInfo>
-}
-
-struct (0x83449946) RedirectMessage {
-    queryId: uint64
-    destination: address
-    messageBody: cell
-    forwardTonAmount: coins
-}
-
-// Forwarded from Game
-struct (0xf62ed009) ForwardMintRequest {
-    receiver: address
-    amount: coins
-}
-
-// Jetton transfer notification (from jetton wallet to GameManager)
-struct (0x7362d09c) TransferNotificationForRecipient {
-    queryId: uint64
-    jettonAmount: coins
-    transferInitiator: address?
-    forwardPayload: ForwardPayloadRemainder
-}
-
-
-// From GameManager to any Game
-struct(0xd7610922) JettonUsed {
-    jettonAmount: coins
-    data: cell
-}
-
-// Jetton message structures (from jetton project, redefined here for forwarding)
-type ForwardPayloadRemainder = RemainingBitsAndRefs
-
-struct (0x178d4519) InternalTransferStep {
-    queryId: uint64
-    jettonAmount: coins
-    transferInitiator: address? // is null when minting
-    sendExcessesTo: address?
-    forwardTonAmount: coins
-    forwardPayload: ForwardPayloadRemainder
-}
-
-struct (0x00000015) MintNewJettons {
-    queryId: uint64
-    mintRecipient: address
-    tonAmount: coins
-    internalTransferMsg: Cell<InternalTransferStep>
-}
-
-type AnyMessage = ReturnExcessesBack | LiteralyAnything
-
-struct (0xd53276db) ReturnExcessesBack {
-    queryId: uint64
-}
-
-struct (0x0a1b2c3d) LiteralyAnything {
-    queryId: uint64
-}
-
-struct (0x7a8b9c0d) SetAllowBurn {
-    allow_burn: bool
-}
-
-struct (0x8b9c0d1e) RequestBurn {
-    queryId: uint64
-    jettonAmount: coins
-    sendExcessesTo: address?
-    customPayload: cell?
-}
-
-// Jetton burn message (from jetton project, redefined here for forwarding)
-struct (0x595f07bc) AskToBurn {
-    queryId: uint64
-    jettonAmount: coins
-    sendExcessesTo: address?
-    customPayload: cell?
-}
-
-fun empty_cell() : cell {
-    return beginCell().endCell();
-}
-
-fun reserveValue(msgValue: coins, delta: coins = 0) {
-    val base = (contract.getOriginalBalance() - msgValue) + BASIC_STORAGE_TAX;
-    reserveToncoinsOnBalance(base + delta, RESERVE_MODE_EXACT_AMOUNT);
-}
-
-fun calcDeployedGameManager(
-    ownerAddress: address,
-    gameManagerCode: cell,
-): AutoDeployAddress {
-    val initStorage: GameManagerStorage = {
-        ownerAddress,
-        jettonInfo: null,
-        gamesInfo: null,
-        allow_burn: false,
-        my_little_tax: MY_LITTLE_TAX,
-        config: null,
-    };
-    return {
-        stateInit: {
-            code: gameManagerCode,
-            data: initStorage.toCell()
-        }
-    }
-}
-
-fun calcAddressOfGameManager(
-    ownerAddress: address,
-    gameManagerCode: cell,
-): address {
-    val gameManagerDeployed = calcDeployedGameManager(ownerAddress, gameManagerCode);
-    return gameManagerDeployed.calculateAddress();
-}
-
-// Jetton wallet address calculation (redefined to avoid cross-project dependencies)
-fun calcDeployedJettonWallet(ownerAddress: address, minterAddress: address, jettonWalletCode: cell): AutoDeployAddress {
-    val emptyWalletStorage = beginCell()
-        .storeCoins(0) // jettonBalance
-        .storeAddress(ownerAddress) // ownerAddress
-        .storeAddress(minterAddress) // minterAddress
-        .endCell();
-
-    return {
-        stateInit: {
-            code: jettonWalletCode,
-            data: emptyWalletStorage
-        }
-    }
-}
-
-fun calcAddressOfJettonWallet(ownerAddress: address, minterAddress: address, jettonWalletCode: cell): address {
-    val jwDeployed = calcDeployedJettonWallet(ownerAddress, minterAddress, jettonWalletCode);
-    return jwDeployed.calculateAddress()
 }
 
 // Calculate jetton minter address from code and initData

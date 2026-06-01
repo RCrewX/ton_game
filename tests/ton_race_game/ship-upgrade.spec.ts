@@ -265,19 +265,29 @@ describe('Ship Upgrade', () => {
             forwardPayload
         );
 
-        // GameManager should reject the transfer (sender is not GameManager's jetton wallet)
-        // The transfer notification will be sent, but GameManager will reject it
+        // New architecture: the dumb-pipe GM does NOT validate the wallet. It wraps
+        // the foreign notification into R2 and forwards it to the Retranslator, which
+        // rejects it because the initiator is not GM's NATIVE jetton wallet.
         const gameManagerForeignJettonWallet = SC_System.blockchain.openContract(
             JettonWallet.createFromConfig({
                 ownerAddress: SC_System.gameManager.address,
                 minterAddress: foreignJettonMinter.address,
             }, SC_System.jettonWalletCode)
         );
+        // Foreign wallet -> GM succeeds (GM just forwards).
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: gameManagerForeignJettonWallet.address,
             to: SC_System.gameManager.address,
-            success: false,
+            success: true,
             op: GameManagerOpcodes.OP_TRANSFER_NOTIFICATION_FOR_RECIPIENT,
+        });
+        // GM -> R* (R2) is rejected: ERR_INVALID_JETTON_WALLET_SENDER (925).
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.gameManager.address,
+            to: SC_System.retranslator.address,
+            success: false,
+            exitCode: 925,
+            op: GameManagerOpcodes.OP_R2,
         });
     });
 

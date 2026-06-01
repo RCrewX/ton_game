@@ -151,10 +151,17 @@ struct (0x33226fce) ResponseAddress {
     requestedAddress: address 
 }
 
-// To GameManager
+// To GameManager: inner reward request, now wrapped in R1 (see below).
 struct (0xf62ed009) ForwardMintRequest {
     receiver: address
     amount: coins
+}
+
+// Generic request envelope to the new dumb-pipe GameManager. GM does NOT inspect
+// `data`; it attests our address and forwards the payload to the Retranslator.
+// Opcode must match game_manager/static.tolk R1.
+struct (0x52310001) R1 {
+    data: cell
 }
 
 // From GameManager to any Game

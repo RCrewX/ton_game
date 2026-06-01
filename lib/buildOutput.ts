@@ -64,6 +64,7 @@ export interface NetworkDeploymentData {
     deployed: boolean;
     ownerAddress?: AddressInfo;
     gameManager?: AddressInfo;
+    retranslator?: AddressInfo;
     jettonMinter?: AddressInfo;
     ownerJettonWallet?: AddressInfo;
     ship_station?: AddressInfo;
@@ -81,6 +82,7 @@ export interface NetworkDeploymentData {
  */
 export interface ContractCodes {
     gameManager: ContractCodeInfo;
+    retranslator?: ContractCodeInfo;
     jettonWallet: ContractCodeInfo;
     jettonMinter: ContractCodeInfo;
     subcontract: ContractCodeInfo;

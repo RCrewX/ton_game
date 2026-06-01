@@ -1,8 +1,18 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
-import { encodeDeployJetton, encodeSetGamesInfo, encodeGamesInfo, encodeRedirectMessage, encodeSetAllowBurn, encodeRequestBurn, DeployJetton, SetGamesInfo, GamesInfo } from './types';
+import { encodeR1, encodeRedirectMessage, encodeSetRetranslator, RedirectMessage } from './types';
+import { encodeForwardMintRequest, encodeRequestBurn, ForwardMintRequest, RequestBurn } from './RetranslatorTypes';
+
+// =============================================================================
+// GameManager (GM) — the stable dumb pipe + sole on-chain authority.
+// Storage (static.tolk GameManagerStorage):
+//   ownerAddress, retranslatorAddress, my_little_tax, config?
+// retranslatorAddress is set to ownerAddress at deploy (placeholder), then
+// pointed at the real R* via SetRetranslator.
+// =============================================================================
 
 export type GameManagerConfig = {
     ownerAddress: Address;
+    retranslatorAddress?: Address; // defaults to ownerAddress (deploy-time placeholder)
 };
 
 export const DEFAULT_MY_LITTLE_TAX = toNano('0.02');
@@ -10,10 +20,8 @@ export const DEFAULT_MY_LITTLE_TAX = toNano('0.02');
 export function gameManagerConfigToCell(config: GameManagerConfig): Cell {
     return beginCell()
         .storeAddress(config.ownerAddress)
-        .storeBit(false) // allow_burn: bool (default false)
-        .storeCoins(DEFAULT_MY_LITTLE_TAX) // my_little_tax: coins (0.01 by default)
-        .storeMaybeRef(null) // jettonInfo: Cell<JettonInfo>?
-        .storeMaybeRef(null) // gamesInfo: Cell<GamesInfo>?
+        .storeAddress(config.retranslatorAddress ?? config.ownerAddress) // retranslatorAddress
+        .storeCoins(DEFAULT_MY_LITTLE_TAX) // my_little_tax
         .storeMaybeRef(null) // config: cell?
         .endCell();
 }
@@ -32,45 +40,29 @@ export class GameManager implements Contract {
     }
 
     // ========================================================================
-    // Static Message Builders (for use without ContractProvider)
+    // Static message builders
     // ========================================================================
 
-    /**
-     * Build deployJetton message body
-     */
-    static deployJettonMessage(deployJetton: DeployJetton): Cell {
-        return encodeDeployJetton(deployJetton);
+    /** Wrap an arbitrary inner request body into an R1 envelope. */
+    static r1Message(data: Cell): Cell {
+        return encodeR1({ data });
     }
 
-    /**
-     * Build setGamesInfo message body
-     */
-    static setGamesInfoMessage(gamesInfo: GamesInfo): Cell {
-        const gamesInfoCell = encodeGamesInfo(gamesInfo);
-        return encodeSetGamesInfo({ gamesInfo: gamesInfoCell });
+    static setRetranslatorMessage(retranslatorAddress: Address): Cell {
+        return encodeSetRetranslator({ retranslatorAddress });
     }
 
-    /**
-     * Build redirectMessage body
-     */
     static redirectMessage(
         destination: Address,
         messageBody: Cell,
         forwardTonAmount: bigint = toNano('0.1'),
-        queryId: bigint = 0n
+        queryId: bigint = 0n,
     ): Cell {
         return encodeRedirectMessage({ queryId, destination, messageBody, forwardTonAmount });
     }
 
-    /**
-     * Build setAllowBurn message body
-     */
-    static setAllowBurnMessage(allow_burn: boolean): Cell {
-        return encodeSetAllowBurn({ allow_burn });
-    }
-
     // ========================================================================
-    // Provider-based Send Methods
+    // Provider-based send methods
     // ========================================================================
 
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
@@ -81,21 +73,40 @@ export class GameManager implements Contract {
         });
     }
 
-    async sendDeployJetton(provider: ContractProvider, via: Sender, value: bigint, deployJetton: DeployJetton) {
+    /** Owner points GM at the Retranslator (the swappable brain). */
+    async sendSetRetranslator(provider: ContractProvider, via: Sender, value: bigint, retranslatorAddress: Address) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeDeployJetton(deployJetton),
+            body: encodeSetRetranslator({ retranslatorAddress }),
         });
     }
 
-    async sendSetGamesInfo(provider: ContractProvider, via: Sender, value: bigint, gamesInfo: GamesInfo) {
-        const gamesInfoCell = encodeGamesInfo(gamesInfo);
+    /** Send a raw R1 (opaque inner body) into the pipe. */
+    async sendR1(provider: ContractProvider, via: Sender, value: bigint, data: Cell) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeSetGamesInfo({ gamesInfo: gamesInfoCell }),
+            body: encodeR1({ data }),
         });
+    }
+
+    /** Convenience: R1-wrap a ForwardMintRequest. */
+    async sendForwardMintRequest(provider: ContractProvider, via: Sender, value: bigint, req: ForwardMintRequest) {
+        await this.sendR1(provider, via, value, encodeForwardMintRequest(req));
+    }
+
+    /** Convenience: R1-wrap a RequestBurn (owner-initiated). */
+    async sendRequestBurn(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        jettonAmount: bigint,
+        sendExcessesTo: Address | null = null,
+        customPayload: Cell | null = null,
+        queryId: bigint = 0n,
+    ) {
+        await this.sendR1(provider, via, value, encodeRequestBurn({ queryId, jettonAmount, sendExcessesTo, customPayload }));
     }
 
     async sendRedirectMessage(
@@ -105,7 +116,7 @@ export class GameManager implements Contract {
         destination: Address,
         messageBody: Cell,
         forwardTonAmount: bigint = toNano('0.1'),
-        queryId: bigint = 0n
+        queryId: bigint = 0n,
     ) {
         await provider.internal(via, {
             value,
@@ -114,74 +125,17 @@ export class GameManager implements Contract {
         });
     }
 
+    // ========================================================================
+    // Get methods
+    // ========================================================================
+
     async getOwnerAddress(provider: ContractProvider): Promise<Address> {
         const result = await provider.get('get_owner_address', []);
         return result.stack.readAddress();
     }
 
-    async getJettonMinterAddress(provider: ContractProvider): Promise<Address | null> {
-        const result = await provider.get('get_jetton_minter_address', []);
-        return result.stack.readAddressOpt();
-    }
-
-    async getGames(provider: ContractProvider): Promise<Cell | null> {
-        const result = await provider.get('get_games', []);
-        return result.stack.readCellOpt();
-    }
-
-    async sendSetAllowBurn(provider: ContractProvider, via: Sender, value: bigint, allow_burn: boolean) {
-        await provider.internal(via, {
-            value,
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeSetAllowBurn({ allow_burn }),
-        });
-    }
-
-    async sendRequestBurn(
-        provider: ContractProvider,
-        via: Sender,
-        value: bigint,
-        jettonAmount: bigint,
-        sendExcessesTo: Address | null = null,
-        customPayload: Cell | null = null,
-        queryId: bigint = 0n
-    ) {
-        await provider.internal(via, {
-            value,
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: encodeRequestBurn({ queryId, jettonAmount, sendExcessesTo, customPayload }),
-        });
-    }
-
-    async getAllowBurn(provider: ContractProvider): Promise<boolean> {
-        const result = await provider.get('get_allow_burn', []);
-        return result.stack.readBoolean();
-    }
-
-    async getJettonInfo(provider: ContractProvider): Promise<{ jettonMinterAddress: Address; jettonWalletCode: Cell } | null> {
-        const result = await provider.get('get_jetton_info', []);
-        const jettonInfoCell = result.stack.readCellOpt();
-        if (!jettonInfoCell) {
-            return null;
-        }
-        const slice = jettonInfoCell.beginParse();
-        return {
-            jettonMinterAddress: slice.loadAddress(),
-            jettonWalletCode: slice.loadRef(),
-        };
-    }
-
-    async getGamesInfo(provider: ContractProvider): Promise<GamesInfo | null> {
-        const result = await provider.get('get_games_info', []);
-        const gamesInfoCell = result.stack.readCellOpt();
-        if (!gamesInfoCell) {
-            return null;
-        }
-        const slice = gamesInfoCell.beginParse();
-        return {
-            active_game: slice.loadAddress(),
-            all_games: slice.loadRef(),
-        };
+    async getRetranslatorAddress(provider: ContractProvider): Promise<Address> {
+        const result = await provider.get('get_retranslator_address', []);
+        return result.stack.readAddress();
     }
 }
-

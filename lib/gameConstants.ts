@@ -26,12 +26,18 @@ import { join } from 'path';
 
 import {
     Opcodes as GameManagerOpcodes,
-    GAS_COST_DEPLOY_JETTON,
-    GAS_COST_SET_GAMES_INFO,
     GAS_COST_REDIRECT_MESSAGE,
+    GAS_COST_SET_RETRANSLATOR,
+} from '../wrappers/game_manager/types';
+
+import {
+    ROpcodes as RetranslatorOpcodes,
+    GAS_COST_SET_GAMES_INFO,
+    GAS_COST_SET_JETTON_INFO,
+    GAS_COST_SET_TOOLS_INFO,
     GAS_COST_SET_ALLOW_BURN,
     GAS_COST_REQUEST_BURN,
-} from '../wrappers/game_manager/types';
+} from '../wrappers/game_manager/RetranslatorTypes';
 
 import {
     Opcodes as SsmOpcodes,
@@ -186,6 +192,7 @@ export function buildGameConstants(): GameConstants {
 
         opcodes: {
             gameManager: hexMap(GameManagerOpcodes),
+            retranslator: hexMap(RetranslatorOpcodes),
             soullessSlotMachine: hexMap(SsmOpcodes),
             subcontract: hexMap(SubcontractOpcodes),
             tonRaceGame: hexMap(TrgOpcodes),
@@ -207,9 +214,13 @@ export function buildGameConstants(): GameConstants {
 
         gasCosts: {
             gameManager: {
-                GAS_COST_DEPLOY_JETTON: nano(GAS_COST_DEPLOY_JETTON),
-                GAS_COST_SET_GAMES_INFO: nano(GAS_COST_SET_GAMES_INFO),
                 GAS_COST_REDIRECT_MESSAGE: nano(GAS_COST_REDIRECT_MESSAGE),
+                GAS_COST_SET_RETRANSLATOR: nano(GAS_COST_SET_RETRANSLATOR),
+            },
+            retranslator: {
+                GAS_COST_SET_JETTON_INFO: nano(GAS_COST_SET_JETTON_INFO),
+                GAS_COST_SET_GAMES_INFO: nano(GAS_COST_SET_GAMES_INFO),
+                GAS_COST_SET_TOOLS_INFO: nano(GAS_COST_SET_TOOLS_INFO),
                 GAS_COST_SET_ALLOW_BURN: nano(GAS_COST_SET_ALLOW_BURN),
                 GAS_COST_REQUEST_BURN: nano(GAS_COST_REQUEST_BURN),
             },

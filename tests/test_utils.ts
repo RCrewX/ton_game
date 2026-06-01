@@ -5,10 +5,11 @@ import { Game } from "../wrappers/ton_race_game/Game";
 import { Ship } from "../wrappers/ton_race_game/Ship";
 import { CoordinateCell } from "../wrappers/ton_race_game/CoordinateCell";
 import { GameManager } from "../wrappers/game_manager/GameManager";
+import { Retranslator } from "../wrappers/game_manager/Retranslator";
 import { MoveMode } from "../wrappers/ton_race_game/structs";
 import { jettonContentToCell, JettonMinter } from "../wrappers/tep/jetton/JettonMinter";
 import { JettonWallet } from "../wrappers/tep/jetton/JettonWallet";
-import { Opcodes, GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO, GAS_COST_REDIRECT_MESSAGE, encodeGamesInfo } from "../wrappers/game_manager/types";
+import { GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_RETRANSLATOR } from "../wrappers/game_manager/types";
 import { GAS_COST_REQUEST_TO_MOVE, GAS_COST_MOVE_SHIP_TO_CC, TODO_TOTAL_GAS_TO_MOVE, JettonUsageMode, GAS_COST_SEND_MOVE, Opcodes as GameOpcodes } from "../wrappers/ton_race_game/types";
 
 export type ContractSystem = {
@@ -16,12 +17,14 @@ export type ContractSystem = {
     ownerAccount: SandboxContract<TreasuryContract>;
 
     gameManager: SandboxContract<GameManager>;
+    retranslator: SandboxContract<Retranslator>;
     game: SandboxContract<Game>;
     ownerShip: SandboxContract<Ship>; //hehe, ownership
     jettonMinter: SandboxContract<JettonMinter>;
 
     ownerJettonWallet: SandboxContract<JettonWallet>;
     gameManagerCode: Cell;
+    retranslatorCode: Cell;
     gameCode: Cell;
     shipCode: Cell;
     coordinateCellCode: Cell;
@@ -37,6 +40,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
     const ownerAccount = await blockchain.treasury("owner");
 
     let gameManagerCode = await compile('GameManager');
+    let retranslatorCode = await compile('Retranslator');
     let gameCode = await compile('Game');
     let shipCode = await compile('Ship');
     let coordinateCellCode = await compile('CoordinateCell');
@@ -44,7 +48,7 @@ export async function initContractSystem(): Promise<ContractSystem> {
     let jettonMinterCode = await compile('JettonMinter');
     let subcontractCode = await compile('Subcontract');
 
-    // Deploy GameManager first
+    // Deploy GameManager first (the stable dumb-pipe authority)
     let gameManager = blockchain.openContract(GameManager.createFromConfig({
         ownerAddress: ownerAccount.address,
     }, gameManagerCode));
@@ -55,6 +59,34 @@ export async function initContractSystem(): Promise<ContractSystem> {
         from: ownerAccount.address,
         to: gameManager.address,
         deploy: true,
+        success: true,
+    });
+
+    // Deploy Retranslator (the swappable brain). gameManagerAddress = GM, owner = us.
+    let retranslator = blockchain.openContract(Retranslator.createFromConfig({
+        gameManagerAddress: gameManager.address,
+        ownerAddress: ownerAccount.address,
+        active: true,
+        allow_burn: false,
+    }, retranslatorCode));
+
+    messageResult = await retranslator.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: retranslator.address,
+        deploy: true,
+        success: true,
+    });
+
+    // Point GM at the Retranslator.
+    messageResult = await gameManager.sendSetRetranslator(
+        ownerAccount.getSender(),
+        GAS_COST_SET_RETRANSLATOR + toNano('0.05'),
+        retranslator.address,
+    );
+    expect(messageResult.transactions).toHaveTransaction({
+        from: ownerAccount.address,
+        to: gameManager.address,
         success: true,
     });
 
@@ -100,46 +132,58 @@ export async function initContractSystem(): Promise<ContractSystem> {
         success: true,
     });
 
-    // Deploy jetton in GameManager
-    const jettonContent = jettonContentToCell({ type: 1, uri: 'https://example.com/jetton.json' });
-    messageResult = await gameManager.sendDeployJetton(ownerAccount.getSender(), GAS_COST_DEPLOY_JETTON + toNano('0.1'), {
-        jettonMinterCode,
-        jettonWalletCode,
-        jettonContent,
-    });
+    // Configure the Retranslator registries. These are GM-gated on R*, so they
+    // are relayed through GM.RedirectMessage (owner -> GM -> R*).
+    // 1) jettonInfo: minter address + wallet code (R* computes wallets from this).
+    messageResult = await gameManager.sendRedirectMessage(
+        ownerAccount.getSender(),
+        toNano('0.2'),
+        retranslator.address,
+        Retranslator.setJettonInfoMessage({
+            jettonMinterAddress: jettonMinter.address,
+            jettonWalletCode,
+        }),
+        toNano('0.1'),
+    );
     expect(messageResult.transactions).toHaveTransaction({
-        from: ownerAccount.address,
-        to: gameManager.address,
+        from: gameManager.address,
+        to: retranslator.address,
         success: true,
     });
 
-    // Set games info in game manager
+    // 2) gamesInfo: active_game + the all_games list.
     const allGamesCell = beginCell()
         .storeUint(1, 2) // mode 1
         .storeAddress(game.address) // active_game
         .storeUint(0, 2) // mode 0 (end)
         .endCell();
-    const gamesInfoData = {
-        active_game: game.address,
-        all_games: allGamesCell,
-    };
-    messageResult = await gameManager.sendSetGamesInfo(ownerAccount.getSender(), GAS_COST_SET_GAMES_INFO, gamesInfoData);
+    messageResult = await gameManager.sendRedirectMessage(
+        ownerAccount.getSender(),
+        toNano('1'),
+        retranslator.address,
+        Retranslator.setGamesInfoMessage({
+            active_game: game.address,
+            all_games: allGamesCell,
+        }),
+        toNano('0.9'),
+    );
     expect(messageResult.transactions).toHaveTransaction({
-        from: ownerAccount.address,
-        to: gameManager.address,
+        from: gameManager.address,
+        to: retranslator.address,
         success: true,
     });
 
-    // Check game manager address in minter
+    // Check GM admin is set on the minter, GM points at R*, and R* holds registries.
     let minterOwnerAddress = await jettonMinter.getAdminAddress();
     expect(minterOwnerAddress).toEqualAddress(gameManager.address);
 
-    // Check jetton minter address in game manager
-    let jettonMinterAddress = await gameManager.getJettonMinterAddress();
-    expect(jettonMinterAddress).toEqualAddress(jettonMinter.address);
+    expect(await gameManager.getRetranslatorAddress()).toEqualAddress(retranslator.address);
 
-    // Check games info in game manager
-    let storedGamesInfo = await gameManager.getGamesInfo();
+    let storedJettonInfo = await retranslator.getJettonInfo();
+    expect(storedJettonInfo).not.toBeNull();
+    expect(storedJettonInfo?.jettonMinterAddress).toEqualAddress(jettonMinter.address);
+
+    let storedGamesInfo = await retranslator.getGamesInfo();
     expect(storedGamesInfo).not.toBeNull();
     expect(storedGamesInfo?.active_game).toEqualAddress(game.address);
 
@@ -203,11 +247,13 @@ export async function initContractSystem(): Promise<ContractSystem> {
         blockchain,
         ownerAccount,
         gameManager,
+        retranslator,
         game,
         ownerShip,
         jettonMinter,
         ownerJettonWallet,
         gameManagerCode,
+        retranslatorCode,
         gameCode,
         shipCode,
         coordinateCellCode,

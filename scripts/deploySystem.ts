@@ -24,13 +24,14 @@ import { keyPairFromSecretKey, mnemonicToPrivateKey } from '@ton/crypto';
 import * as dotenv from 'dotenv';
 
 import { GameManager } from '../wrappers/game_manager/GameManager';
+import { Retranslator } from '../wrappers/game_manager/Retranslator';
 import { Game } from '../wrappers/ton_race_game/Game';
 import { Ship } from '../wrappers/ton_race_game/Ship';
 import { SoullessSlotMachine } from '../wrappers/soulless_slot_machine/SoullessSlotMachine';
 import { JettonMinter, jettonContentToCell } from '../wrappers/tep/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/tep/jetton/JettonWallet';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
-import { GAS_COST_DEPLOY_JETTON, GAS_COST_SET_GAMES_INFO } from '../wrappers/game_manager/types';
+import { GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_RETRANSLATOR } from '../wrappers/game_manager/types';
 import { GAS_COST_MANUAL_DEPLOY } from '../wrappers/subcontract/types';
 import { BASIC_STORAGE_TAX } from '../wrappers/ton_race_game/types';
 import {
@@ -263,6 +264,27 @@ async function getSeqno(
     }
 }
 
+// The provider system hands back a single @ton/ton TonClient that is cached and
+// PINNED to one endpoint, so its "failover" never re-routes an actual send — every
+// retry re-hits the same (possibly dead) provider. We keep a reference to the
+// ProviderManager and rebuild a client against whatever provider it currently
+// considers best, so a 500 from one provider's /sendBoc is genuinely escaped.
+let activeProviderManager: ProviderManager | undefined;
+// Set when an explicit TON_RPC_ENDPOINT override is in effect; that URL carries its
+// own auth, so we must NOT also attach a pooled provider's apiKey header.
+let usingCustomEndpoint = false;
+
+async function clientForCurrentProvider(fallback: TonClient): Promise<TonClient> {
+    if (!activeProviderManager) return fallback;
+    try {
+        const endpoint = await activeProviderManager.getEndpoint();
+        const apiKey = usingCustomEndpoint ? undefined : activeProviderManager.getActiveProvider()?.apiKey;
+        return new TonClient({ endpoint, apiKey });
+    } catch {
+        return fallback;
+    }
+}
+
 async function sendTransaction(
     client: TonClient,
     wallet: WalletContractV4,
@@ -272,14 +294,19 @@ async function sendTransaction(
     withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>,
     body?: Cell,
     stateInit?: { code: Cell; data: Cell },
-    maxRetries: number = 3
+    maxRetries: number = 6
 ): Promise<void> {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        // Rebuild the client against the provider the ProviderManager currently
+        // considers best. A previous attempt's failure already failed over (inside
+        // withRateLimit -> reportError), so this re-routes the send to the NEXT
+        // provider instead of re-hitting the dead one with the cached pinned client.
+        const sendClient = await clientForCurrentProvider(client);
         try {
             // Get fresh seqno before each attempt
-            const seqno = await getSeqno(client, wallet.address, withRateLimit);
+            const seqno = await getSeqno(sendClient, wallet.address, withRateLimit);
 
             const transfer = wallet.createTransfer({
                 seqno,
@@ -295,11 +322,18 @@ async function sendTransaction(
                 ],
             });
 
-            await withRateLimit(() => client.sendExternalMessage(wallet, transfer));
+            await withRateLimit(() => sendClient.sendExternalMessage(wallet, transfer));
             return; // Success
         } catch (error: any) {
             lastError = error;
-            const errorMsg = error.message || String(error);
+            // @ton/ton's HttpApi uses axios, so the real RPC reason (e.g. toncenter's
+            // {ok:false,error:...} on /sendBoc) lives in error.response.data and is
+            // otherwise swallowed as a bare "Request failed with status code 500".
+            const rpcBody = error?.response?.data;
+            const rpcDetail = rpcBody
+                ? ` | RPC: ${typeof rpcBody === 'string' ? rpcBody : JSON.stringify(rpcBody)}`
+                : '';
+            const errorMsg = (error.message || String(error)) + rpcDetail;
 
             // Check if it's a retryable error
             const isRetryable =
@@ -312,9 +346,13 @@ async function sendTransaction(
                 errorMsg.includes('ETIMEDOUT');
 
             if (isRetryable && attempt < maxRetries) {
-                const delay = RETRY_DELAY * attempt; // Exponential backoff
+                // These failures (500/502/503/timeout) are provider/node health, not
+                // our message — the next attempt rebuilds against the next provider
+                // (see clientForCurrentProvider). So rotate FAST with a short fixed
+                // delay rather than a long exponential backoff on the dead endpoint.
+                const delay = Math.min(RETRY_DELAY, 3000);
                 console.warn(`Transaction attempt ${attempt} failed: ${errorMsg}`);
-                console.warn(`Retrying in ${delay / 1000}s...`);
+                console.warn(`Rotating to next provider, retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${maxRetries})`);
                 await sleep(delay);
                 continue;
             }
@@ -373,7 +411,7 @@ async function sendContractMessage(
     body: Cell,
     withRateLimit: <T>(fn: () => Promise<T>) => Promise<T>
 ): Promise<void> {
-    await sendTransaction(client, wallet, keyPair, to, value, withRateLimit, body, undefined, 3);
+    await sendTransaction(client, wallet, keyPair, to, value, withRateLimit, body, undefined, 6);
 }
 
 /**
@@ -438,6 +476,7 @@ async function sendAndWait(
 function calculateNetworkAddresses(
     ownerAddress: Address,
     gameManagerCode: Cell,
+    retranslatorCode: Cell,
     gameCode: Cell,
     shipCode: Cell,
     coordinateCellCode: Cell,
@@ -451,6 +490,12 @@ function calculateNetworkAddresses(
     jettonContentUri: string
 ): NetworkDeploymentData {
     const gameManager = GameManager.createFromConfig({ ownerAddress }, gameManagerCode);
+
+    const retranslator = Retranslator.createFromConfig({
+        gameManagerAddress: gameManager.address,
+        ownerAddress,
+        active: true,
+    }, retranslatorCode);
 
     const game = Game.createFromConfig({
         managerAddress: gameManager.address,
@@ -490,6 +535,7 @@ function calculateNetworkAddresses(
         deployed: false,
         ownerAddress: formatAddress(ownerAddress, isTestnet),
         gameManager: formatAddress(gameManager.address, isTestnet),
+        retranslator: formatAddress(retranslator.address, isTestnet),
         jettonMinter: formatAddress(jettonMinter.address, isTestnet),
         ownerJettonWallet: formatAddress(ownerJettonWallet.address, isTestnet),
         ship_station: formatAddress(shipStation.address, isTestnet),
@@ -524,6 +570,18 @@ async function main(): Promise<void> {
     console.log('Initializing provider system...');
     const pm = ProviderManager.getInstance();
     await pm.init(network as ProviderNetwork);
+    // Let the send path rebuild clients against the current provider on failover.
+    activeProviderManager = pm;
+
+    // Escape hatch for a degraded public testnet pool (e.g. a liteserver that can't
+    // parse a network config param and rejects every external message): pin a
+    // known-good RPC. The override URL must carry its own auth (api_key in the URL).
+    const customRpcEndpoint = (process.env.TON_RPC_ENDPOINT || '').trim();
+    if (customRpcEndpoint) {
+        pm.setCustomEndpoint(customRpcEndpoint);
+        usingCustomEndpoint = true;
+        console.log('Using custom RPC endpoint override from TON_RPC_ENDPOINT (provider rotation disabled)');
+    }
 
     const { client, withRateLimit } = await getTonClientWithRateLimit(pm);
     const endpoint = await pm.getEndpoint();
@@ -555,6 +613,7 @@ async function main(): Promise<void> {
         // Compile all contracts
         console.log('Compiling contracts...');
         const gameManagerCode = await compile('GameManager');
+        const retranslatorCode = await compile('Retranslator');
         const gameCode = await compile('Game');
         const shipCode = await compile('Ship');
         const coordinateCellCode = await compile('CoordinateCell');
@@ -575,6 +634,7 @@ async function main(): Promise<void> {
         // Build contract codes
         const contractCodes: ContractCodes = {
             gameManager: getContractCodeData(gameManagerCode),
+            retranslator: getContractCodeData(retranslatorCode),
             jettonWallet: getContractCodeData(jettonWalletCode),
             jettonMinter: getContractCodeData(jettonMinterCode),
             subcontract: getContractCodeData(subcontractCode),
@@ -597,12 +657,12 @@ async function main(): Promise<void> {
         // Calculate addresses for both networks
         console.log('Calculating addresses...');
         const testnetAddresses = calculateNetworkAddresses(
-            ownerAddress, gameManagerCode, gameCode, shipCode, coordinateCellCode,
+            ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
             ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
             true, shipStationId, ownerPublicKey, jettonContentUri
         );
         const mainnetAddresses = calculateNetworkAddresses(
-            ownerAddress, gameManagerCode, gameCode, shipCode, coordinateCellCode,
+            ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
             ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
             false, shipStationId, ownerPublicKey, jettonContentUri
         );
@@ -630,6 +690,11 @@ async function main(): Promise<void> {
 
         // Create contract instances
         const gameManager = GameManager.createFromConfig({ ownerAddress }, gameManagerCode);
+        const retranslator = Retranslator.createFromConfig({
+            gameManagerAddress: gameManager.address,
+            ownerAddress,
+            active: true,
+        }, retranslatorCode);
         const game = Game.createFromConfig({
             managerAddress: gameManager.address,
             shipCode,
@@ -673,6 +738,32 @@ async function main(): Promise<void> {
         );
         console.log('GameManager:', gameManager.address.toString());
         writeFullDeploymentData(deploymentData);
+
+        // 1b. Deploy Retranslator (the swappable brain) and point GM at it.
+        await checkAndDeploy(
+            client, wallet, keyPair,
+            retranslator.address, 'Retranslator',
+            toNano('0.5'),
+            { code: retranslatorCode, data: retranslator.init!.data },
+            withRateLimit
+        );
+        console.log('Retranslator:', retranslator.address.toString());
+        writeFullDeploymentData(deploymentData);
+
+        const openedGameManagerForWiring = client.open(gameManager);
+        const currentRetranslator = await withRateLimit(() => openedGameManagerForWiring.getRetranslatorAddress()).catch(() => null);
+        if (!currentRetranslator?.equals(retranslator.address)) {
+            await sendAndWait(
+                client, wallet, keyPair,
+                gameManager.address,
+                GAS_COST_SET_RETRANSLATOR + toNano('0.05'),
+                GameManager.setRetranslatorMessage(retranslator.address),
+                'Set retranslator',
+                withRateLimit
+            );
+        } else {
+            console.log('Retranslator already wired');
+        }
 
         // 2. Deploy Game
         await checkAndDeploy(
@@ -718,32 +809,35 @@ async function main(): Promise<void> {
         console.log('Owner JettonWallet:', ownerJettonWallet.address.toString());
         writeFullDeploymentData(deploymentData);
 
-        // 6. Configure GameManager: Deploy Jetton
-        console.log('Configuring GameManager jetton...');
-        const openedGameManager = client.open(gameManager);
-        let jettonInfo = await withRateLimit(() => openedGameManager.getJettonInfo()).catch(() => null);
+        // 6. Configure Retranslator: jetton info (minter address + wallet code),
+        //    relayed through GM.RedirectMessage (owner -> GM -> R*).
+        console.log('Configuring Retranslator jetton info...');
+        const openedRetranslator = client.open(retranslator);
+        let jettonInfo = await withRateLimit(() => openedRetranslator.getJettonInfo()).catch(() => null);
 
         if (!jettonInfo?.jettonMinterAddress?.equals(jettonMinter.address)) {
-            const jettonContent = jettonContentToCell({ type: 1, uri: jettonContentUri });
             await sendAndWait(
                 client, wallet, keyPair,
                 gameManager.address,
-                GAS_COST_DEPLOY_JETTON + toNano('0.1'),
-                GameManager.deployJettonMessage({
-                    jettonMinterCode,
-                    jettonWalletCode,
-                    jettonContent,
-                }),
-                'Deploy jetton',
+                GAS_COST_REDIRECT_MESSAGE + toNano('0.1'),
+                GameManager.redirectMessage(
+                    retranslator.address,
+                    Retranslator.setJettonInfoMessage({
+                        jettonMinterAddress: jettonMinter.address,
+                        jettonWalletCode,
+                    }),
+                    toNano('0.1'),
+                ),
+                'Set jetton info (R*)',
                 withRateLimit
             );
         } else {
-            console.log('Jetton already configured');
+            console.log('Jetton info already configured');
         }
 
-        // 7. Configure GameManager: Set games info
-        console.log('Setting games info...');
-        const gamesInfo = await withRateLimit(() => openedGameManager.getGamesInfo()).catch(() => null);
+        // 7. Configure Retranslator: games info, also via GM relay.
+        console.log('Setting games info on Retranslator...');
+        const gamesInfo = await withRateLimit(() => openedRetranslator.getGamesInfo()).catch(() => null);
 
         if (!gamesInfo?.active_game?.equals(game.address)) {
             let allGamesBuilder = beginCell();
@@ -757,34 +851,38 @@ async function main(): Promise<void> {
             await sendAndWait(
                 client, wallet, keyPair,
                 gameManager.address,
-                GAS_COST_SET_GAMES_INFO,
-                GameManager.setGamesInfoMessage({
-                    active_game: game.address,
-                    all_games: allGamesBuilder.endCell(),
-                }),
-                'Set games info',
+                toNano('1'),
+                GameManager.redirectMessage(
+                    retranslator.address,
+                    Retranslator.setGamesInfoMessage({
+                        active_game: game.address,
+                        all_games: allGamesBuilder.endCell(),
+                    }),
+                    toNano('0.9'),
+                ),
+                'Set games info (R*)',
                 withRateLimit
             );
         } else {
             console.log('Games info already configured');
         }
 
-        // 8. Verify configurations
+        // 8. Verify configurations (on the Retranslator now).
         console.log('Verifying configurations...');
         await sleep(TRANSACTION_WAIT_TIME);
 
-        const verifyJettonInfo = await withRateLimit(() => openedGameManager.getJettonInfo()).catch(() => null);
+        const verifyJettonInfo = await withRateLimit(() => openedRetranslator.getJettonInfo()).catch(() => null);
         if (verifyJettonInfo?.jettonMinterAddress?.equals(jettonMinter.address)) {
-            console.log('✓ JettonMinter address verified');
+            console.log('✓ JettonMinter address verified on R*');
         } else {
-            console.warn('⚠ JettonMinter address not yet set (may still be processing)');
+            console.warn('⚠ JettonMinter address not yet set on R* (may still be processing)');
         }
 
-        const verifyGamesInfo = await withRateLimit(() => openedGameManager.getGamesInfo()).catch(() => null);
+        const verifyGamesInfo = await withRateLimit(() => openedRetranslator.getGamesInfo()).catch(() => null);
         if (verifyGamesInfo?.active_game?.equals(game.address)) {
-            console.log('✓ Active game address verified');
+            console.log('✓ Active game address verified on R*');
         } else {
-            console.warn('⚠ Active game not yet set (may still be processing)');
+            console.warn('⚠ Active game not yet set on R* (may still be processing)');
         }
 
         // 9. Mint initial jettons
@@ -863,6 +961,7 @@ async function main(): Promise<void> {
         console.log('');
         console.log('Owner:', ownerAddress.toString());
         console.log('GameManager:', gameManager.address.toString());
+        console.log('Retranslator:', retranslator.address.toString());
         console.log('TON Race Game:', game.address.toString());
         console.log('Soulless Slot Machine:', ssm.address.toString());
         console.log('JettonMinter:', jettonMinter.address.toString());

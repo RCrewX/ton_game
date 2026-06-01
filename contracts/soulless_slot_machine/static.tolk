@@ -59,10 +59,16 @@ struct (0xb2c3d4e5) SetMintAmount {
     mintAmount: coins
 }
 
-// To GameManager (same as TON Race Game)
+// To GameManager (same as TON Race Game): inner reward request, wrapped in R1.
 struct (0xf62ed009) ForwardMintRequest {
     receiver: address
     amount: coins
+}
+
+// Generic request envelope to the new dumb-pipe GameManager. GM forwards `data`
+// (opaque to it) to the Retranslator. Opcode must match game_manager/static.tolk.
+struct (0x52310001) R1 {
+    data: cell
 }
 
 fun empty_cell(): cell {

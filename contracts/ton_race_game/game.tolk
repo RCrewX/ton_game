@@ -51,13 +51,19 @@ fun onInternalMessage(in: InMessage) {
 
             reserveValue(in.valueCoins);
 
+            // New architecture: GM is a dumb pipe. Wrap ForwardMintRequest in R1
+            // so GM forwards it (as R2, attesting this game) to the Retranslator,
+            // which verifies the game and orders the mint.
+            val mintRequestBody = ForwardMintRequest {
+                receiver: msg.receiver,
+                amount: msg.amount,
+            }.toCell();
             val forwardMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: storage.managerAddress,
                 value: 0,
-                body: ForwardMintRequest {
-                    receiver: msg.receiver,
-                    amount: msg.amount,
+                body: R1 {
+                    data: mintRequestBody,
                 }
             });
             // Use send_mode=128 to carry all remaining balance (excesses)

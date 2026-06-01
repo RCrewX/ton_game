@@ -94,7 +94,14 @@ This will:
    ```
    PRIVATE_KEY=your_128_hex_character_private_key
    JETTON_CONTENT_URI=https://your-jetton-metadata.json  # Optional
+   TON_RPC_ENDPOINT=https://testnet.toncenter.com/api/v2/jsonRPC?api_key=YOUR_KEY  # Optional, see Troubleshooting
    ```
+
+   By default the deploy script auto-selects and fails over across a pool of public
+   RPC providers. `TON_RPC_ENDPOINT` is an optional override that pins **one** known-good
+   endpoint and disables rotation — use it only when the public pool is degraded (see
+   [Troubleshooting](#troubleshooting-deployment)). The override URL must carry its own
+   auth (the `api_key` goes in the URL).
 
 ### Deploy to Testnet
 
@@ -109,15 +116,23 @@ clear && pnpm build --all && pnpm blueprint run deploySystem --testnet --mnemoni
 ```
 
 The deployment script will:
-1. Deploy GameManager contract
-2. Deploy Game contract
-3. Deploy JettonMinter contract
-4. Deploy owner's JettonWallet
-5. Deploy owner's Ship
-6. Configure GameManager (set jetton minter and game address)
-7. Mint initial jettons to owner
+1. Deploy GameManager contract (the stable pipe + on-chain authority)
+2. Deploy Retranslator contract and point GameManager at it (`SetRetranslator`)
+3. Deploy Game contract
+4. Deploy SoullessSlotMachine contract
+5. Deploy JettonMinter contract (admin = GameManager)
+6. Deploy owner's JettonWallet
+7. Deploy owner's Ship
+8. Configure the Retranslator registries via `GameManager.RedirectMessage` (jetton info + games info)
+9. Mint initial jettons to owner
 
-Deployment information is saved to `build/deployment-{network}-{timestamp}.json` with all contract addresses.
+The script is **idempotent**: re-running it skips any contract that is already deployed
+and resumes from where it left off, so it is safe to re-run after a partial deployment.
+
+Deployment information is saved to `deployment_info/deployment_latest.json` (with a
+timestamped copy under `deployment_info/all/`) containing all contract addresses. This
+file is the published interface that downstream consumers read — see
+[Related Projects](#related-projects).
 
 ### Deployment Output
 
@@ -142,11 +157,37 @@ Example:
     "bounceable": "kQ...",
     "nonBounceable": "0Q..."
   },
+  "retranslator": { ... },
   "game": { ... },
   "jettonMinter": { ... },
   "status": "completed"
 }
 ```
+
+### Troubleshooting deployment
+
+The deploy script talks to the chain through a pool of public RPC providers, auto-selecting
+the healthiest and **failing over to the next provider** on each send attempt (up to 6
+attempts per transaction). When a send fails, the real RPC reason is printed after the
+status code, e.g. `... 500 | RPC: {"ok":false,"error":"..."}`.
+
+**`External message was not accepted: ... configuration parameter 43 is invalid`** (or
+mixed `500`/`502` across providers) — this is a **node-side fault, not your contracts or
+keys**: the provider's liteserver cannot parse a current network config parameter and so
+rejects every external message. It is not specific to your transaction. What to do, in order:
+
+1. **Re-run** `pnpm deploy:testnet`. Failover now tries the whole provider pool (including
+   `toncenter_testnet`); providers run different node versions, so a patched one will accept
+   the message. The script is idempotent, so a re-run resumes safely.
+2. **Pin a known-good endpoint** and re-run, if the public pool stays degraded:
+   ```bash
+   TON_RPC_ENDPOINT="https://testnet.toncenter.com/api/v2/jsonRPC?api_key=YOUR_KEY" pnpm deploy:testnet
+   ```
+   Get a free testnet key from [@tonapibot](https://t.me/tonapibot). The `api_key` must be in
+   the URL; this disables provider rotation and sends only to that endpoint.
+3. **If even a pinned/official endpoint returns the same param error**, it is a live testnet
+   network incident — no client change can fix a broken liteserver config parse. Wait for the
+   providers to upgrade, or point `TON_RPC_ENDPOINT` at your own liteserver/proxy.
 
 ## Game Mechanics
 
@@ -196,17 +237,23 @@ The first player to explore a cell becomes the "first explorer" and can:
 ## Contract Architecture
 
 ### GameManager
-- Root contract managing the game system
-- Owns JettonMinter (as admin)
-- Stores game instance addresses
-- Handles jetton transfers for ship upgrades
-- Owner-controlled configuration
+- The stable **pipe** and sole on-chain **authority** (owner/admin of the JettonMinter and all sub-contracts)
+- Stores **no** registries/addresses other than its owner and the current Retranslator
+- Wraps inbound requests (`R1`, jetton transfer notifications) into `R2` and forwards them to the Retranslator, attesting the initiator
+- Emits whatever the Retranslator returns (`R3` → an `R4` send to the recipient); never parses Retranslator payloads
+- Owner-only: swap the Retranslator (`SetRetranslator`) and relay config to it (`RedirectMessage`)
+
+### Retranslator
+- The swappable **brain** behind GameManager — can be redeployed/upgraded and re-pointed **without recompiling or redeploying GameManager**
+- Holds the registries (jetton info, games info, tools info) and the kill-switch / burn-allow flags
+- Validates requests (registered game, owner-only burn, GM's own jetton wallet) and computes recipients
+- Builds the output bodies (mint, burn, jetton-used) and tells GameManager what to emit; never sends outbound itself
 
 ### Game
 - Game instance contract
 - Manages ship and coordinate cell codes
-- Forwards mint requests to GameManager
-- Handles ship upgrade requests from GameManager
+- Forwards mint requests to GameManager wrapped in `R1` (GameManager relays them to the Retranslator)
+- Handles ship upgrade requests originating from the Retranslator (via GameManager)
 - Provides address calculation utilities
 
 ### Ship
