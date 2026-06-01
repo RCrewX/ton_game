@@ -43,6 +43,7 @@ import {
     writeFullDeploymentData,
     readDeploymentData,
 } from '../lib/buildOutput';
+import { buildGameConstants } from '../lib/gameConstants';
 import {
     ProviderManager,
     getTonClientWithRateLimit,
@@ -605,6 +606,9 @@ async function main(): Promise<void> {
         // Initialize deployment data
         const deploymentData: DeploymentData = {
             timestamp,
+            // Non-secret constants (opcodes/errors/gas/amounts/enums) for sibling
+            // projects. Placed between `timestamp` and `contractCodes`.
+            constants: buildGameConstants(),
             contractCodes,
             testnet: network === 'testnet'
                 ? { ...testnetAddresses, status: 'in_progress' }

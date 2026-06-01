@@ -99,6 +99,8 @@ This will:
 ### Deploy to Testnet
 
 ```bash
+pnpm deploy:testnet
+# or
 npm run deploy
 # or
 npx blueprint run deploySystem

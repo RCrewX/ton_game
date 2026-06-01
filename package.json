@@ -20,7 +20,7 @@
     "dependencies": {
         "@orbs-network/ton-access": "^2.3.3",
         "@ton/core": "~0.62.0",
-        "ton-provider-system": "^0.2.4",
+        "ton-provider-system": "^0.3.0",
         "zod": "^3.23.8"
     },
     "devDependencies": {
