@@ -15,8 +15,8 @@ importers:
         specifier: ~0.62.0
         version: 0.62.0(@ton/crypto@3.3.0)
       ton-provider-system:
-        specifier: ^0.2.4
-        version: 0.2.4(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0))
+        specifier: ^0.3.0
+        version: 0.3.0(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0))
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -1933,12 +1933,12 @@ packages:
     peerDependencies:
       '@ton/core': '>=0.56.0'
 
-  ton-provider-system@0.2.4:
-    resolution: {integrity: sha512-uj2q2l5kM6xuBbOaRpEvA8Z6yY/6T5t44NI2hBzIcrJVxRYPKBj3iZTh/7hpStJQTaqY9ZhVeRxfW6gJN9bgng==}
+  ton-provider-system@0.3.0:
+    resolution: {integrity: sha512-2Q32nKi9zE+Qb8BcdWwVaOLfATyiqcEeHZ/fnYEJEnTj91wCS0BDGBhEOZomYlpqlzOnMKLxQ2IKcn5xKxBZWw==}
     peerDependencies:
       '@orbs-network/ton-access': ^2.3.0
-      '@ton/core': ^0.59.0
-      '@ton/ton': ^15.0.0
+      '@ton/core': ^0.59.0 || ^0.63.0
+      '@ton/ton': ^15.0.0 || ^16.0.0
 
   ton-tl@1.0.1:
     resolution: {integrity: sha512-dAHJSWEW0CRNm/sdWVhola9/OZc/yHmLOXlSNr9I6l0WaVZmGhwkmDuzvMm1ZJ3Dvhf5tYN+iAUSSgmf8Q+P0g==}
@@ -4303,7 +4303,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  ton-provider-system@0.2.4(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0)):
+  ton-provider-system@0.3.0(@orbs-network/ton-access@2.3.3)(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/ton@15.4.0(@ton/core@0.62.0(@ton/crypto@3.3.0))(@ton/crypto@3.3.0)):
     dependencies:
       '@orbs-network/ton-access': 2.3.3
       '@ton/core': 0.62.0(@ton/crypto@3.3.0)

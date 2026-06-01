@@ -104,6 +104,13 @@ export interface ContractCodes {
  */
 export interface DeploymentData {
     timestamp: string;
+    /**
+     * Non-secret source-of-truth constants (opcodes, error codes, gas costs,
+     * amounts, enums, storage layout) for sibling projects to stay in sync.
+     * Populated by `buildGameConstants()` (see lib/gameConstants.ts).
+     * Typed loosely here to keep this module free of wrapper imports.
+     */
+    constants?: unknown;
     contractCodes?: ContractCodes;
     testnet: NetworkDeploymentData;
     mainnet: NetworkDeploymentData;
