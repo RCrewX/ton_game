@@ -18,9 +18,9 @@ Wire protocol (defined in static.tolk):
 Classic flow:
     anyone -[R1]-> GM -[R2]-> R*  (verify + logic) -[R3]-> GM -[R4]-> recipient
 
-NOTE: This is part 1 of 3 — the COMPILING SKELETON. R* has NO business/flow logic
-yet: the R2 arm parses the inner request and stubs each branch with a TODO. R*
-never sends directly to a minter/wallet; only GM sends outbound.
+The R2 arm parses the inner request and dispatches the implemented branches
+(ForwardMintRequest mint, jetton-usage TransferNotification, owner RequestBurn).
+R* never sends directly to a minter/wallet; it only returns R3 and GM sends outbound.
 */
 
 const VERSION: uint64 = 1;
