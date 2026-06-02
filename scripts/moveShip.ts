@@ -275,6 +275,29 @@ export async function run(provider: NetworkProvider) {
         }
     }
 
+    // Guard: moves are owner-gated on-chain. ship.tolk asserts
+    // `in.senderAddress == storage.userAddress` (the deployment owner) BEFORE it would
+    // initialize the game, so a non-owner move silently bounces with ERR_INVALID_USER_SENDER
+    // and no game is ever created. The usual cause is a wallet-version mismatch:
+    // deploySystem.ts derives the owner from Wallet V4R2, while `blueprint run --mnemonic`
+    // defaults to V5R1 (a different address from the same seed). Fail loud here instead of
+    // wasting a transaction.
+    if (senderAddress && deploymentData.ownerAddress?.bounceable) {
+        const ownerAddress = Address.parse(deploymentData.ownerAddress.bounceable);
+        if (!senderAddress.equals(ownerAddress)) {
+            throw new Error(
+                `Sender wallet is not the deployment owner — the ship will reject every move ` +
+                `(ERR_INVALID_USER_SENDER) and no game will be initialized.\n` +
+                `  Sender:           ${senderAddress.toString()}\n` +
+                `  Deployment owner: ${ownerAddress.toString()}\n` +
+                `This is usually a wallet-version mismatch: deploySystem.ts uses Wallet V4R2, ` +
+                `while "blueprint run --mnemonic" defaults to V5R1.\n` +
+                `Fix: set WALLET_VERSION=v4r2 in your .env (or environment) so the move is sent ` +
+                `from the owner wallet.`
+            );
+        }
+    }
+
     const ownerShipAddress = deploymentData.games?.ton_race_game?.ownerShip;
     if (!ownerShipAddress) {
         throw new Error('Owner ship address not found in deployment data');
