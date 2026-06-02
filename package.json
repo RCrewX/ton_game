@@ -12,7 +12,8 @@
         "deploy:mainnet": "ts-node scripts/deploySystem.ts --mainnet",
         "release": "blueprint pack && npm publish --access public",
         "generate-key": "ts-node scripts/generatePrivateKey.ts",
-        "move-ship": "blueprint run moveShip",
+        "move-ship": "WALLET_VERSION=v4r2 blueprint run moveShip --mnemonic",
+        "test-external": "WALLET_VERSION=v4r2 blueprint run testExternalShipStation --mnemonic",
         "check-connection": "ts-node scripts/checkConnection.ts",
         "chainstack": "ts-node scripts/runWithChainstack.ts",
         "get_op": "ts-node scripts/getOpcode.ts"

@@ -24,7 +24,8 @@
  * - CHAINSTACK_API_MAINNET_V3: Chainstack API v3 endpoint for mainnet
  */
 
-import { Address, Cell } from '@ton/core';
+import { Address, beginCell, Cell } from '@ton/core';
+import { createRegistry } from 'ton-provider-system';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
@@ -66,25 +67,72 @@ export interface GetMethodResult {
  * @param network - The network to get endpoints for
  * @returns Object with v2 and v3 endpoint URLs
  */
+/**
+ * Build a Chainstack endpoint base URL from a bare API key, mirroring the
+ * `ton-provider-system` rpc.json template (keyEnvVar: CHAINSTACK_KEY_TESTNET /
+ * CHAINSTACK_KEY_MAINNET). This unifies env-var naming so a single key variable
+ * works across every code path (blueprint provider, lib helpers, the chainstack
+ * runner), instead of requiring full URLs in CHAINSTACK_API_V2/_V3.
+ *
+ * Returns a base URL ending in /api/v2 or /api/v3 (no /jsonRPC), matching the
+ * format the other endpoints in this module use.
+ */
+export function chainstackEndpointFromKey(network: Network, version: 'v2' | 'v3'): string | undefined {
+    const key = (network === 'mainnet'
+        ? process.env.CHAINSTACK_KEY_MAINNET
+        : process.env.CHAINSTACK_KEY_TESTNET
+    )?.trim();
+    if (!key) return undefined;
+    const host = network === 'mainnet'
+        ? 'ton-mainnet.core.chainstack.com'
+        : 'ton-testnet.core.chainstack.com';
+    return `https://${host}/${key}/api/${version}`;
+}
+
 export function getChainstackEndpoints(network: Network): ChainstackEndpoints {
     if (network === 'mainnet') {
         return {
             v2:
                 process.env.CHAINSTACK_API_MAINNET_V2 ||
                 process.env.CHAINSTACK_API_V2?.replace('testnet', 'mainnet') ||
+                chainstackEndpointFromKey('mainnet', 'v2') ||
                 'https://toncenter.com/api/v2',
             v3:
                 process.env.CHAINSTACK_API_MAINNET_V3 ||
                 process.env.CHAINSTACK_API_V3?.replace('testnet', 'mainnet') ||
+                chainstackEndpointFromKey('mainnet', 'v3') ||
                 'https://toncenter.com/api/v3',
         };
     }
 
     // Testnet
     return {
-        v2: process.env.CHAINSTACK_API_V2 || 'https://testnet.toncenter.com/api/v2',
-        v3: process.env.CHAINSTACK_API_V3 || 'https://testnet.toncenter.com/api/v3',
+        v2:
+            process.env.CHAINSTACK_API_V2 ||
+            chainstackEndpointFromKey('testnet', 'v2') ||
+            'https://testnet.toncenter.com/api/v2',
+        v3:
+            process.env.CHAINSTACK_API_V3 ||
+            chainstackEndpointFromKey('testnet', 'v3') ||
+            'https://testnet.toncenter.com/api/v3',
     };
+}
+
+/**
+ * Endpoint base for BROADCASTING external messages. Always a send-capable public node
+ * (toncenter), because some keyed providers — notably the Chainstack testnet node — serve
+ * reads/get-methods fine but fail external-message emulation with "cannot fetch config
+ * params: configuration parameter 43 is invalid". Use this ONLY for sends; keep
+ * getChainstackEndpoints() (keyed, fast) for the read-heavy calls. Override via
+ * TONCENTER_SEND_ENDPOINT if you have a different send-capable node.
+ */
+export function getSendEndpoint(network: Network): string {
+    if (process.env.TONCENTER_SEND_ENDPOINT) {
+        return process.env.TONCENTER_SEND_ENDPOINT;
+    }
+    return network === 'mainnet'
+        ? 'https://toncenter.com/api/v2'
+        : 'https://testnet.toncenter.com/api/v2';
 }
 
 /**
@@ -95,9 +143,17 @@ export function getChainstackEndpoints(network: Network): ChainstackEndpoints {
  */
 export function isChainstackConfigured(network: Network): boolean {
     if (network === 'mainnet') {
-        return !!(process.env.CHAINSTACK_API_MAINNET_V2 || process.env.CHAINSTACK_API_MAINNET_V3);
+        return !!(
+            process.env.CHAINSTACK_API_MAINNET_V2 ||
+            process.env.CHAINSTACK_API_MAINNET_V3 ||
+            process.env.CHAINSTACK_KEY_MAINNET
+        );
     }
-    return !!(process.env.CHAINSTACK_API_V2 || process.env.CHAINSTACK_API_V3);
+    return !!(
+        process.env.CHAINSTACK_API_V2 ||
+        process.env.CHAINSTACK_API_V3 ||
+        process.env.CHAINSTACK_KEY_TESTNET
+    );
 }
 
 /**
@@ -119,6 +175,77 @@ export function toV2Base(endpoint: string): string {
  */
 export function toV3Base(endpoint: string): string {
     return endpoint.replace(/\/api\/v2\b/, '/api/v3').replace(/\/api\/v3\/?$/, '/api/v3');
+}
+
+// ============================================================================
+// Multi-provider failover (via ton-provider-system)
+// ============================================================================
+//
+// This is the "centralize in the shared lib" migration: the legacy hand-rolled HTTP calls
+// below now fail over across the providers defined by ton-provider-system (rpc.json + env
+// keys: CHAINSTACK_KEY_TESTNET, TONCENTER_API_KEY, ...) instead of hitting a single endpoint.
+// The caller's preferred endpoint is always tried first, so existing routing is preserved
+// (reads → keyed Chainstack, sends → toncenter); other providers are backups. It degrades
+// gracefully to single-endpoint behavior if the registry can't be loaded.
+
+type EndpointKind = 'read' | 'send';
+
+// Lazily-loaded, per-network provider order from ton-provider-system. Cached (built once).
+const _providerOrderCache = new Map<Network, Promise<Array<{ type: string; endpointV2: string }>>>();
+
+function getProviderOrder(network: Network): Promise<Array<{ type: string; endpointV2: string }>> {
+    let cached = _providerOrderCache.get(network);
+    if (!cached) {
+        cached = createRegistry()
+            .then((registry) =>
+                registry.getDefaultOrderForNetwork(network).map((p) => ({
+                    type: p.type as string,
+                    endpointV2: p.endpointV2,
+                })))
+            .catch(() => [] as Array<{ type: string; endpointV2: string }>); // degrade to preferred-only
+        _providerOrderCache.set(network, cached);
+    }
+    return cached;
+}
+
+/**
+ * Ordered list of v2 base URLs to try. Preferred endpoint first; ton-provider-system providers
+ * as backups. For sends we EXCLUDE Chainstack-type providers — that node serves reads but fails
+ * external-message emulation ("config param 43 invalid").
+ */
+async function buildCandidates(network: Network, kind: EndpointKind, preferredBaseV2: string): Promise<string[]> {
+    const candidates: string[] = [preferredBaseV2];
+    for (const p of await getProviderOrder(network)) {
+        if (kind === 'send' && p.type === 'chainstack') continue;
+        const base = toV2Base(p.endpointV2);
+        if (!candidates.includes(base)) candidates.push(base);
+    }
+    return candidates;
+}
+
+/**
+ * Run a request against the preferred endpoint, failing over to other providers (read: all;
+ * send: send-capable only) on error. Returns the first success.
+ *
+ * NOTE on sends: external messages broadcast here are seqno-protected (the subcontract bumps
+ * extSeqno), so a retry on another provider is safe — a duplicate is rejected, not re-applied.
+ */
+async function fetchWithFailover<T>(
+    preferredEndpoint: string,
+    kind: EndpointKind,
+    doRequest: (baseV2: string) => Promise<T>,
+): Promise<T> {
+    const network: Network = preferredEndpoint.includes('testnet') ? 'testnet' : 'mainnet';
+    const candidates = await buildCandidates(network, kind, toV2Base(preferredEndpoint));
+    const errors: string[] = [];
+    for (const baseV2 of candidates) {
+        try {
+            return await doRequest(baseV2);
+        } catch (e: any) {
+            errors.push(`${baseV2}: ${e?.message ?? String(e)}`);
+        }
+    }
+    throw new Error(`All ${kind} endpoints failed (${candidates.length} tried):\n  ${errors.join('\n  ')}`);
 }
 
 /**
@@ -151,8 +278,8 @@ export function logChainstackConfig(network: Network): void {
         console.log('⚠ Chainstack API not configured, using public endpoints');
         console.log(`  API v2: ${endpoints.v2}`);
         console.log(`  API v3: ${endpoints.v3}`);
-        console.log('  To use Chainstack, set CHAINSTACK_API_V2 and/or CHAINSTACK_API_V3 in .env');
-        console.log('  Or configure providers in node_modules/ton-provider-system/rpc.json');
+        console.log('  To use Chainstack, set CHAINSTACK_KEY_TESTNET (or CHAINSTACK_KEY_MAINNET) in .env');
+        console.log('  (a full URL in CHAINSTACK_API_V2/_V3 still takes precedence if set)');
     }
     console.log('');
 }
@@ -209,33 +336,34 @@ export function stackItemToBigInt(item: any): bigint {
  * @returns The state string
  */
 export async function getAddressState(endpoint: string, address: Address): Promise<string> {
-    const baseV2 = toV2Base(endpoint);
-    const url = `${baseV2}/getAddressState?address=${encodeURIComponent(address.toString())}`;
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    const text = await res.text();
+    return fetchWithFailover(endpoint, 'read', async (baseV2) => {
+        const url = `${baseV2}/getAddressState?address=${encodeURIComponent(address.toString())}`;
+        const res = await fetch(url, { headers: { accept: 'application/json' } });
+        const text = await res.text();
 
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`getAddressState non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
+        let json: any;
+        try {
+            json = JSON.parse(text);
+        } catch {
+            throw new Error(`getAddressState non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
+        }
 
-    if (!res.ok) {
-        throw new Error(`getAddressState failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
+        if (!res.ok) {
+            throw new Error(`getAddressState failed: HTTP ${res.status} ${JSON.stringify(json)}`);
+        }
 
-    const data = unwrapTonApiResponse(json);
-    // Handle case where unwrapped result is directly the state string
-    if (typeof data === 'string') {
-        return data;
-    }
-    // Handle case where state is in an object
-    if (data && typeof data === 'object' && typeof data.state === 'string') {
-        return data.state;
-    }
-    console.error('Unexpected getAddressState payload:', JSON.stringify(json, null, 2));
-    throw new Error('getAddressState payload missing or invalid state field');
+        const data = unwrapTonApiResponse(json);
+        // Handle case where unwrapped result is directly the state string
+        if (typeof data === 'string') {
+            return data;
+        }
+        // Handle case where state is in an object
+        if (data && typeof data === 'object' && typeof data.state === 'string') {
+            return data.state;
+        }
+        console.error('Unexpected getAddressState payload:', JSON.stringify(json, null, 2));
+        throw new Error('getAddressState payload missing or invalid state field');
+    });
 }
 
 /**
@@ -246,39 +374,40 @@ export async function getAddressState(endpoint: string, address: Address): Promi
  * @returns The balance as bigint
  */
 export async function getAddressBalance(endpoint: string, address: Address): Promise<bigint> {
-    const baseV2 = toV2Base(endpoint);
-    const url = `${baseV2}/getAddressBalance?address=${encodeURIComponent(address.toString())}`;
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    const text = await res.text();
+    return fetchWithFailover(endpoint, 'read', async (baseV2) => {
+        const url = `${baseV2}/getAddressBalance?address=${encodeURIComponent(address.toString())}`;
+        const res = await fetch(url, { headers: { accept: 'application/json' } });
+        const text = await res.text();
 
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`getAddressBalance non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
-
-    if (!res.ok) {
-        throw new Error(`getAddressBalance failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const data = unwrapTonApiResponse(json);
-    // Handle case where unwrapped result is directly the balance string
-    if (typeof data === 'string') {
-        return BigInt(data);
-    }
-    // Handle case where balance is a number
-    if (typeof data === 'number') {
-        return BigInt(data);
-    }
-    // Handle case where balance is in an object
-    if (data && typeof data === 'object') {
-        if (data.balance !== undefined) {
-            return BigInt(String(data.balance));
+        let json: any;
+        try {
+            json = JSON.parse(text);
+        } catch {
+            throw new Error(`getAddressBalance non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
         }
-    }
-    console.error('Unexpected getAddressBalance payload:', JSON.stringify(json, null, 2));
-    throw new Error('getAddressBalance payload missing or invalid balance field');
+
+        if (!res.ok) {
+            throw new Error(`getAddressBalance failed: HTTP ${res.status} ${JSON.stringify(json)}`);
+        }
+
+        const data = unwrapTonApiResponse(json);
+        // Handle case where unwrapped result is directly the balance string
+        if (typeof data === 'string') {
+            return BigInt(data);
+        }
+        // Handle case where balance is a number
+        if (typeof data === 'number') {
+            return BigInt(data);
+        }
+        // Handle case where balance is in an object
+        if (data && typeof data === 'object') {
+            if (data.balance !== undefined) {
+                return BigInt(String(data.balance));
+            }
+        }
+        console.error('Unexpected getAddressBalance payload:', JSON.stringify(json, null, 2));
+        throw new Error('getAddressBalance payload missing or invalid balance field');
+    });
 }
 
 /**
@@ -289,48 +418,49 @@ export async function getAddressBalance(endpoint: string, address: Address): Pro
  * @returns Address information object
  */
 export async function getAddressInfo(endpoint: string, address: Address): Promise<AddressInfo> {
-    const baseV2 = toV2Base(endpoint);
-    const url = `${baseV2}/getAddressInformation?address=${encodeURIComponent(address.toString())}`;
+    return fetchWithFailover(endpoint, 'read', async (baseV2) => {
+        const url = `${baseV2}/getAddressInformation?address=${encodeURIComponent(address.toString())}`;
 
-    const res = await fetch(url, { headers: { accept: 'application/json' } });
-    const text = await res.text();
+        const res = await fetch(url, { headers: { accept: 'application/json' } });
+        const text = await res.text();
 
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`getAddressInformation non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
-
-    if (!res.ok) {
-        throw new Error(`getAddressInformation failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const data = unwrapTonApiResponse(json);
-
-    if (data.state === undefined || data.balance === undefined) {
-        console.log('Attempting fallback: calling getAddressState and getAddressBalance separately...');
-
+        let json: any;
         try {
-            const state = await getAddressState(endpoint, address);
-            const balance = await getAddressBalance(endpoint, address);
-            return {
-                state,
-                balance,
-                lastTransactionId: data.last_transaction_id,
-            };
-        } catch (fallbackError: any) {
-            throw new Error(
-                `getAddressInformation payload missing required fields (state/balance). Fallback also failed: ${fallbackError.message}`
-            );
+            json = JSON.parse(text);
+        } catch {
+            throw new Error(`getAddressInformation non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
         }
-    }
 
-    return {
-        state: data.state,
-        balance: BigInt(String(data.balance)),
-        lastTransactionId: data.last_transaction_id,
-    };
+        if (!res.ok) {
+            throw new Error(`getAddressInformation failed: HTTP ${res.status} ${JSON.stringify(json)}`);
+        }
+
+        const data = unwrapTonApiResponse(json);
+
+        if (data.state === undefined || data.balance === undefined) {
+            console.log('Attempting fallback: calling getAddressState and getAddressBalance separately...');
+
+            try {
+                const state = await getAddressState(endpoint, address);
+                const balance = await getAddressBalance(endpoint, address);
+                return {
+                    state,
+                    balance,
+                    lastTransactionId: data.last_transaction_id,
+                };
+            } catch (fallbackError: any) {
+                throw new Error(
+                    `getAddressInformation payload missing required fields (state/balance). Fallback also failed: ${fallbackError.message}`
+                );
+            }
+        }
+
+        return {
+            state: data.state,
+            balance: BigInt(String(data.balance)),
+            lastTransactionId: data.last_transaction_id,
+        };
+    });
 }
 
 /**
@@ -348,37 +478,38 @@ export async function runGetMethod(
     method: string,
     stack: any[] = []
 ): Promise<GetMethodResult> {
-    const baseV2 = toV2Base(endpoint);
-    const url = `${baseV2}/runGetMethod`;
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({
-            address: address.toString(),
-            method,
-            stack,
-        }),
+    return fetchWithFailover(endpoint, 'read', async (baseV2) => {
+        const url = `${baseV2}/runGetMethod`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({
+                address: address.toString(),
+                method,
+                stack,
+            }),
+        });
+
+        const text = await res.text();
+        let json: any;
+        try {
+            json = JSON.parse(text);
+        } catch {
+            throw new Error(`runGetMethod non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
+        }
+
+        if (!res.ok) {
+            throw new Error(`runGetMethod failed: HTTP ${res.status} ${JSON.stringify(json)}`);
+        }
+
+        const data = unwrapTonApiResponse(json);
+        if (data.exit_code === undefined) {
+            console.error('Unexpected runGetMethod payload:', JSON.stringify(json, null, 2));
+            throw new Error('runGetMethod payload missing exit_code field');
+        }
+
+        return data;
     });
-
-    const text = await res.text();
-    let json: any;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        throw new Error(`runGetMethod non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-    }
-
-    if (!res.ok) {
-        throw new Error(`runGetMethod failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const data = unwrapTonApiResponse(json);
-    if (data.exit_code === undefined) {
-        console.error('Unexpected runGetMethod payload:', JSON.stringify(json, null, 2));
-        throw new Error('runGetMethod payload missing exit_code field');
-    }
-
-    return data;
 }
 
 /**
@@ -395,48 +526,27 @@ export async function sendExternalMessage(
     body: Cell,
     timeoutMs: number = 30000
 ): Promise<void> {
-    const baseV2 = toV2Base(endpoint);
-    const url = `${baseV2}/sendQuery`;
-    const bodyBase64 = body.toBoc().toString('base64');
+    // Wrap the signed body in an external-in message and broadcast via /sendBoc.
+    //
+    // We deliberately do NOT use /sendQuery: toncenter — the only node here that can emulate
+    // external-message acceptance (the Chainstack testnet node fails with "cannot fetch config
+    // params: configuration parameter 43 is invalid") — does not expose /sendQuery (it 405s).
+    // /sendBoc is the portable path, so callers should pass a send-capable endpoint
+    // (getSendEndpoint(), i.e. toncenter), NOT the keyed Chainstack read endpoint.
+    //
+    // External-in message (TL-B): ext_in_msg_info$10 src:addr_none dest:MsgAddressInt
+    // import_fee:0, init:nothing (contract already deployed), body:^Cell (stored as a ref).
+    const extMessage = beginCell()
+        .storeUint(0b10, 2)      // ext_in_msg_info$10
+        .storeUint(0, 2)         // src: addr_none$00
+        .storeAddress(address)   // dest: the contract
+        .storeCoins(0)           // import_fee
+        .storeBit(false)         // init: nothing$0
+        .storeBit(true)          // body: stored in a reference
+        .storeRef(body)
+        .endCell();
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                address: address.toString(),
-                body: bodyBase64,
-            }),
-            signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        const text = await res.text();
-        let json: any;
-        try {
-            json = JSON.parse(text);
-        } catch {
-            throw new Error(`sendQuery non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-        }
-
-        if (!res.ok) {
-            console.error('Full sendQuery response:', JSON.stringify(json, null, 2));
-            throw new Error(`sendQuery failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-        }
-
-        // Unwrap and validate response
-        unwrapTonApiResponse(json);
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            throw new Error(`sendQuery timeout after ${timeoutMs}ms`);
-        }
-        throw error;
-    }
+    await sendBoc(endpoint, extMessage.toBoc(), timeoutMs);
 }
 
 /**
@@ -451,47 +561,48 @@ export async function sendBoc(
     boc: Buffer | string,
     timeoutMs: number = 30000
 ): Promise<void> {
-    const baseV2 = toV2Base(endpoint);
-    const url = `${baseV2}/sendBoc`;
     const bocBase64 = typeof boc === 'string' ? boc : boc.toString('base64');
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    await fetchWithFailover(endpoint, 'send', async (baseV2) => {
+        const url = `${baseV2}/sendBoc`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                boc: bocBase64,
-            }),
-            signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        const text = await res.text();
-        let json: any;
         try {
-            json = JSON.parse(text);
-        } catch {
-            throw new Error(`sendBoc non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
-        }
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    boc: bocBase64,
+                }),
+                signal: controller.signal,
+            });
 
-        if (!res.ok) {
-            console.error('Full sendBoc response:', JSON.stringify(json, null, 2));
-            throw new Error(`sendBoc failed: HTTP ${res.status} ${JSON.stringify(json)}`);
-        }
+            clearTimeout(timeoutId);
 
-        // Unwrap and validate response
-        unwrapTonApiResponse(json);
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            throw new Error(`sendBoc timeout after ${timeoutMs}ms`);
+            const text = await res.text();
+            let json: any;
+            try {
+                json = JSON.parse(text);
+            } catch {
+                throw new Error(`sendBoc non-JSON: HTTP ${res.status} body=${text.slice(0, 300)}`);
+            }
+
+            if (!res.ok) {
+                console.error('Full sendBoc response:', JSON.stringify(json, null, 2));
+                throw new Error(`sendBoc failed: HTTP ${res.status} ${JSON.stringify(json)}`);
+            }
+
+            // Unwrap and validate response
+            unwrapTonApiResponse(json);
+        } catch (error: any) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error(`sendBoc timeout after ${timeoutMs}ms`);
+            }
+            throw error;
         }
-        throw error;
-    }
+    });
 }
 
 // ============================================================================

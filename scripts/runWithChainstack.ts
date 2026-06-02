@@ -186,11 +186,14 @@ async function main() {
     console.log('');
 
     // Merge environment variables.
-    // Match the wallet version deploySystem.ts uses to derive the owner (WalletContractV4 / V4R2).
+    // Force the wallet version deploySystem.ts uses to derive the owner (WalletContractV4 / V4R2).
     // Blueprint's `--mnemonic` provider defaults to V5R1, which produces a DIFFERENT address from
     // the same seed — so owner-gated actions (moveShip, testExternalShipStation) would be sent from
-    // a non-owner wallet and bounce. Default to v4r2 unless the user explicitly sets WALLET_VERSION.
-    const childEnv = { WALLET_VERSION: 'v4r2', ...process.env, ...envVars };
+    // a non-owner wallet and bounce (ERR_INVALID_USER_SENDER). Since deploySystem.ts is hardcoded to
+    // V4R2, the on-chain owner is ALWAYS V4R2, so we override any WALLET_VERSION inherited from .env
+    // here (WALLET_VERSION is placed LAST so it wins over both process.env and envVars).
+    const childEnv = { ...process.env, ...envVars, WALLET_VERSION: 'v4r2' };
+    console.log('Wallet version: v4r2 (forced to match deploySystem.ts owner; overrides .env)');
 
     // Spawn blueprint process
     const child = spawn('npx', ['blueprint', ...blueprintArgs], {

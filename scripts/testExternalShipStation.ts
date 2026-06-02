@@ -16,6 +16,7 @@ import {
 } from '../lib/buildOutput';
 import {
     getChainstackEndpoints,
+    getSendEndpoint,
     logChainstackConfig,
     isChainstackConfigured,
     getAddressState,
@@ -141,18 +142,25 @@ export async function run(provider: NetworkProvider) {
         // Log Chainstack configuration
         logChainstackConfig(network);
 
-        // Resolve endpoint using shared utilities
+        // Resolve endpoints. Read calls use endpointAny (keyed Chainstack if configured — fast,
+        // avoids public-toncenter 429s on this read-heavy test). External-message broadcasts use
+        // sendEndpoint (toncenter via /sendBoc): the Chainstack testnet node can read but fails
+        // external-message emulation ("config param 43 invalid") on every send path. The
+        // blueprint-provider sends (subcontract deploy + funding) likewise go through toncenter
+        // via blueprint.config.
         const endpoints = getChainstackEndpoints(network);
         const endpointAny = endpoints.v2;
-        
+        const sendEndpoint = getSendEndpoint(network);
+
         if (!isChainstackConfigured(network)) {
             console.warn('⚠ Warning: Chainstack API not configured, using public endpoints');
-            console.warn('  For better performance, set CHAINSTACK_API_V2 and/or CHAINSTACK_API_V3 in .env');
+            console.warn('  For better performance, set CHAINSTACK_KEY_TESTNET in .env');
         }
 
         const baseV2 = toV2Base(endpointAny);
         console.log(`\n--- Endpoint Configuration ---`);
-        console.log(`Using endpoint: ${endpointAny}`);
+        console.log(`Read endpoint:  ${endpointAny}`);
+        console.log(`Send endpoint:  ${sendEndpoint}`);
         console.log(`Computed v2 base: ${baseV2}`);
 
         // Derive key pair from PRIVATE_KEY
@@ -234,7 +242,11 @@ export async function run(provider: NetworkProvider) {
 
         // Step 5: Deploy Subcontract using external message
         console.log(`\n--- Step 5: Deploy Subcontract (External Message) ---`);
-        const subcontract = provider.open(Subcontract.createFromAddress(subcontractAddress));
+        // Open WITH init (code+data) so sendDeploy() attaches the stateInit. Opening via
+        // createFromAddress() carries no init, so the deploy message went out without stateInit
+        // and the account never initialized ("Confirmation timeout"). subcontractInit yields the
+        // same address computed above.
+        const subcontract = provider.open(new Subcontract(subcontractAddress, subcontractInit));
         
         // Get initial extSeqno (should be 0 for new contract, but we'll check)
         let extSeqno = 0;
@@ -316,11 +328,14 @@ export async function run(provider: NetworkProvider) {
         console.log(`\n--- Funding Subcontract ---`);
         const fundAmount = toNano('1'); // Optimized: enough for ship deployment and 2 moves with buffer
         try {
+            // Use PAY_GAS_SEPARATELY only: blueprint's V4R2 mnemonic Sender (the deployment owner —
+            // see deploySystem.ts) rejects any other sendMode ("does not support sendMode other than
+            // PAY_GAS_SEPARATELY"). IGNORE_ERRORS / the bounce flag are unsupported here and were only
+            // tolerated by a V5R1 sender; they aren't needed for a plain funding transfer.
             await provider.sender().send({
                 to: subcontractAddress,
                 value: fundAmount,
-                bounce: false,
-                sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
+                sendMode: SendMode.PAY_GAS_SEPARATELY,
             });
             console.log(`✓ Funded subcontract with ${fromNano(fundAmount)} TON`);
             await sleep(3000); // Wait for funding
@@ -382,7 +397,7 @@ export async function run(provider: NetworkProvider) {
         });
 
         console.log(`Sending external ForwardWithInit message...`);
-        await sendExternalMessage(endpointAny, subcontractAddress, envelope, 30000);
+        await sendExternalMessage(sendEndpoint, subcontractAddress, envelope, 30000);
         console.log('✓ External message sent');
 
         // Wait for confirmation (extSeqno increment)
@@ -451,7 +466,7 @@ export async function run(provider: NetworkProvider) {
         });
 
         console.log('Sending external Forward message for UP move...');
-        await sendExternalMessage(endpointAny, subcontractAddress, envelopeUp, 30000);
+        await sendExternalMessage(sendEndpoint, subcontractAddress, envelopeUp, 30000);
         console.log('✓ External message sent');
 
         await waitForConfirmation(endpointAny, subcontractAddress, async () => {
@@ -527,7 +542,7 @@ export async function run(provider: NetworkProvider) {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 // Increase timeout for EXIT move as it may take longer to process
-                await sendExternalMessage(endpointAny, subcontractAddress, envelopeExit, 60000);
+                await sendExternalMessage(sendEndpoint, subcontractAddress, envelopeExit, 60000);
                 console.log('✓ External message sent');
                 break; // Success, exit retry loop
             } catch (error: any) {

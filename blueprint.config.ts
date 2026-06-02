@@ -33,7 +33,15 @@ function getNetworkType(): 'testnet' | 'mainnet' {
 }
 
 /**
- * Get Chainstack endpoint based on network type
+ * Get Chainstack endpoint based on network type.
+ *
+ * NOTE: this endpoint feeds the blueprint NetworkProvider, which BROADCASTS external
+ * messages. We deliberately do NOT derive it from CHAINSTACK_KEY_TESTNET/_MAINNET here:
+ * the Chainstack testnet node serves reads fine but fails external-message emulation
+ * ("cannot fetch config params: configuration parameter 43 is invalid"). Sends therefore
+ * stay on a send-capable node (toncenter fallback below), while keyed Chainstack reads are
+ * wired in lib/chainstack.ts. An explicit, send-capable CHAINSTACK_API_V2/_V3 URL is still
+ * honored if you set one.
  */
 function getChainstackEndpoint(network: 'testnet' | 'mainnet'): string | undefined {
     if (network === 'mainnet') {
