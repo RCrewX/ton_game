@@ -85,6 +85,8 @@ import { X_TYPE_BITS, Y_TYPE_BITS, HP_TYPE_BITS, UniqueResult, MoveMode } from '
 import { Op as NftOp } from '../wrappers/tep/nft/types';
 import { Op as SbtOp } from '../wrappers/tep/sbt/types';
 import { Op as JettonOp, Errors as JettonErrors } from '../wrappers/tep/jetton/JettonConstants';
+import { NFTPrinterOp } from '../wrappers/printers/nft_printer/NFTPrinter';
+import { SBTPrinterOp } from '../wrappers/printers/sbt_printer/SBTPrinter';
 
 /**
  * Bump when the *shape* of the `constants` section changes (not when a value
@@ -199,6 +201,10 @@ export function buildGameConstants(): GameConstants {
             jetton: hexMap(staticNumberMap(JettonOp as unknown as Record<string, unknown>)),
             nft: hexMap(NftOp),
             sbt: hexMap(SbtOp),
+            // GM-owned printer collections (DeployNft/DeploySbtn/RevokeSbtnItem/admin).
+            // The R1 recipe opcodes (MintNft/MintSbt/RevokeSbt) live under `retranslator`.
+            nftPrinter: hexMap(NFTPrinterOp),
+            sbtPrinter: hexMap(SBTPrinterOp),
         },
 
         errors: {
@@ -210,6 +216,8 @@ export function buildGameConstants(): GameConstants {
             jetton: { ...staticNumberMap(JettonErrors as unknown as Record<string, unknown>), ...parseErrorCodes('contracts/tep/jetton/errors.tolk') },
             nft: parseErrorCodes('contracts/tep/nft/errors.tolk'),
             sbt: parseErrorCodes('contracts/tep/sbt/errors.tolk'),
+            nftPrinter: parseErrorCodes('contracts/printers/nft_printer/errors.tolk'),
+            sbtPrinter: parseErrorCodes('contracts/printers/sbt_printer/errors.tolk'),
         },
 
         gasCosts: {

@@ -26,7 +26,6 @@ end-to-end and on the auth gates. GM stays free of every printer/R\*-private typ
 | `wrappers/printers/nft_printer/NFTPrinter.ts` | wrapper (config/getters/sendDeployNft/sendChangeAdmin) |
 | `wrappers/printers/sbt_printer/SBTPrinter.ts` | wrapper (config/getters/sendDeploySbtn/sendRevokeToItem/sendChangeAdmin) |
 | `tests/printers/printers-e2e.spec.ts` | 10-case e2e + auth spec |
-| `scripts/deployPrinters.ts` | Blueprint `run` deploy + toolsInfo wiring (NOT executed) |
 | `dev-info/results/20260603-135220_nft-sbt-printers_seam-delta.md` | seam note for uap consumer |
 | `dev-info/results/20260603-135220_nft-sbt-printers_result.md` | this report |
 
@@ -38,7 +37,9 @@ end-to-end and on the auth gates. GM stays free of every printer/R\*-private typ
 | `wrappers/game_manager/RetranslatorTypes.ts` | + printer opcodes + MintNft/MintSbt/RevokeSbt encoders/types |
 | `wrappers/game_manager/Retranslator.ts` | + `nextNftIndex`/`nextSbtIndex` in config encoder + 2 getters |
 | `wrappers/game_manager/GameManager.ts` | + `sendMintNft`/`sendMintSbt`/`sendRevokeSbt` (R1-wrap helpers) |
-| `lib/buildOutput.ts` | + optional `nftPrinter`/`sbtPrinter` fields (additive) |
+| `lib/buildOutput.ts` | + optional `nftPrinter`/`sbtPrinter` fields (addresses + code hashes) |
+| `lib/gameConstants.ts` | + printer opcodes (`nftPrinter`/`sbtPrinter`) + printer errors in the constants section |
+| `scripts/deploySystem.ts` | **printers folded into the single core deploy** (compile, address calc, deploy, `SetToolsInfo` wiring, manifest write, verify, summary) |
 
 `game_manager.tolk` was **not** touched — decoupling invariant holds (grep for
 `Printer|MintNft|DeployNft|ToolsInfo|…` in it returns nothing).
@@ -97,18 +98,28 @@ initiator → 930, non-owner revoke → 920, R3-not-from-R\* → 932 (GM), direc
 not-from-GM → 401, direct DeploySbtn not-from-GM → 968. Regression specs confirm the new
 `RetranslatorStorage` layout (the 2 appended counters) did not break the existing R\* paths.
 
+## Deploy integration (added 2026-06-03, after the user's first core-only deploy)
+The printers are now part of the **single** core deploy — `pnpm build --all && pnpm
+deploy:testnet` deploys everything (GM, R\*, games, printers, jetton, …) and writes the full
+manifest. `scripts/deploySystem.ts` now: compiles `NFTItem`/`NFTPrinter`/`SBTPrinter`; records
+their code hashes in `contractCodes` (`nftPrinter`/`sbtPrinter`/`nftItem`); derives + deploys
+both printer collections (admin = GM); relays `SetToolsInfo` (printer addresses) to R\* via GM;
+verifies it on-chain; and writes addresses to `deployment_latest.json`. The constants section
+(`lib/gameConstants.ts`) now emits printer opcodes + errors. The standalone `deployPrinters.ts`
+was removed (superseded — it didn't write the manifest). Offline-verified: `buildGameConstants()`
+emits `opcodes.nftPrinter/sbtPrinter`, the R1 recipe opcodes, and printer/GM errors. The deploy
+itself is the user's to run (agent does not deploy).
+
 ## ⚠ Deployment-interface / seam delta — FLAGGED LOUDLY
-`deployment_info/deployment_latest.json` is **stale** in two ways and MUST be regenerated
-via the repo deploy tooling (NOT hand-edited): (1) it gains the two printer addresses +
-code hashes + the new R1/R3 opcodes; (2) the `sbtnItem`/`sbtnCollection` code BOCs are
-already stale from the 2026-06-03 sbtn fix (item hash `339e7222…`). The
-`ultimate_amusement_park` consumer reads this json at boot — see the **seam-delta note**
-(`…_nft-sbt-printers_seam-delta.md`). Do NOT edit uap from here.
+After the next `pnpm deploy:testnet`, `deployment_info/deployment_latest.json` gains the two
+printer addresses + code hashes + the new opcodes, and the `sbtnItem`/`sbtnCollection` BOCs
+refresh (the 2026-06-03 sbtn fix, item repr-hash `339e7222…`). The `ultimate_amusement_park`
+consumer reads this json at boot — see the **seam-delta note**
+(`…_nft-sbt-printers_seam-delta.md`). Do NOT edit uap from here. (The user's earlier deploy was
+the core-only build BEFORE this integration, so its manifest has no printers yet — re-deploy.)
 
 ## NOT done here (out of safe scope / deferred)
-- **No deploy / no commit / no push** — `scripts/deployPrinters.ts` is written + typechecked
-  but not run; it deploys both printers and relays SetToolsInfo (order documented in-file).
-- **deployment_latest.json not regenerated** — deploy-coupled; left to the user/Git-agent.
+- **No deploy / no commit / no push** — deploy logic is written + typechecked, not run.
 - **Deferred features (per plan):** content-edit (NFT) / `individualContent`-edit (SBT) — kept
   set-once; the full recipe-registry spec; an SBTN edit schema. Feature-space (`version`,`extra`)
   on both collection storages reserves room to add these later without a GM redeploy.

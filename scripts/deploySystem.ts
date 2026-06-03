@@ -31,6 +31,9 @@ import { SoullessSlotMachine } from '../wrappers/soulless_slot_machine/SoullessS
 import { JettonMinter, jettonContentToCell } from '../wrappers/tep/jetton/JettonMinter';
 import { JettonWallet } from '../wrappers/tep/jetton/JettonWallet';
 import { Subcontract } from '../wrappers/subcontract/Subcontract';
+import { NFTPrinter } from '../wrappers/printers/nft_printer/NFTPrinter';
+import { SBTPrinter } from '../wrappers/printers/sbt_printer/SBTPrinter';
+import { ToolsInfo } from '../wrappers/game_manager/RetranslatorTypes';
 import { GAS_COST_REDIRECT_MESSAGE, GAS_COST_SET_RETRANSLATOR } from '../wrappers/game_manager/types';
 import { GAS_COST_MANUAL_DEPLOY } from '../wrappers/subcontract/types';
 import { BASIC_STORAGE_TAX } from '../wrappers/ton_race_game/types';
@@ -470,6 +473,68 @@ async function sendAndWait(
 }
 
 // ============================================================================
+// Printers (GM-owned, R*-governed collections). admin == GameManager; they reuse
+// the proven item codes (NFTItem / the gate-fixed SBTNItem) as their item code.
+// ============================================================================
+
+// v1: NFT royalty -> owner (5%). Tune as needed; off-chain only affects metadata.
+const PRINTER_NFT_ROYALTY = { numerator: 5, denominator: 100 };
+
+function createPrinters(
+    ownerAddress: Address,
+    gameManagerAddress: Address,
+    nftPrinterCode: Cell,
+    sbtPrinterCode: Cell,
+    nftItemCode: Cell,
+    sbtnItemCode: Cell,
+) {
+    const nftPrinter = NFTPrinter.createFromConfig(
+        {
+            nftItemCode,
+            adminAddress: gameManagerAddress,
+            royaltyParams: { ...PRINTER_NFT_ROYALTY, royaltyAddress: ownerAddress },
+        },
+        nftPrinterCode,
+    );
+    const sbtPrinter = SBTPrinter.createFromConfig(
+        { sbtnItemCode, adminAddress: gameManagerAddress },
+        sbtPrinterCode,
+    );
+    return { nftPrinter, sbtPrinter };
+}
+
+// v1 toolsInfo carries ONLY the printer addresses (fees stay off).
+function buildToolsInfo(nftPrinter: Address, sbtPrinter: Address): ToolsInfo {
+    return {
+        feeNumerator: 0,
+        feeDenominator: 1,
+        feeCollector: null,
+        nftPrinterAddress: nftPrinter,
+        sbtPrinterAddress: sbtPrinter,
+        extra: null,
+    };
+}
+
+// Decode the two printer addresses out of a stored toolsInfo cell (null if unset).
+function decodeToolsPrinters(cell: Cell | null): { nft: Address | null; sbt: Address | null } {
+    if (!cell) return { nft: null, sbt: null };
+    try {
+        const s = cell.beginParse();
+        s.loadUint(16); // feeNumerator
+        s.loadUint(16); // feeDenominator
+        s.loadAddressAny(); // feeCollector (addr_none when null)
+        const nft = s.loadAddressAny();
+        const sbt = s.loadAddressAny();
+        return {
+            nft: nft instanceof Address ? nft : null,
+            sbt: sbt instanceof Address ? sbt : null,
+        };
+    } catch {
+        return { nft: null, sbt: null };
+    }
+}
+
+// ============================================================================
 // Address Calculation
 // ============================================================================
 
@@ -484,6 +549,10 @@ function calculateNetworkAddresses(
     jettonMinterCode: Cell,
     jettonWalletCode: Cell,
     subcontractCode: Cell,
+    nftPrinterCode: Cell,
+    sbtPrinterCode: Cell,
+    nftItemCode: Cell,
+    sbtnItemCode: Cell,
     isTestnet: boolean,
     shipStationId: bigint,
     ownerPublicKey: bigint,
@@ -531,11 +600,17 @@ function calculateNetworkAddresses(
         ownerPublicKey,
     }, subcontractCode);
 
+    const { nftPrinter, sbtPrinter } = createPrinters(
+        ownerAddress, gameManager.address, nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
+    );
+
     return {
         deployed: false,
         ownerAddress: formatAddress(ownerAddress, isTestnet),
         gameManager: formatAddress(gameManager.address, isTestnet),
         retranslator: formatAddress(retranslator.address, isTestnet),
+        nftPrinter: formatAddress(nftPrinter.address, isTestnet),
+        sbtPrinter: formatAddress(sbtPrinter.address, isTestnet),
         jettonMinter: formatAddress(jettonMinter.address, isTestnet),
         ownerJettonWallet: formatAddress(ownerJettonWallet.address, isTestnet),
         ship_station: formatAddress(shipStation.address, isTestnet),
@@ -625,6 +700,11 @@ async function main(): Promise<void> {
         const sbtCollectionCode = await compile('SBTCollection');
         const sbtnItemCode = await compile('SBTNItem');
         const sbtnCollectionCode = await compile('SBTNCollection');
+        // NFTItem is reused as the NFTPrinter item code; SBTNItem (above) as the
+        // SBTPrinter item code. The printers are the GM-owned collections.
+        const nftItemCode = await compile('NFTItem');
+        const nftPrinterCode = await compile('NFTPrinter');
+        const sbtPrinterCode = await compile('SBTPrinter');
         console.log('Contracts compiled successfully');
         console.log('');
 
@@ -652,6 +732,9 @@ async function main(): Promise<void> {
             sbtItem: getContractCodeData(sbtItemCode),
             sbtnCollection: getContractCodeData(sbtnCollectionCode),
             sbtnItem: getContractCodeData(sbtnItemCode),
+            nftItem: getContractCodeData(nftItemCode),
+            nftPrinter: getContractCodeData(nftPrinterCode),
+            sbtPrinter: getContractCodeData(sbtPrinterCode),
         };
 
         // Calculate addresses for both networks
@@ -659,11 +742,13 @@ async function main(): Promise<void> {
         const testnetAddresses = calculateNetworkAddresses(
             ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
             ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
+            nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
             true, shipStationId, ownerPublicKey, jettonContentUri
         );
         const mainnetAddresses = calculateNetworkAddresses(
             ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
             ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
+            nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
             false, shipStationId, ownerPublicKey, jettonContentUri
         );
 
@@ -723,6 +808,9 @@ async function main(): Promise<void> {
             id: shipStationId,
             ownerPublicKey,
         }, subcontractCode);
+        const { nftPrinter, sbtPrinter } = createPrinters(
+            ownerAddress, gameManager.address, nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
+        );
 
         // ================================================================
         // Deploy contracts
@@ -809,6 +897,28 @@ async function main(): Promise<void> {
         console.log('Owner JettonWallet:', ownerJettonWallet.address.toString());
         writeFullDeploymentData(deploymentData);
 
+        // 5b. Deploy NFTPrinter (GM-owned, TEP-62 transferable collection).
+        await checkAndDeploy(
+            client, wallet, keyPair,
+            nftPrinter.address, 'NFTPrinter',
+            toNano('0.2'),
+            { code: nftPrinterCode, data: nftPrinter.init!.data },
+            withRateLimit
+        );
+        console.log('NFTPrinter:', nftPrinter.address.toString());
+        writeFullDeploymentData(deploymentData);
+
+        // 5c. Deploy SBTPrinter (GM-owned, soulbound/revocable collection).
+        await checkAndDeploy(
+            client, wallet, keyPair,
+            sbtPrinter.address, 'SBTPrinter',
+            toNano('0.2'),
+            { code: sbtPrinterCode, data: sbtPrinter.init!.data },
+            withRateLimit
+        );
+        console.log('SBTPrinter:', sbtPrinter.address.toString());
+        writeFullDeploymentData(deploymentData);
+
         // 6. Configure Retranslator: jetton info (minter address + wallet code),
         //    relayed through GM.RedirectMessage (owner -> GM -> R*).
         console.log('Configuring Retranslator jetton info...');
@@ -867,6 +977,34 @@ async function main(): Promise<void> {
             console.log('Games info already configured');
         }
 
+        // 7b. Configure Retranslator: toolsInfo (printer addresses), via GM relay.
+        //     R* needs these so MintNft/MintSbt/RevokeSbt can target the printers.
+        console.log('Setting tools info (printer addresses) on Retranslator...');
+        const existingTools = await withRateLimit(() => openedRetranslator.getToolsInfo()).catch(() => null);
+        const existingPrinters = decodeToolsPrinters(existingTools);
+        const printersWired =
+            existingPrinters.nft?.equals(nftPrinter.address) &&
+            existingPrinters.sbt?.equals(sbtPrinter.address);
+
+        if (!printersWired) {
+            await sendAndWait(
+                client, wallet, keyPair,
+                gameManager.address,
+                GAS_COST_REDIRECT_MESSAGE + toNano('0.1'),
+                GameManager.redirectMessage(
+                    retranslator.address,
+                    Retranslator.setToolsInfoMessage(
+                        buildToolsInfo(nftPrinter.address, sbtPrinter.address),
+                    ),
+                    toNano('0.1'),
+                ),
+                'Set tools info (R*)',
+                withRateLimit
+            );
+        } else {
+            console.log('Tools info (printers) already configured');
+        }
+
         // 8. Verify configurations (on the Retranslator now).
         console.log('Verifying configurations...');
         await sleep(TRANSACTION_WAIT_TIME);
@@ -883,6 +1021,15 @@ async function main(): Promise<void> {
             console.log('✓ Active game address verified on R*');
         } else {
             console.warn('⚠ Active game not yet set on R* (may still be processing)');
+        }
+
+        const verifyTools = decodeToolsPrinters(
+            await withRateLimit(() => openedRetranslator.getToolsInfo()).catch(() => null)
+        );
+        if (verifyTools.nft?.equals(nftPrinter.address) && verifyTools.sbt?.equals(sbtPrinter.address)) {
+            console.log('✓ Printer addresses verified on R* (toolsInfo)');
+        } else {
+            console.warn('⚠ Printer addresses not yet set on R* (may still be processing)');
         }
 
         // 9. Mint initial jettons
@@ -962,6 +1109,8 @@ async function main(): Promise<void> {
         console.log('Owner:', ownerAddress.toString());
         console.log('GameManager:', gameManager.address.toString());
         console.log('Retranslator:', retranslator.address.toString());
+        console.log('NFTPrinter:', nftPrinter.address.toString());
+        console.log('SBTPrinter:', sbtPrinter.address.toString());
         console.log('TON Race Game:', game.address.toString());
         console.log('Soulless Slot Machine:', ssm.address.toString());
         console.log('JettonMinter:', jettonMinter.address.toString());
