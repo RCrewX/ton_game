@@ -32,3 +32,6 @@ Session.vim
 prompt*
 
 .cursor*
+# Local SSM scratch note + private encryption note (untracked by request)
+contracts/soulless_slot_machine/new_ssm.md
+note_encrypt_multisplav.txt
