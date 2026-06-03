@@ -41,14 +41,15 @@ import {
 
 import {
     Opcodes as SsmOpcodes,
-    TRY_LUCK_REQUIRED_AMOUNT,
-    TRY_LUCK_MAX_AMOUNT,
-    DEFAULT_MINT_AMOUNT,
-    WIN_CHANCE_PERCENT,
-    GAS_COST_TRY_LUCK,
-    GAS_COST_SET_MINT_AMOUNT,
-    GAS_COST_REQUEST_MINT as SSM_GAS_COST_REQUEST_MINT,
-    GAS_COST_RETURN_EXCESS,
+    MIN_ROLL_VALUE,
+    NFT_REWARD_BUDGET,
+    RUDA_MINT_BUDGET,
+    ESCROW_RETURN_BUDGET,
+    RUDA_AMOUNT_10,
+    RUDA_AMOUNT_100,
+    RUDA_AMOUNT_1000,
+    CUSTOM_ALLOWED_AMOUNT,
+    ONE_RUDA,
 } from '../wrappers/soulless_slot_machine/types';
 
 import {
@@ -233,10 +234,10 @@ export function buildGameConstants(): GameConstants {
                 GAS_COST_REQUEST_BURN: nano(GAS_COST_REQUEST_BURN),
             },
             soullessSlotMachine: {
-                GAS_COST_TRY_LUCK: nano(GAS_COST_TRY_LUCK),
-                GAS_COST_SET_MINT_AMOUNT: nano(GAS_COST_SET_MINT_AMOUNT),
-                GAS_COST_REQUEST_MINT: nano(SSM_GAS_COST_REQUEST_MINT),
-                GAS_COST_RETURN_EXCESS: nano(GAS_COST_RETURN_EXCESS),
+                MIN_ROLL_VALUE: nano(MIN_ROLL_VALUE),
+                NFT_REWARD_BUDGET: nano(NFT_REWARD_BUDGET),
+                RUDA_MINT_BUDGET: nano(RUDA_MINT_BUDGET),
+                ESCROW_RETURN_BUDGET: nano(ESCROW_RETURN_BUDGET),
             },
             subcontract: {
                 GAS_COST_FORWARD: nano(GAS_COST_FORWARD),
@@ -264,16 +265,19 @@ export function buildGameConstants(): GameConstants {
         amounts: {
             BASIC_STORAGE_TAX: nano(BASIC_STORAGE_TAX),
             MINT_TON_AMOUNT: nano(MINT_TON_AMOUNT),
-            TRY_LUCK_REQUIRED_AMOUNT: nano(TRY_LUCK_REQUIRED_AMOUNT),
-            TRY_LUCK_MAX_AMOUNT: nano(TRY_LUCK_MAX_AMOUNT),
+            SSM_MIN_ROLL_VALUE: nano(MIN_ROLL_VALUE),
             HARD_TRAVEL_MIN_VALUE: nano(HARD_TRAVEL_MIN_VALUE),
         },
 
         // Plain game-logic counts (not TON amounts).
         gameConstants: {
             BASIC_SHIP_HP: nano(BASIC_SHIP_HP),
-            DEFAULT_MINT_AMOUNT: nano(DEFAULT_MINT_AMOUNT),
-            WIN_CHANCE_PERCENT: WIN_CHANCE_PERCENT,
+            // SSM allowed stakes (raw jetton units): native RUDA + the custom amount.
+            SSM_RUDA_AMOUNT_10: nano(RUDA_AMOUNT_10),
+            SSM_RUDA_AMOUNT_100: nano(RUDA_AMOUNT_100),
+            SSM_RUDA_AMOUNT_1000: nano(RUDA_AMOUNT_1000),
+            SSM_ONE_RUDA: nano(ONE_RUDA),
+            SSM_CUSTOM_ALLOWED_AMOUNT: CUSTOM_ALLOWED_AMOUNT.toString(),
         },
 
         enums: {

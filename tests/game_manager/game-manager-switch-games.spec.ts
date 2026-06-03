@@ -8,8 +8,7 @@ import { Game } from '../../wrappers/ton_race_game/Game';
 import { SoullessSlotMachine } from '../../wrappers/soulless_slot_machine/SoullessSlotMachine';
 import { JettonMinter, jettonContentToCell } from '../../wrappers/tep/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
-import { Opcodes as GMOpcodes, GAS_COST_SET_RETRANSLATOR } from '../../wrappers/game_manager/types';
-import { TRY_LUCK_REQUIRED_AMOUNT } from '../../wrappers/soulless_slot_machine/types';
+import { GAS_COST_SET_RETRANSLATOR } from '../../wrappers/game_manager/types';
 import { Ship } from '../../wrappers/ton_race_game/Ship';
 import { MoveMode } from '../../wrappers/ton_race_game/structs';
 import { GAS_COST_SEND_MOVE } from '../../wrappers/ton_race_game/types';
@@ -89,9 +88,14 @@ describe('GameManager Switch Games (via Retranslator)', () => {
         }, gameCode));
         await tonRaceGame.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
 
-        // SSM with GameManager as owner
+        // SSM with GameManager as owner. Here it is only used as a registered
+        // game ADDRESS (the roll mechanics are covered by the ssm-* specs), so the
+        // slot code / RUDA master values are immaterial to these switching tests.
+        const ssmSlotCode = await compile('SSMSlot');
         ssm = blockchain.openContract(SoullessSlotMachine.createFromConfig({
             ownerAddress: gameManager.address,
+            ssmSlotCode,
+            rudaMasterAddress: gameManager.address,
         }, ssmCode));
         await ssm.sendDeploy(ownerAccount.getSender(), toNano('0.5'));
 
@@ -178,86 +182,12 @@ describe('GameManager Switch Games (via Retranslator)', () => {
         expect((await retranslator.getGamesInfo())?.active_game).toEqualAddress(tonRaceGame.address);
     });
 
-    it('should allow a non-active game (in all_games) to mint when it wins', async () => {
-        // TON Race Game active, SSM secondary but registered.
-        const allGamesCell = beginCell()
-            .storeUint(1, 2).storeAddress(tonRaceGame.address)
-            .storeUint(1, 2).storeAddress(ssm.address)
-            .storeUint(0, 2)
-            .endCell();
-        await setGamesInfo(tonRaceGame.address, allGamesCell);
-
-        // SSM (registered, non-active) mints when the user wins. Retry for the 5% chance.
-        let ssmMintSuccess = false;
-        for (let i = 0; i < 100 && !ssmMintSuccess; i++) {
-            const messageResult = await ssm.sendTryLuck(
-                userAccount.getSender(),
-                TRY_LUCK_REQUIRED_AMOUNT + toNano('0.5'),
-                BigInt(i),
-            );
-            // SSM forwards an R1 envelope to GM on a win.
-            const hasR1 = messageResult.transactions.some(tx => {
-                if (tx.inMessage?.info.type !== 'internal') return false;
-                if (!tx.inMessage?.info.dest?.equals(gameManager.address)) return false;
-                try {
-                    return tx.inMessage!.body!.beginParse().loadUint(32) === GMOpcodes.OP_R1;
-                } catch { return false; }
-            });
-            if (hasR1) {
-                ssmMintSuccess = true;
-                // The mint must complete all the way to the jetton minter (R4).
-                const hasJettonMinterTx = messageResult.transactions.some(tx =>
-                    tx.inMessage?.info.type === 'internal' &&
-                    tx.inMessage?.info.dest?.equals(jettonMinter.address),
-                );
-                expect(hasJettonMinterTx).toBe(true);
-            }
-        }
-        expect(ssmMintSuccess).toBe(true);
-    });
-
-    it('should reject minting from a game not in all_games list (R* rejects)', async () => {
-        // Only TON Race Game registered; SSM is not.
-        const allGamesCell = beginCell()
-            .storeUint(1, 2).storeAddress(tonRaceGame.address)
-            .storeUint(0, 2)
-            .endCell();
-        await setGamesInfo(tonRaceGame.address, allGamesCell);
-
-        for (let i = 0; i < 100; i++) {
-            const messageResult = await ssm.sendTryLuck(
-                userAccount.getSender(),
-                TRY_LUCK_REQUIRED_AMOUNT + toNano('0.5'),
-                BigInt(i),
-            );
-            // Did the SSM win and forward an R1 to GM?
-            const r1ToGm = messageResult.transactions.some(tx =>
-                tx.inMessage?.info.type === 'internal' &&
-                tx.inMessage?.info.dest?.equals(gameManager.address) &&
-                (() => { try { return tx.inMessage!.body!.beginParse().loadUint(32) === GMOpcodes.OP_R1; } catch { return false; } })(),
-            );
-            if (!r1ToGm) continue;
-
-            // GM forwards R2 to R*, which must reject the unregistered game.
-            const r2ToR = messageResult.transactions.find(tx =>
-                tx.inMessage?.info.type === 'internal' &&
-                tx.inMessage?.info.dest?.equals(retranslator.address) &&
-                (() => { try { return tx.inMessage!.body!.beginParse().loadUint(32) === GMOpcodes.OP_R2; } catch { return false; } })(),
-            );
-            expect(r2ToR).toBeDefined();
-            if (r2ToR && r2ToR.description.type === 'generic' && r2ToR.description.computePhase?.type === 'vm') {
-                // value < 0.2 -> ERR_INVALID_GAME_SENDER (921); value >= 0.2 -> ERR_GAME_NOT_FOUND (930)
-                expect([921, 930]).toContain(r2ToR.description.computePhase.exitCode);
-            }
-            // The mint must NOT reach the jetton minter.
-            const reachedMinter = messageResult.transactions.some(tx =>
-                tx.inMessage?.info.type === 'internal' &&
-                tx.inMessage?.info.dest?.equals(jettonMinter.address),
-            );
-            expect(reachedMinter).toBe(false);
-            break;
-        }
-    });
+    // NOTE: the two former sub-tests here drove R*'s game-mint gate via SSM's
+    // (now-removed) TryLuck win. That gate is covered by tests/printers/printers-e2e
+    // ("mint by a registered active game is allowed" / "mint by a non-allowed
+    // initiator is rejected") and by tests/soulless_slot_machine/ssm-roll-native
+    // (native win -> R1 -> mint through the real pipe). This file keeps the
+    // game-SWITCHING coverage only.
 
     it('R* validates that first game in all_games matches active_game', async () => {
         const invalidGamesCell = beginCell()

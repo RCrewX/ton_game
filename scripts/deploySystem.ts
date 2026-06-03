@@ -547,6 +547,7 @@ function calculateNetworkAddresses(
     shipCode: Cell,
     coordinateCellCode: Cell,
     ssmCode: Cell,
+    ssmSlotCode: Cell,
     jettonMinterCode: Cell,
     jettonWalletCode: Cell,
     subcontractCode: Cell,
@@ -573,16 +574,22 @@ function calculateNetworkAddresses(
         coordinateCellCode,
     }, gameCode);
 
-    const ssm = SoullessSlotMachine.createFromConfig(
-        { ownerAddress: gameManager.address },
-        ssmCode
-    );
-
     const jettonMinter = JettonMinter.createFromConfig({
         admin: gameManager.address,
         content: jettonContentToCell({ type: 1, uri: jettonContentUri }),
         wallet_code: jettonWalletCode,
     }, jettonMinterCode);
+
+    // SSM: GM is owner; the RUDA minter is the native NFT origin. (Full deploy
+    // wiring + registration happen in plan 3; here we just compute the address.)
+    const ssm = SoullessSlotMachine.createFromConfig(
+        {
+            ownerAddress: gameManager.address,
+            ssmSlotCode,
+            rudaMasterAddress: jettonMinter.address,
+        },
+        ssmCode
+    );
 
     const ownerJettonWallet = JettonWallet.createFromConfig({
         ownerAddress,
@@ -694,6 +701,7 @@ async function main(): Promise<void> {
         const shipCode = await compile('Ship');
         const coordinateCellCode = await compile('CoordinateCell');
         const ssmCode = await compile('SoullessSlotMachine');
+        const ssmSlotCode = await compile('SSMSlot');
         const jettonWalletCode = await compile('JettonWallet');
         const jettonMinterCode = await compile('JettonMinter');
         const subcontractCode = await compile('Subcontract');
@@ -748,13 +756,13 @@ async function main(): Promise<void> {
         console.log('Calculating addresses...');
         const testnetAddresses = calculateNetworkAddresses(
             ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
-            ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
+            ssmCode, ssmSlotCode, jettonMinterCode, jettonWalletCode, subcontractCode,
             nftPrinterCode, sbtPrinterCode, nftPrinterItemCode, sbtPrinterItemCode,
             true, shipStationId, ownerPublicKey, jettonContentUri
         );
         const mainnetAddresses = calculateNetworkAddresses(
             ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
-            ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
+            ssmCode, ssmSlotCode, jettonMinterCode, jettonWalletCode, subcontractCode,
             nftPrinterCode, sbtPrinterCode, nftPrinterItemCode, sbtPrinterItemCode,
             false, shipStationId, ownerPublicKey, jettonContentUri
         );
@@ -792,15 +800,21 @@ async function main(): Promise<void> {
             shipCode,
             coordinateCellCode,
         }, gameCode);
-        const ssm = SoullessSlotMachine.createFromConfig(
-            { ownerAddress: gameManager.address },
-            ssmCode
-        );
         const jettonMinter = JettonMinter.createFromConfig({
             admin: gameManager.address,
             content: jettonContentToCell({ type: 1, uri: jettonContentUri }),
             wallet_code: jettonWalletCode,
         }, jettonMinterCode);
+        // Full SSM deploy wiring + registration are plan 3; here we only need a
+        // type-correct, address-stable config (RUDA minter as the native origin).
+        const ssm = SoullessSlotMachine.createFromConfig(
+            {
+                ownerAddress: gameManager.address,
+                ssmSlotCode,
+                rudaMasterAddress: jettonMinter.address,
+            },
+            ssmCode
+        );
         const ownerJettonWallet = JettonWallet.createFromConfig({
             ownerAddress,
             minterAddress: jettonMinter.address,
