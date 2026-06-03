@@ -7,6 +7,32 @@ import "messages"
 // calcDeployedSbtnItem) is byte-identical to tep/sbtn so the printer can reuse the
 // proven, gate-fixed SBTNItem code as its `sbtnItemCode` and interoperate with it.
 
+// =============================================================================
+//  SBTContent — the SBT item's structured individual content. Schema (v1):
+//    { tatoo: Cell<SnakeString> }   (more attributes will be added later)
+//  Per the standard SBTN model, the item persists individualContent as an OPAQUE
+//  `cell`; this struct is the agreed schema for that cell. GM and R* forward it
+//  without parsing; the wrapper builds it and the item's get_sbt_content_fields
+//  parses it back. Adding fields later only extends this struct + the wrapper.
+// =============================================================================
+type SnakeString = slice
+
+fun SnakeString.unpackFromSlice(mutate s: slice) {
+    val snakeRemainder = s;
+    s = createEmptySlice();
+    return snakeRemainder
+}
+
+fun SnakeString.packToBuilder(self, mutate b: builder) {
+    b.storeSlice(self)
+}
+
+struct SBTContent {
+    tatoo: Cell<SnakeString>
+    // more attributes later (extend here + in the wrapper; on-chain it stays an
+    // opaque individualContent cell, so address derivation is unaffected).
+}
+
 // Canonical StateInit data — index, collection, owner only.
 struct SbtnItemData {
     index: uint256

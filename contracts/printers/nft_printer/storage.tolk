@@ -27,6 +27,20 @@ struct RoyaltyParams {
     royaltyAddress: address
 }
 
+// =============================================================================
+//  NFTContent — the NFT item's structured, ON-CHAIN individual content.
+//  Schema: { origin: address, type: uint64, tier: uint64 }.
+//  `itemType` carries the user-facing `type` attribute (renamed because `type`
+//  is a Tolk keyword; the wire layout is just address+uint64+uint64, so the TS
+//  wrapper exposes it as `type`). The item persists this as `Cell<NFTContent>`;
+//  it is opaque to GM and R* (they forward it without parsing).
+// =============================================================================
+struct NFTContent {
+    origin: address     // who/what minted this NFT (game or owner-supplied origin)
+    itemType: uint64    // the `type` attribute
+    tier: uint64
+}
+
 // FEATURE-SPACE: version + extra are appended AFTER the proven base layout so the
 // head (admin..royaltyParams) stays identical to tep/nft and the wrapper/tests can
 // rely on the same field order.
@@ -45,13 +59,16 @@ struct CollectionContent {
     commonContent: Cell<SnakeString>
 }
 
-// --- item side: identical to tep/nft (reused NFTItem code depends on this) ---
+// --- item side: storage layout identical in WIRE to tep/nft (the printer NFT
+//     item reuses this layout; the only schema change is `content` is now a
+//     `Cell<NFTContent>` ref instead of a `Cell<SnakeString>` ref — same single
+//     ref, so address derivation is unchanged). ---
 
 struct NftItemStorage {
     itemIndex: uint64
     collectionAddress: address
     ownerAddress: address
-    content: Cell<SnakeString>
+    content: Cell<NFTContent>
 }
 
 struct NftItemStorageNotInitialized {
@@ -65,6 +82,36 @@ fun NftPrinterCollectionStorage.load() {
 }
 
 fun NftPrinterCollectionStorage.save(self) {
+    contract.setData(self.toCell())
+}
+
+// --- item-storage loader: an NFT item is either uninitialized (only
+//     itemIndex+collection, no content ref) or initialized (full NftItemStorage
+//     with a content ref). Detect by ref presence, same trick as tep/nft. ---
+
+struct NftItemStorageMaybeNotInitialized {
+    contractData: slice
+}
+
+fun NftItemStorageMaybeNotInitialized.isInitialized(self) {
+    return self.contractData.remainingRefsCount();
+}
+
+fun NftItemStorageMaybeNotInitialized.parseNotInitialized(self) {
+    return NftItemStorageNotInitialized.fromSlice(self.contractData)
+}
+
+fun NftItemStorageMaybeNotInitialized.parseInitialized(self) {
+    return NftItemStorage.fromSlice(self.contractData)
+}
+
+fun startLoadingNftItemStorage(): NftItemStorageMaybeNotInitialized {
+    return {
+        contractData: contract.getData().beginParse()
+    }
+}
+
+fun NftItemStorage.save(self) {
     contract.setData(self.toCell())
 }
 

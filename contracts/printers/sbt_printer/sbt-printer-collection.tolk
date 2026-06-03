@@ -15,9 +15,12 @@ import "messages"
 // destroy-reserve), supplied as `sbtnItemCode` at deploy time — the printer
 // inherits that correct behavior for free.
 //
-// v1 surface: DeploySbtn (mint) + RevokeSbtnItem (revoke) + ChangeCollectionAdmin.
-// Owner Destroy stays on the item. NO individualContent-edit in v1.
+// Surface: DeploySbtn (mint) + RevokeSbtnItem (revoke) + EditSbtItem (admin
+// content-edit) + ChangeCollectionAdmin. Owner Destroy stays on the item.
 // =============================================================================
+
+// TON forwarded to an item when editing its content (storage already funded).
+const EDIT_ITEM_FORWARD_AMOUNT: coins = ton("0.02");
 
 fun deploySbtnItemWithStateInit(ownerAddress: address, index: uint256, sbtnItemCode: cell, attachTonAmount: coins, individualContent: cell) {
     val itemAddr = calcDeployedSbtnItem(index, contract.getAddress(), ownerAddress, sbtnItemCode);
@@ -37,6 +40,7 @@ type AllowedMessageToSbtnPrinterCollection =
     | DeploySbtn
     | ChangeCollectionAdmin
     | RevokeSbtnItem
+    | EditSbtItem
 
 fun onInternalMessage(in: InMessage) {
     val msg = lazy AllowedMessageToSbtnPrinterCollection.fromSlice(in.body);
@@ -72,6 +76,24 @@ fun onInternalMessage(in: InMessage) {
                 body: Revoke { queryId: msg.queryId },
             });
             revokeMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
+        }
+
+        // admin (== GM) edits an item's content. R*'s ANVIL section gates this to
+        // the owner upstream; here we re-check sender == admin and forward
+        // SetSbtContent to the item (the item checks sender == collection).
+        EditSbtItem => {
+            var storage = lazy SbtnPrinterCollectionStorage.load();
+            assert (in.senderAddress == storage.adminAddress) throw ERROR_NOT_FROM_ADMIN;
+            val editMsg = createMessage({
+                bounce: BounceMode.Only256BitsOfBody,
+                dest: msg.itemAddress,
+                value: EDIT_ITEM_FORWARD_AMOUNT,
+                body: SetSbtContent {
+                    queryId: msg.queryId,
+                    newContent: msg.newContent,
+                },
+            });
+            editMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
         }
 
         else => {

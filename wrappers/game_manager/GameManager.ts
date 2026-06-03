@@ -6,6 +6,8 @@ import {
     encodeMintNft,
     encodeMintSbt,
     encodeRevokeSbt,
+    encodeEditNft,
+    encodeEditSbt,
     ForwardMintRequest,
     RequestBurn,
 } from './RetranslatorTypes';
@@ -148,6 +150,28 @@ export class GameManager implements Contract {
         queryId: bigint = 0n,
     ) {
         await this.sendR1(provider, via, value, encodeRevokeSbt({ queryId, itemAddress }));
+    }
+
+    /** ⚒ ANVIL: R1-wrap an EditNft (owner/GM-only on R*; opaque content cell). */
+    async sendEditNft(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        itemAddress: Address,
+        content: Cell,
+    ) {
+        await this.sendR1(provider, via, value, encodeEditNft({ itemAddress, content }));
+    }
+
+    /** ⚒ ANVIL: R1-wrap an EditSbt (owner/GM-only on R*; opaque content cell). */
+    async sendEditSbt(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        itemAddress: Address,
+        content: Cell,
+    ) {
+        await this.sendR1(provider, via, value, encodeEditSbt({ itemAddress, content }));
     }
 
     async sendRedirectMessage(

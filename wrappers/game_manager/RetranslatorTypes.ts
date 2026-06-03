@@ -29,10 +29,15 @@ export const ROpcodes = {
     OP_MINT_NFT: 0x4d6e6674,
     OP_MINT_SBT: 0x4d736274,
     OP_REVOKE_SBT: 0x52766b73,
+    // ⚒ ANVIL edit recipes (wrapped in R1.data). Owner/GM-only on R*.
+    OP_EDIT_NFT: 0x456e6674,
+    OP_EDIT_SBT: 0x45736274,
     // Printer output bodies emitted by GM (R4). Must match the printer collections.
     OP_PRINTER_DEPLOY_NFT: 0x00000001,
     OP_PRINTER_DEPLOY_SBTN: 0x00000001,
     OP_PRINTER_REVOKE_SBTN_ITEM: 0x00000004,
+    OP_PRINTER_EDIT_NFT_ITEM: 0x00000006,
+    OP_PRINTER_EDIT_SBT_ITEM: 0x00000007,
 } as const;
 
 // ----- Registry shapes -----
@@ -77,6 +82,42 @@ export type JettonUsed = { jettonAmount: bigint; data: Cell };
 export type MintNft = { receiver: Address; content: Cell };
 export type MintSbt = { receiver: Address; individualContent: Cell };
 export type RevokeSbt = { queryId: bigint; itemAddress: Address };
+// ⚒ ANVIL edit recipes: route an opaque content cell to an existing item.
+export type EditNft = { itemAddress: Address; content: Cell };
+export type EditSbt = { itemAddress: Address; content: Cell };
+
+// ----- Structured item content schemas (built off-chain; opaque to GM/R*) -----
+// NFTContent { origin: address, type: uint64, tier: uint64 } — matches
+// contracts/printers/nft_printer/storage.tolk (Tolk field `itemType` == `type`).
+export type NFTContent = { origin: Address; type: bigint | number; tier: bigint | number };
+// SBTContent { tatoo: Cell<SnakeString> } — matches sbt_printer/storage.tolk.
+export type SBTContent = { tatoo: Cell };
+
+export function encodeNftContent(c: NFTContent): Cell {
+    return beginCell()
+        .storeAddress(c.origin)
+        .storeUint(c.type, 64)
+        .storeUint(c.tier, 64)
+        .endCell();
+}
+
+export function decodeNftContent(cell: Cell): NFTContent {
+    const s = cell.beginParse();
+    return { origin: s.loadAddress(), type: s.loadUintBig(64), tier: s.loadUintBig(64) };
+}
+
+/** Build a SnakeString cell (short string stored as the cell's data tail). */
+export function snakeString(s: string): Cell {
+    return beginCell().storeStringTail(s).endCell();
+}
+
+export function encodeSbtContent(c: SBTContent): Cell {
+    return beginCell().storeRef(c.tatoo).endCell();
+}
+
+export function decodeSbtContent(cell: Cell): SBTContent {
+    return { tatoo: cell.beginParse().loadRef() };
+}
 
 // ----- Registry encoders -----
 export function encodeJettonInfo(info: JettonInfo): Cell {
@@ -167,5 +208,22 @@ export function encodeRevokeSbt(msg: RevokeSbt): Cell {
         .storeUint(ROpcodes.OP_REVOKE_SBT, 32)
         .storeUint(msg.queryId, 64)
         .storeAddress(msg.itemAddress)
+        .endCell();
+}
+
+// ⚒ ANVIL edit recipes (wrapped in R1 before sending to GM; owner/GM-only on R*).
+export function encodeEditNft(msg: EditNft): Cell {
+    return beginCell()
+        .storeUint(ROpcodes.OP_EDIT_NFT, 32)
+        .storeAddress(msg.itemAddress)
+        .storeRef(msg.content)
+        .endCell();
+}
+
+export function encodeEditSbt(msg: EditSbt): Cell {
+    return beginCell()
+        .storeUint(ROpcodes.OP_EDIT_SBT, 32)
+        .storeAddress(msg.itemAddress)
+        .storeRef(msg.content)
         .endCell();
 }

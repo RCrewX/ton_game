@@ -9,9 +9,16 @@ import "storage"
 // (individualContent stays a set-once opaque cell).
 
 // SBTN init: collection sends; item sets active=true + content. Authority = collection.
+// individualContent is the opaque (Cell<SBTContent>) cell — see storage.tolk.
 struct (0x7e488f18) SbtnInit {
     queryId: uint64
     individualContent: cell
+}
+
+// collection -> item: replace the item's individualContent (authority = collection).
+struct (0x6f89f5e4) SetSbtContent {
+    queryId: uint64
+    newContent: cell
 }
 
 struct (0x04ded148) ProveOwnership {
@@ -87,6 +94,15 @@ struct (0x00000003) ChangeCollectionAdmin {
 struct (0x00000004) RevokeSbtnItem {
     queryId: uint64
     itemAddress: address
+}
+
+// admin (== GM) -> collection: edit one item's content. The collection forwards
+// SetSbtContent to the item (the item checks sender == collection). `newContent`
+// is the opaque Cell<SBTContent>; GM/R* never parse it.
+struct (0x00000007) EditSbtItem {
+    queryId: uint64
+    itemAddress: address
+    newContent: cell
 }
 
 // TEP-62 opcode: SBTN must reject transfer.

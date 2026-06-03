@@ -169,6 +169,51 @@ struct (0x52766b73) RevokeSbt {          // "Rvks"
 }
 
 // =============================================================================
+//  ⚒  A N V I L  — NFT/SBT item editing (the on-chain workbench)
+//
+//  This is the SINGLE place where minted NFT/SBT items get re-forged. The whole
+//  "allowed editings" policy lives here and ONLY here, so it can grow without
+//  touching GM or the printers.
+//
+//  POLICY v1 (intentionally permissive): GM (the owner/admin) may edit EVERYTHING.
+//  Admin -[R1{EditNft|EditSbt}]-> GM -[R2]-> R* (this ANVIL) -[R3]-> GM -[R4]->
+//  printer collection -> item. The update is an OPAQUE `content` cell — R* never
+//  inspects what's inside it (it just routes it). Finer-grained, field-level
+//  "allowed editings" (e.g. only `tier`, only `tatoo`) will be added in THIS
+//  section later, replacing the blanket owner check with per-field rules — still
+//  without recompiling/redeploying GM.
+//
+//  Wire match: EditNft.content / EditSbt.content are forwarded verbatim into the
+//  printer EditItem bodies below, whose opcodes mirror the printer collections:
+//    PrinterEditNftItem (0x00000006) <-> nft_printer/messages.tolk EditNftItem
+//    PrinterEditSbtItem (0x00000007) <-> sbt_printer/messages.tolk EditSbtItem
+// =============================================================================
+
+// ---- ANVIL inbound recipe requests (wrapped in R1.data -> R2.data) ----
+struct (0x456e6674) EditNft {            // "Enft"
+    itemAddress: address                 // which NFT item to re-forge
+    content: cell                        // new Cell<NFTContent>; opaque to R*/GM
+}
+
+struct (0x45736274) EditSbt {            // "Esbt"
+    itemAddress: address                 // which SBT item to re-forge
+    content: cell                        // new Cell<SBTContent>; opaque to R*/GM
+}
+
+// ---- ANVIL output bodies (R* builds them, packs into R3.data; GM emits as R4) ----
+struct (0x00000006) PrinterEditNftItem {
+    queryId: uint64
+    itemAddress: address
+    newContent: cell
+}
+
+struct (0x00000007) PrinterEditSbtItem {
+    queryId: uint64
+    itemAddress: address
+    newContent: cell
+}
+
+// =============================================================================
 //  R*-private config messages (opcodes verified unique vs the existing set)
 // =============================================================================
 
@@ -238,6 +283,8 @@ type AllowedRequests =
     | MintNft
     | MintSbt
     | RevokeSbt
+    | EditNft   // ⚒ ANVIL
+    | EditSbt   // ⚒ ANVIL
 
 
 fun onInternalMessage(in: InMessage) {
@@ -459,13 +506,13 @@ fun onInternalMessage(in: InMessage) {
                 }
 
                 // Mint one soulbound SBT to `receiver` via the SBTPrinter.
-                // Recipe policy v1: initiator = a registered game OR the owner.
+                // Recipe policy v1: OWNER/GM ONLY (games may create NFTs, NOT SBTs).
                 // Global nextSbtIndex guarantees per-owner item uniqueness.
                 MintSbt => {
+                    assert (msg.initiator == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
                     assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
                     val toolsInfo = storage.toolsInfo!.load();
                     assert (toolsInfo.sbtPrinterAddress != null) throw ERR_SBT_PRINTER_NOT_SET;
-                    assertMintInitiatorAllowed(storage, msg.initiator, in.valueCoins);
 
                     val index = storage.nextSbtIndex;
                     val deploySbtn = PrinterDeploySbtn {
@@ -496,6 +543,43 @@ fun onInternalMessage(in: InMessage) {
                     };
                     reserveValue(in.valueCoins);
                     emitR3(storage.gameManagerAddress, toolsInfo.sbtPrinterAddress!, revokeItem.toCell());
+                }
+
+                // ----------------------------------------------------------------
+                //  ⚒  ANVIL arms — edit an existing NFT/SBT item's content.
+                //  Policy v1: OWNER/GM ONLY may edit (everything). R* forwards the
+                //  opaque `content` cell to the printer collection, which forwards
+                //  SetNftContent/SetSbtContent to the item. R* never parses content.
+                //  Future field-level "allowed editings" replace the owner check here.
+                // ----------------------------------------------------------------
+                EditNft => {
+                    assert (msg.initiator == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
+                    assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
+                    val toolsInfo = storage.toolsInfo!.load();
+                    assert (toolsInfo.nftPrinterAddress != null) throw ERR_NFT_PRINTER_NOT_SET;
+
+                    val editItem = PrinterEditNftItem {
+                        queryId: 0,
+                        itemAddress: request.itemAddress,
+                        newContent: request.content,
+                    };
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, toolsInfo.nftPrinterAddress!, editItem.toCell());
+                }
+
+                EditSbt => {
+                    assert (msg.initiator == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
+                    assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
+                    val toolsInfo = storage.toolsInfo!.load();
+                    assert (toolsInfo.sbtPrinterAddress != null) throw ERR_SBT_PRINTER_NOT_SET;
+
+                    val editItem = PrinterEditSbtItem {
+                        queryId: 0,
+                        itemAddress: request.itemAddress,
+                        newContent: request.content,
+                    };
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, toolsInfo.sbtPrinterAddress!, editItem.toCell());
                 }
             }
         }

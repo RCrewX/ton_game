@@ -102,9 +102,12 @@ export interface ContractCodes {
     /** Optional: SBTN collection/item code hashes (TEP-6666) */
     sbtnCollection?: ContractCodeInfo;
     sbtnItem?: ContractCodeInfo;
-    /** Optional: GM-owned printer collection code hashes (v1 = mint + revoke) */
+    /** Optional: GM-owned printer collection code hashes (mint + revoke + edit) */
     nftPrinter?: ContractCodeInfo;
     sbtPrinter?: ContractCodeInfo;
+    /** Optional: printer item variant code hashes (standard item + SetContent edit) */
+    nftPrinterItem?: ContractCodeInfo;
+    sbtPrinterItem?: ContractCodeInfo;
 }
 
 /**

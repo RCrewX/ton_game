@@ -24,6 +24,8 @@ import { buildRoyaltyParamsCell, type RoyaltyParams } from '../../tep/nft/types'
 export const NFTPrinterOp = {
     DeployNft: 0x00000001,
     ChangeCollectionAdmin: 0x00000003,
+    SetNftContent: 0x00000005, // collection -> item (content edit)
+    EditNftItem: 0x00000006, // admin (GM) -> collection (content edit)
     RequestRoyaltyParams: 0x693d3950,
     ResponseRoyaltyParams: 0xa8cb00ad,
 } as const;
@@ -147,6 +149,27 @@ export class NFTPrinter implements Contract {
                 .storeUint(typeof opts.index === 'bigint' ? opts.index : BigInt(opts.index), 64)
                 .storeCoins(attachAmount)
                 .storeRef(initParams)
+                .endCell(),
+        });
+    }
+
+    /**
+     * Direct EditNftItem (admin-gated: admin == GM). In production driven by the
+     * R* ANVIL recipe flow; this helper exists mainly for the auth-gate tests.
+     */
+    async sendEditNftItem(
+        provider: ContractProvider,
+        via: Sender,
+        opts: { itemAddress: Address; newContent: Cell; value: bigint; queryId?: bigint | number },
+    ): Promise<void> {
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(NFTPrinterOp.EditNftItem, 32)
+                .storeUint(Number(opts.queryId ?? 0), 64)
+                .storeAddress(opts.itemAddress)
+                .storeRef(opts.newContent)
                 .endCell(),
         });
     }

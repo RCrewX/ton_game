@@ -2,15 +2,22 @@ import "storage"
 
 // NFTPrinter message surface — based on tep/nft/messages.tolk.
 //
-// v1 collection surface = DeployNft (mint) + ChangeCollectionAdmin (lets the owner
-// re-point admin if GM is replaced) + RequestRoyaltyParams (TEP-62 query). NO
-// content-edit message in v1 (designed for later, not implemented). The item-side
-// structs (NftItemInitAtDeployment, AskToChangeOwnership, RequestStaticData, …) are
-// kept byte-identical to tep/nft so the reused NFTItem code interoperates.
+// Collection surface = DeployNft (mint) + EditNftItem (admin content-edit) +
+// ChangeCollectionAdmin (lets the owner re-point admin if GM is replaced) +
+// RequestRoyaltyParams (TEP-62 query). The item-side structs (NftItemInitAtDeployment,
+// AskToChangeOwnership, RequestStaticData, …) keep the tep/nft wire shape so the
+// printer NFT item stays a drop-in TEP-62 item. `content` is now the structured
+// Cell<NFTContent> (see storage.tolk) instead of a Cell<SnakeString>.
 
 struct NftItemInitAtDeployment {
     ownerAddress: address
-    content: Cell<SnakeString>
+    content: Cell<NFTContent>
+}
+
+// collection -> item: replace the item's individual content (authority = collection).
+struct (0x00000005) SetNftContent {
+    queryId: uint64
+    newContent: Cell<NFTContent>
 }
 
 struct (0x693d3950) RequestRoyaltyParams {
@@ -32,6 +39,15 @@ struct (0x00000001) DeployNft {
 struct (0x00000003) ChangeCollectionAdmin {
     queryId: uint64
     newAdminAddress: address
+}
+
+// admin (== GM) -> collection: edit one item's content. The collection forwards
+// SetNftContent to the item at `itemAddress` (the item checks sender == collection).
+// `newContent` is an opaque-to-GM/R* Cell<NFTContent>; only this contract types it.
+struct (0x00000006) EditNftItem {
+    queryId: uint64
+    itemAddress: address
+    newContent: Cell<NFTContent>
 }
 
 struct (0x2fcb26a2) RequestStaticData {

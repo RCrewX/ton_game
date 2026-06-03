@@ -23,6 +23,8 @@ export const SBTPrinterOp = {
     DeploySbtn: 0x00000001,
     ChangeCollectionAdmin: 0x00000003,
     RevokeSbtnItem: 0x00000004,
+    SetSbtContent: 0x6f89f5e4, // collection -> item (content edit)
+    EditSbtItem: 0x00000007, // admin (GM) -> collection (content edit)
 } as const;
 
 export type SBTPrinterConfig = {
@@ -153,6 +155,27 @@ export class SBTPrinter implements Contract {
                 .storeUint(SBTPrinterOp.RevokeSbtnItem, 32)
                 .storeUint(Number(opts.queryId ?? 0), 64)
                 .storeAddress(opts.itemAddress)
+                .endCell(),
+        });
+    }
+
+    /**
+     * Direct EditSbtItem (admin-gated: admin == GM). In production driven by the
+     * R* ANVIL recipe flow; this helper exists mainly for the auth-gate tests.
+     */
+    async sendEditSbtItem(
+        provider: ContractProvider,
+        via: Sender,
+        opts: { itemAddress: Address; newContent: Cell; value: bigint; queryId?: bigint | number },
+    ): Promise<void> {
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(SBTPrinterOp.EditSbtItem, 32)
+                .storeUint(Number(opts.queryId ?? 0), 64)
+                .storeAddress(opts.itemAddress)
+                .storeRef(opts.newContent)
                 .endCell(),
         });
     }

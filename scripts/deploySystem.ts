@@ -473,8 +473,9 @@ async function sendAndWait(
 }
 
 // ============================================================================
-// Printers (GM-owned, R*-governed collections). admin == GameManager; they reuse
-// the proven item codes (NFTItem / the gate-fixed SBTNItem) as their item code.
+// Printers (GM-owned, R*-governed collections). admin == GameManager; they use
+// their own editable item variants (NFTPrinterItem / SBTPrinterItem = standard
+// item + a collection-gated SetContent handler) as their item code.
 // ============================================================================
 
 // v1: NFT royalty -> owner (5%). Tune as needed; off-chain only affects metadata.
@@ -700,9 +701,13 @@ async function main(): Promise<void> {
         const sbtCollectionCode = await compile('SBTCollection');
         const sbtnItemCode = await compile('SBTNItem');
         const sbtnCollectionCode = await compile('SBTNCollection');
-        // NFTItem is reused as the NFTPrinter item code; SBTNItem (above) as the
-        // SBTPrinter item code. The printers are the GM-owned collections.
         const nftItemCode = await compile('NFTItem');
+        // The printers use their OWN editable item variants (standard NFTItem/SBTNItem
+        // + a collection-gated SetContent edit handler; storage layout identical, so
+        // address derivation is unchanged). These are the codes the GM-owned printer
+        // collections deploy as their items.
+        const nftPrinterItemCode = await compile('NFTPrinterItem');
+        const sbtPrinterItemCode = await compile('SBTPrinterItem');
         const nftPrinterCode = await compile('NFTPrinter');
         const sbtPrinterCode = await compile('SBTPrinter');
         console.log('Contracts compiled successfully');
@@ -733,6 +738,8 @@ async function main(): Promise<void> {
             sbtnCollection: getContractCodeData(sbtnCollectionCode),
             sbtnItem: getContractCodeData(sbtnItemCode),
             nftItem: getContractCodeData(nftItemCode),
+            nftPrinterItem: getContractCodeData(nftPrinterItemCode),
+            sbtPrinterItem: getContractCodeData(sbtPrinterItemCode),
             nftPrinter: getContractCodeData(nftPrinterCode),
             sbtPrinter: getContractCodeData(sbtPrinterCode),
         };
@@ -742,13 +749,13 @@ async function main(): Promise<void> {
         const testnetAddresses = calculateNetworkAddresses(
             ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
             ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
-            nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
+            nftPrinterCode, sbtPrinterCode, nftPrinterItemCode, sbtPrinterItemCode,
             true, shipStationId, ownerPublicKey, jettonContentUri
         );
         const mainnetAddresses = calculateNetworkAddresses(
             ownerAddress, gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
             ssmCode, jettonMinterCode, jettonWalletCode, subcontractCode,
-            nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
+            nftPrinterCode, sbtPrinterCode, nftPrinterItemCode, sbtPrinterItemCode,
             false, shipStationId, ownerPublicKey, jettonContentUri
         );
 
@@ -809,7 +816,7 @@ async function main(): Promise<void> {
             ownerPublicKey,
         }, subcontractCode);
         const { nftPrinter, sbtPrinter } = createPrinters(
-            ownerAddress, gameManager.address, nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
+            ownerAddress, gameManager.address, nftPrinterCode, sbtPrinterCode, nftPrinterItemCode, sbtPrinterItemCode,
         );
 
         // ================================================================

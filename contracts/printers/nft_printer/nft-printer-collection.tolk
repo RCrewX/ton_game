@@ -12,9 +12,13 @@ import "messages"
 // NFTPrinter items are TEP-62 TRANSFERABLE (game NFTs are tradeable). The item
 // code is the proven tep/nft NFTItem, supplied as `nftItemCode` at deploy time.
 //
-// v1 surface: DeployNft (mint) + ChangeCollectionAdmin + RequestRoyaltyParams.
-// NO content-edit in v1 (feature-space reserved on storage for later).
+// Surface: DeployNft (mint) + EditNftItem (admin content-edit) +
+// ChangeCollectionAdmin + RequestRoyaltyParams.
 // =============================================================================
+
+// TON forwarded to an item when editing its content (item storage is already
+// funded; this just covers the receive + setData gas).
+const EDIT_ITEM_FORWARD_AMOUNT: coins = ton("0.02");
 
 fun deployNftItem(itemIndex: int, nftItemCode: cell, attachTonAmount: coins, initParams: Cell<NftItemInitAtDeployment>) {
     val deployMsg = createMessage({
@@ -29,6 +33,7 @@ fun deployNftItem(itemIndex: int, nftItemCode: cell, attachTonAmount: coins, ini
 type AllowedMessageToNftPrinterCollection =
     | RequestRoyaltyParams
     | DeployNft
+    | EditNftItem
     | ChangeCollectionAdmin
 
 fun onInternalMessage(in: InMessage) {
@@ -46,6 +51,24 @@ fun onInternalMessage(in: InMessage) {
                 storage.nextItemIndex += 1;
                 storage.save();
             }
+        }
+
+        // admin (== GM) edits an item's content. R*'s ANVIL section gates this to
+        // the owner upstream; here we only re-check sender == admin and forward
+        // SetNftContent to the target item (the item checks sender == collection).
+        EditNftItem => {
+            val storage = lazy NftPrinterCollectionStorage.load();
+            assert (in.senderAddress == storage.adminAddress) throw ERROR_NOT_FROM_ADMIN;
+            val editMsg = createMessage({
+                bounce: BounceMode.Only256BitsOfBody,
+                dest: msg.itemAddress,
+                value: EDIT_ITEM_FORWARD_AMOUNT,
+                body: SetNftContent {
+                    queryId: msg.queryId,
+                    newContent: msg.newContent,
+                },
+            });
+            editMsg.send(SEND_MODE_PAY_FEES_SEPARATELY);
         }
 
         RequestRoyaltyParams => {
@@ -108,7 +131,7 @@ get fun royalty_params(): RoyaltyParams {
     return storage.royaltyParams.load();
 }
 
-get fun get_nft_content(itemIndex: int, individualNftContent: Cell<SnakeString>): Cell<OffchainMetadataReply> {
+get fun get_nft_content(itemIndex: int, individualNftContent: Cell<NFTContent>): Cell<OffchainMetadataReply> {
     val storage = lazy NftPrinterCollectionStorage.load();
     val content = lazy storage.content.load();
 

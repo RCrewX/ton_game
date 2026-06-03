@@ -10,6 +10,13 @@ import { NFTPrinter, NFTPrinterOp } from '../../wrappers/printers/nft_printer/NF
 import { SBTPrinter, SBTPrinterOp } from '../../wrappers/printers/sbt_printer/SBTPrinter';
 import { NFTItem } from '../../wrappers/tep/nft/NFTItem';
 import { SBTNItem } from '../../wrappers/tep/sbtn/SBTNItem';
+import {
+    encodeNftContent,
+    decodeNftContent,
+    encodeSbtContent,
+    decodeSbtContent,
+    snakeString,
+} from '../../wrappers/game_manager/RetranslatorTypes';
 
 // =============================================================================
 // NFTPrinter + SBTPrinter e2e through the GM/R* pipe.
@@ -33,9 +40,10 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
     beforeEach(async () => {
         const base = await initContractSystem();
 
-        // Reuse the proven item codes as the printers' item code.
-        const nftItemCode = await compile('NFTItem');
-        const sbtnItemCode = await compile('SBTNItem');
+        // The printers use their own editable item variants (standard item +
+        // collection-gated SetContent edit handler; storage layout identical).
+        const nftItemCode = await compile('NFTPrinterItem');
+        const sbtnItemCode = await compile('SBTPrinterItem');
         const nftCollectionCode = await compile('NFTPrinter');
         const sbtCollectionCode = await compile('SBTPrinter');
 
@@ -106,7 +114,7 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
 
     it('mint NFT (owner initiator): R1->R4 deploys an item to the receiver', async () => {
         const receiver = await S.blockchain.treasury('nftReceiver');
-        const content = beginCell().storeStringTail('ipfs://nft-0').endCell();
+        const content = encodeNftContent({ origin: S.ownerAccount.address, type: 7, tier: 3 });
 
         expect(await S.retranslator.getNextNftIndex()).toBe(0n);
 
@@ -149,11 +157,16 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
         expect(data.index).toBe(0n);
         expect(data.ownerAddress).toEqualAddress(receiver.address);
         expect(data.collectionAddress).toEqualAddress(S.nftPrinter.address);
+        // Structured content {origin, type, tier} round-trips through the item.
+        const nftContent = decodeNftContent(data.individualContent!);
+        expect(nftContent.origin).toEqualAddress(S.ownerAccount.address);
+        expect(nftContent.type).toBe(7n);
+        expect(nftContent.tier).toBe(3n);
     });
 
     it('mint SBT (owner initiator): deploys a soulbound item to the receiver', async () => {
         const receiver = await S.blockchain.treasury('sbtReceiver');
-        const content = beginCell().storeStringTail('ipfs://sbt-0').endCell();
+        const content = encodeSbtContent({ tatoo: snakeString('dragon-tattoo') });
 
         expect(await S.retranslator.getNextSbtIndex()).toBe(0n);
 
@@ -184,6 +197,9 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
         expect(data.init).toBe(true);
         expect(data.ownerAddress).toEqualAddress(receiver.address);
         expect(data.revokedAt).toBe(0n);
+        // Structured SBTContent {tatoo} round-trips through the soulbound item.
+        const sbtContent = decodeSbtContent(data.individualContent!);
+        expect(sbtContent.tatoo.beginParse().loadStringTail()).toBe('dragon-tattoo');
     });
 
     it('mint NFT (registered active game initiator) is allowed', async () => {
@@ -202,7 +218,7 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
         );
 
         const receiver = await S.blockchain.treasury('gameNftReceiver');
-        const content = beginCell().storeStringTail('ipfs://game-nft').endCell();
+        const content = encodeNftContent({ origin: gameTreasury.address, type: 1, tier: 1 });
         S.messageResult = await S.gameManager.sendMintNft(
             gameTreasury.getSender(),
             toNano('1'),
@@ -217,9 +233,42 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
         });
     });
 
+    it('mint SBT by a registered game is REJECTED (SBT create is owner/GM-only)', async () => {
+        // Register a treasury as the active game.
+        const gameTreasury = await S.blockchain.treasury('sbtGameTreasury');
+        const allGames = beginCell()
+            .storeUint(1, 2).storeAddress(gameTreasury.address)
+            .storeUint(0, 2)
+            .endCell();
+        await S.gameManager.sendRedirectMessage(
+            S.ownerAccount.getSender(),
+            toNano('1'),
+            S.retranslator.address,
+            Retranslator.setGamesInfoMessage({ active_game: gameTreasury.address, all_games: allGames }),
+            toNano('0.9'),
+        );
+
+        const receiver = await S.blockchain.treasury('sbtGameReceiver');
+        const content = encodeSbtContent({ tatoo: snakeString('forbidden') });
+        S.messageResult = await S.gameManager.sendMintSbt(
+            gameTreasury.getSender(),
+            toNano('1'),
+            receiver.address,
+            content,
+        );
+        // R* rejects: only the owner may mint SBTs.
+        expect(S.messageResult.transactions).toHaveTransaction({
+            from: S.gameManager.address,
+            to: S.retranslator.address,
+            success: false,
+            exitCode: 920, // ERR_INVALID_OWNER_SENDER
+        });
+        expect(await S.retranslator.getNextSbtIndex()).toBe(0n); // unchanged
+    });
+
     it('revoke SBT (owner): R* forwards revoke; item is revoked', async () => {
         const receiver = await S.blockchain.treasury('sbtToRevoke');
-        const content = beginCell().storeStringTail('ipfs://sbt-revoke').endCell();
+        const content = encodeSbtContent({ tatoo: snakeString('to-revoke') });
         await S.gameManager.sendMintSbt(S.ownerAccount.getSender(), toNano('1'), receiver.address, content);
 
         const itemAddr = await S.sbtPrinter.getSbtnAddress(receiver.address, 0);
@@ -251,7 +300,7 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
 
     it('mint by a non-allowed initiator is rejected by R*', async () => {
         const stranger = await S.blockchain.treasury('stranger');
-        const content = beginCell().storeStringTail('ipfs://nope').endCell();
+        const content = encodeNftContent({ origin: stranger.address, type: 0, tier: 0 });
         S.messageResult = await S.gameManager.sendMintNft(
             stranger.getSender(),
             toNano('1'), // >= 0.2 so R* does the full game walk, then ERR_GAME_NOT_FOUND
@@ -335,6 +384,111 @@ describe('NFT/SBT Printers (GM-owned, R*-governed)', () => {
             to: S.sbtPrinter.address,
             success: false,
             exitCode: 968, // ERROR_NOT_FROM_ADMIN (tep/sbtn)
+        });
+    });
+
+    // -------------------------------------------------------------------------
+    // ⚒ ANVIL — content editing (owner/GM edits everything; opaque cell through R*)
+    // -------------------------------------------------------------------------
+
+    it('ANVIL: owner edits an NFT item content end-to-end', async () => {
+        const receiver = await S.blockchain.treasury('nftEditRcv');
+        const content = encodeNftContent({ origin: S.ownerAccount.address, type: 1, tier: 1 });
+        await S.gameManager.sendMintNft(S.ownerAccount.getSender(), toNano('1'), receiver.address, content);
+        const itemAddr = await S.nftPrinter.getNftAddressByIndex(0);
+
+        const newContent = encodeNftContent({ origin: receiver.address, type: 9, tier: 5 });
+        S.messageResult = await S.gameManager.sendEditNft(
+            S.ownerAccount.getSender(),
+            toNano('0.5'),
+            itemAddr,
+            newContent,
+        );
+
+        // GM emitted EditNftItem (R4) to the NFTPrinter collection.
+        expect(S.messageResult.transactions).toHaveTransaction({
+            from: S.gameManager.address,
+            to: S.nftPrinter.address,
+            success: true,
+            op: NFTPrinterOp.EditNftItem,
+        });
+        // Collection forwarded SetNftContent to the item.
+        expect(S.messageResult.transactions).toHaveTransaction({
+            from: S.nftPrinter.address,
+            to: itemAddr,
+            success: true,
+            op: NFTPrinterOp.SetNftContent,
+        });
+        // The item's content is now the new structured value.
+        const item = S.blockchain.openContract(NFTItem.createFromAddress(itemAddr));
+        const parsed = decodeNftContent((await item.getNftData()).individualContent!);
+        expect(parsed.origin).toEqualAddress(receiver.address);
+        expect(parsed.type).toBe(9n);
+        expect(parsed.tier).toBe(5n);
+    });
+
+    it('ANVIL: owner edits an SBT item content end-to-end', async () => {
+        const receiver = await S.blockchain.treasury('sbtEditRcv');
+        const content = encodeSbtContent({ tatoo: snakeString('old-ink') });
+        await S.gameManager.sendMintSbt(S.ownerAccount.getSender(), toNano('1'), receiver.address, content);
+        const itemAddr = await S.sbtPrinter.getSbtnAddress(receiver.address, 0);
+
+        const newContent = encodeSbtContent({ tatoo: snakeString('new-ink') });
+        S.messageResult = await S.gameManager.sendEditSbt(
+            S.ownerAccount.getSender(),
+            toNano('0.5'),
+            itemAddr,
+            newContent,
+        );
+
+        expect(S.messageResult.transactions).toHaveTransaction({
+            from: S.gameManager.address,
+            to: S.sbtPrinter.address,
+            success: true,
+            op: SBTPrinterOp.EditSbtItem,
+        });
+        expect(S.messageResult.transactions).toHaveTransaction({
+            from: S.sbtPrinter.address,
+            to: itemAddr,
+            success: true,
+            op: SBTPrinterOp.SetSbtContent,
+        });
+        const item = S.blockchain.openContract(SBTNItem.createFromAddress(itemAddr));
+        const parsed = decodeSbtContent((await item.getNftData()).individualContent!);
+        expect(parsed.tatoo.beginParse().loadStringTail()).toBe('new-ink');
+    });
+
+    it('ANVIL: edit by a non-owner is rejected by R*', async () => {
+        const nonOwner = await S.blockchain.treasury('nonOwnerEdit');
+        const someItem = await S.blockchain.treasury('someEditItem');
+        const newContent = encodeNftContent({ origin: nonOwner.address, type: 1, tier: 1 });
+        S.messageResult = await S.gameManager.sendEditNft(
+            nonOwner.getSender(),
+            toNano('0.5'),
+            someItem.address,
+            newContent,
+        );
+        expect(S.messageResult.transactions).toHaveTransaction({
+            from: S.gameManager.address,
+            to: S.retranslator.address,
+            success: false,
+            exitCode: 920, // ERR_INVALID_OWNER_SENDER
+        });
+    });
+
+    it('a direct EditNftItem not from GM is rejected by the NFTPrinter', async () => {
+        const stranger = await S.blockchain.treasury('strangerEdit');
+        const someItem = await S.blockchain.treasury('someItemEdit');
+        S.messageResult = await S.nftPrinter.sendEditNftItem(stranger.getSender(), {
+            itemAddress: someItem.address,
+            newContent: encodeNftContent({ origin: stranger.address, type: 0, tier: 0 }),
+            value: toNano('0.3'),
+        });
+        expect(S.messageResult.transactions).toHaveTransaction({
+            from: stranger.address,
+            to: S.nftPrinter.address,
+            success: false,
+            exitCode: 401, // ERROR_NOT_FROM_ADMIN
         });
     });
 });
