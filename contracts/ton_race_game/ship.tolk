@@ -275,12 +275,13 @@ fun onInternalMessage(in: InMessage) {
             var storage = lazy ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
             assert (in.valueCoins >= GAS_COST_RESET_SHIP) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            var gameFields = buildGameFields(BASIC_SHIP_HP);
             var fastTravelInfo = FastTravelInfo {
                 enrichedFuelAmount: 0,
             };
 
-            // storage.gameFields = gameFields.toCell();
+            // Note: gameFields (position/HP/rewards) are intentionally preserved.
+            // ResetShip only unblocks a ship stuck after a failed fast travel
+            // (clears movement_in_process + fast-travel fuel + pending mint).
             storage.fastTravelInfo = fastTravelInfo.toCell();
             storage.pending_mint_amount = 0;
             storage.movement_in_process = false;

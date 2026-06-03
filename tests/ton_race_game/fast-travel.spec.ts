@@ -470,5 +470,105 @@ describe('Fast Travel', () => {
         // but the important part is that the coordinate validation passed,
         // allowing the fast travel request to proceed to the travel stage
     });
+
+    it('unblocks a ship stuck after fast travel to a closed cell via ResetShip', async () => {
+        const ERR_FAST_TRAVEL_NOT_ALLOWED_TO_CLOSED_CELLS = 927;
+        const targetXY = { x: 0n, y: 11n }; // a far, never-opened cell
+
+        // Fund enough enriched fuel so the FT request passes all ship-side asserts
+        const forwardPayload = buildJettonUsageForwardPayload(
+            SC_System.game.address,
+            SC_System.ownerShip.address,
+            JettonUsageMode.FAST_TRAVEL_UPGRADE,
+        );
+        SC_System.messageResult = await SC_System.ownerJettonWallet.sendTransfer(
+            SC_System.ownerAccount.getSender(),
+            toNano('1'),
+            5000n,
+            SC_System.gameManager.address,
+            SC_System.ownerAccount.address,
+            beginCell().endCell(),
+            toNano('0.5'),
+            forwardPayload
+        );
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.game.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_FAST_TRAVEL_UPGRADE,
+        });
+
+        // Snapshot ship state before the doomed jump
+        const gameDataBefore = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameDataBefore).not.toBeNull();
+        const maxHpBefore = await SC_System.ownerShip.getMaxHp();
+
+        // Fast travel to a closed (unopened) cell: the ship-side request succeeds and
+        // commits movement_in_process = true, then the coordinate cell rejects the
+        // MOVE with error 927 — nothing bounces back, so the ship is left stuck.
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY
+        );
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+        });
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            success: false,
+            op: Opcodes.OP_MOVE,
+            exitCode: ERR_FAST_TRAVEL_NOT_ALLOWED_TO_CLOSED_CELLS,
+        });
+
+        // Ship is now stuck: movement is flagged in-process and any further move is rejected.
+        expect(await SC_System.ownerShip.getMovementInProcess()).toBe(true);
+        SC_System.messageResult = await SC_System.ownerShip.sendFastTravel(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            targetXY
+        );
+        const ERR_MOVEMENT_ALREADY_IN_PROCESS = 910;
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: false,
+            op: Opcodes.OP_REQUEST_TO_FAST_TRAVEL,
+            exitCode: ERR_MOVEMENT_ALREADY_IN_PROCESS,
+        });
+
+        // ResetShip unblocks the ship without wiping its progress.
+        SC_System.messageResult = await SC_System.ownerShip.sendResetShip(
+            SC_System.ownerAccount.getSender(),
+            toNano('0.1')
+        );
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_RESET_SHIP,
+        });
+
+        // Movement flag cleared, gameFields (position/HP) preserved.
+        expect(await SC_System.ownerShip.getMovementInProcess()).toBe(false);
+        const gameDataAfter = await SC_System.ownerShip.getCurrentGameData();
+        expect(gameDataAfter).not.toBeNull();
+        expect(await SC_System.ownerShip.getMaxHp()).toBe(maxHpBefore);
+
+        // And the ship can act again: a fresh request is accepted at the ship side.
+        SC_System.messageResult = await SC_System.ownerShip.sendMove(
+            SC_System.ownerAccount.getSender(),
+            GAS_COST_SEND_MOVE,
+            MoveMode.UP
+        );
+        expect(SC_System.messageResult.transactions).toHaveTransaction({
+            from: SC_System.ownerAccount.address,
+            to: SC_System.ownerShip.address,
+            success: true,
+            op: Opcodes.OP_REQUEST_TO_MOVE,
+        });
+    });
 });
 

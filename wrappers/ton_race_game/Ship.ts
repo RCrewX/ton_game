@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
-import { encodeRequestToMove, encodeRequestToFastTravel, encodeRequestToHardTravel, encodeRequestShipToMint, loadGameFieldsOpt } from './types';
+import { encodeRequestToMove, encodeRequestToFastTravel, encodeRequestToHardTravel, encodeRequestShipToMint, encodeResetShip, loadGameFieldsOpt } from './types';
 import { MoveMode, XY, HP_TYPE_BITS, HardTravelInfo } from './structs';
 import { Coins, loadCoins } from '@ton/sandbox/dist/config/config.tlb-gen';
 
@@ -66,6 +66,14 @@ export class Ship implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: encodeRequestToHardTravel({ info }),
+        });
+    }
+
+    async sendResetShip(provider: ContractProvider, via: Sender, value: bigint) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeResetShip(),
         });
     }
 
