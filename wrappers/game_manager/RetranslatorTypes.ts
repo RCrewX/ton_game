@@ -227,3 +227,71 @@ export function encodeEditSbt(msg: EditSbt): Cell {
         .storeRef(msg.content)
         .endCell();
 }
+
+// =============================================================================
+// ⚒ ANVIL recipe engine — constants + helpers. Mirror retranslator.tolk.
+// =============================================================================
+export const AnvilRecipe = {
+    COMBINE: 1,     // I(X|K|R)+I(X|K|R) -> I(X|K+1|R)
+    MULTISPLAV: 2,  // I(5|K|N)+I(5|0|R) -> I(5|K+1|N)
+    ZERO_TYPE: 3,   // I(X|K|R) -> I(0|K|R)
+    ZERO_TIER: 4,   // I(X|K|R) -> I(X|0|R)
+    MELT: 5,        // burn item -> mint RUDA
+} as const;
+
+export const AnvilOutcomeKind = {
+    UPDATE: 1,         // overwrite item1 content
+    UPDATE_DESTROY: 2, // overwrite item1 + destroy item2
+    MELT: 3,           // destroy item1 + mint RUDA
+} as const;
+
+// Distinct ANVIL exit codes (retranslator.tolk).
+export const AnvilErrors = {
+    UNKNOWN_RECIPE: 970,
+    TYPE_MISMATCH: 971,
+    TIER_MISMATCH: 972,
+    ORIGIN_MISMATCH: 973,
+    TIER_CAP: 974,
+    NOT_TYPE5: 975,
+    MULTISPLAV_PRIMARY_NOT_NATIVE: 976,
+    MULTISPLAV_SACRIFICE_NOT_TIER0: 977,
+    SAME_ORIGIN_MULTISPLAV: 978,
+    MELT_NON_NATIVE: 979,
+    TIER_TOO_HIGH: 980,
+    NOT_PRINTER: 981,
+    BAD_MULTISPLAV_MINT_AMOUNT: 982,
+} as const;
+
+export const ANVIL_OPCODES = {
+    OP_ANVIL_COMBINE: 0x416e7643,
+    OP_ANVIL_TRANSFORM: 0x416e7654,
+    OP_ANVIL_MELT: 0x416e764d,
+    OP_PRINTER_ANVIL_APPLY: 0x416e7641,
+} as const;
+
+export type AnvilGetInput = {
+    recipe: number;
+    i1Origin: Address;
+    i1Type: number | bigint;
+    i1Tier: number | bigint;
+    i2Origin: Address;
+    i2Type: number | bigint;
+    i2Tier: number | bigint;
+    nativeOrigin: Address;
+};
+
+// TupleItem[] for the get_anvil_outcome get-method.
+export function anvilGetArgs(a: AnvilGetInput) {
+    const addr = (x: Address) => ({ type: 'slice' as const, cell: beginCell().storeAddress(x).endCell() });
+    const int = (x: number | bigint) => ({ type: 'int' as const, value: BigInt(x) });
+    return [
+        int(a.recipe),
+        addr(a.i1Origin),
+        int(a.i1Type),
+        int(a.i1Tier),
+        addr(a.i2Origin),
+        int(a.i2Type),
+        int(a.i2Tier),
+        addr(a.nativeOrigin),
+    ];
+}

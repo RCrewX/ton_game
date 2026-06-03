@@ -10,6 +10,8 @@ import {
     GamesInfo,
     JettonInfo,
     ToolsInfo,
+    AnvilGetInput,
+    anvilGetArgs,
 } from './RetranslatorTypes';
 
 // =============================================================================
@@ -142,5 +144,21 @@ export class Retranslator implements Contract {
     async getNextSbtIndex(provider: ContractProvider): Promise<bigint> {
         const result = await provider.get('get_next_sbt_index', []);
         return result.stack.readBigNumber();
+    }
+
+    // ⚒ ANVIL pure recipe engine (success path). Rejections throw the VM exit
+    // code; tests assert those via blockchain.getContract(addr).get(...).
+    async getAnvilOutcome(
+        provider: ContractProvider,
+        input: AnvilGetInput,
+    ): Promise<{ kind: number; newOrigin: Address; newType: bigint; newTier: bigint; rudaAmount: bigint }> {
+        const result = await provider.get('get_anvil_outcome', anvilGetArgs(input) as any);
+        return {
+            kind: result.stack.readNumber(),
+            newOrigin: result.stack.readAddress(),
+            newType: result.stack.readBigNumber(),
+            newTier: result.stack.readBigNumber(),
+            rudaAmount: result.stack.readBigNumber(),
+        };
     }
 }

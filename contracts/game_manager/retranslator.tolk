@@ -33,6 +33,61 @@ const PRINTER_REVOKE_FORWARD_AMOUNT: coins = ton("0.02"); // collection->item Re
 const PRINTER_FULL_GAME_WALK_GAS: coins = ton("0.2");
 
 // =============================================================================
+//  ⚒  ANVIL RECIPE ENGINE — constants
+//
+//  The recipe rules are HARDCODED here (locked decision: no config registry).
+//  Recipe codes flow in from the NFT printer (which has verified the input item
+//  addresses); R* validates against the items' REPORTED on-chain attributes and
+//  computes the new content (or the melt/mint amount).
+// =============================================================================
+const RECIPE_COMBINE: uint8 = 1;     // I(X|K|R)+I(X|K|R) -> I(X|K+1|R)   (two items)
+const RECIPE_MULTISPLAV: uint8 = 2;  // I(5|K|N)+I(5|0|R) -> I(5|K+1|N)   (two items)
+const RECIPE_ZERO_TYPE: uint8 = 3;   // I(X|K|R) -> I(0|K|R)              (one item)
+const RECIPE_ZERO_TIER: uint8 = 4;   // I(X|K|R) -> I(X|0|R)              (one item)
+const RECIPE_MELT: uint8 = 5;        // burn item -> mint RUDA            (one item)
+
+// Outcome kinds returned by computeAnvil / the recipe getter.
+const ANVIL_OUT_UPDATE: uint8 = 1;          // overwrite item1 content (single transform)
+const ANVIL_OUT_UPDATE_DESTROY: uint8 = 2;  // overwrite item1 content + destroy item2 (combine)
+const ANVIL_OUT_MELT: uint8 = 3;            // destroy item1 + mint rudaAmount RUDA to owner
+
+const TYPE_MULTISPLAV: uint64 = 5;          // type 5 == multisplav alloy
+const TIER_CAP_TYPE0: uint64 = 10;          // type-0 items cap at tier 10
+const MELT_MAX_TIER: uint64 = 30;           // 10^K guard (10^30 < coins max) for native melt
+
+// Melt economics (FLAGGED assumption — see report). Native melt mints (10^K - 1)
+// RAW nano RUDA; the non-native type0/tier10 escape mints 100 WHOLE RUDA. Source
+// is fresh mint via the GM mint path (NFT is burned), matching the SSM model.
+const MELT_HUNDRED_RUDA: coins = ton("100");
+
+// 1000 RUDA -> I(5|0|N): the user transfers RUDA to GM with a TAGGED forwardPayload
+// (>=32 data bits). The normal game-usage payload carries 0 data bits, so the tag
+// is unambiguous. The house keeps the 1000 RUDA (it lands in GM's wallet); a fresh
+// type-5 tier-0 native item is minted to the depositor (burn-and-mint, SSM model).
+const ANVIL_MULTISPLAV_MINT_TAG: uint32 = 0x4d756c74; // "Mult"
+const MULTISPLAV_MINT_STAKE: coins = ton("1000");     // FLAGGED: 1000 whole RUDA (9-dec)
+
+// TON budgets for the ANVIL return chain (printer item ops + the melt mint).
+const ANVIL_ITEM_OP_TON: coins = ton("0.05");   // collection -> item update/destroy hop
+const ANVIL_DESTROY_TON: coins = ton("0.05");   // item1 -> item2 destroy hop
+
+// ANVIL error codes — R*'s own ANVIL range (970..989), distinct from R* (901..935),
+// SSM (940..959), SBT (950..959 are NOT used by R*), printers (399..405, 96x).
+const ERR_ANVIL_UNKNOWN_RECIPE = 970;
+const ERR_ANVIL_TYPE_MISMATCH = 971;          // combine inputs differ in type
+const ERR_ANVIL_TIER_MISMATCH = 972;          // combine inputs differ in tier
+const ERR_ANVIL_ORIGIN_MISMATCH = 973;        // combine inputs differ in origin
+const ERR_ANVIL_TIER_CAP = 974;               // type-0 combine would exceed tier 10
+const ERR_ANVIL_NOT_TYPE5 = 975;              // multisplav input is not type 5
+const ERR_ANVIL_MULTISPLAV_PRIMARY_NOT_NATIVE = 976; // I(5|K|N) primary must be native
+const ERR_ANVIL_MULTISPLAV_SACRIFICE_NOT_TIER0 = 977; // sacrifice must be I(5|0|R)
+const ERR_ANVIL_SAME_ORIGIN_MULTISPLAV = 978; // sacrifice shares the native origin
+const ERR_ANVIL_MELT_NON_NATIVE = 979;        // non-native melt allowed only for I(0|10|R)
+const ERR_ANVIL_TIER_TOO_HIGH = 980;          // native melt 10^K guard
+const ERR_ANVIL_NOT_PRINTER = 981;            // ANVIL request initiator is not the NFT printer
+const ERR_ANVIL_BAD_MULTISPLAV_MINT_AMOUNT = 982; // 1000-RUDA mint: wrong stake
+
+// =============================================================================
 //  R*-private registries & types (GM never imports these — decoupling invariant)
 // =============================================================================
 
@@ -214,6 +269,146 @@ struct (0x00000007) PrinterEditSbtItem {
 }
 
 // =============================================================================
+//  ⚒  ANVIL RECIPE ENGINE — request / result types + the pure rule engine
+//
+//  Inbound (wrapped in R1.data -> R2.data, sent by the NFT printer collection
+//  AFTER it verified the input item addresses): the reported on-chain attributes
+//  of the input item(s) + the chosen recipe. R* re-validates and computes.
+//
+//  Outbound: an R3 to the NFT printer collection (PrinterAnvilApply) telling it
+//  to overwrite item1's content and/or destroy item2; for MELT, R* ALSO emits a
+//  second R3 to the jetton minter to mint the RUDA payout to the owner.
+//
+//  Each item's attributes ride in a ref cell to keep the request under 1023 bits.
+// =============================================================================
+
+// NFT item content — MUST stay byte-identical to the NFTPrinter's NFTContent
+// (contracts/printers/nft_printer/storage.tolk): {origin, itemType, tier}. R*
+// builds it here for ANVIL updates; the printer/item type it on the other side.
+struct NFTContent {
+    origin: address
+    itemType: uint64
+    tier: uint64
+}
+
+// Reported on-chain attributes of one NFT item (from the item's stored content).
+struct AnvilItemAttrs {
+    index: uint64
+    origin: address
+    itemType: uint64
+    tier: uint64
+}
+
+// Two-item recipes (combine / multisplav).
+struct (0x416e7643) AnvilCombine {     // "AnvC"
+    recipe: uint8
+    owner: address                     // the user who owns both items (cashback target)
+    item1: Cell<AnvilItemAttrs>
+    item2: Cell<AnvilItemAttrs>
+}
+
+// Single-item content transforms (zero-type / zero-tier).
+struct (0x416e7654) AnvilTransform {   // "AnvT"
+    recipe: uint8
+    owner: address
+    item1: Cell<AnvilItemAttrs>
+}
+
+// Single-item melt (burn -> mint RUDA).
+struct (0x416e764d) AnvilMelt {        // "AnvM"
+    owner: address
+    item1: Cell<AnvilItemAttrs>
+}
+
+// R* -> NFT printer collection: apply the computed ANVIL outcome.
+//   kind == ANVIL_OUT_UPDATE          -> SetNftContent on item1
+//   kind == ANVIL_OUT_UPDATE_DESTROY  -> update item1, then item1 destroys item2
+//   kind == ANVIL_OUT_MELT            -> destroy item1 (RUDA minted by a 2nd R3)
+struct (0x416e7641) PrinterAnvilApply { // "AnvA"
+    queryId: uint64
+    kind: uint8
+    item1Index: uint64
+    newContent: cell        // Cell<NFTContent>; ignored for MELT
+    item2Index: uint64      // valid only for ANVIL_OUT_UPDATE_DESTROY
+    owner: address          // cashback / prev-owner target
+}
+
+// Computed ANVIL outcome (also exposed verbatim through get_anvil_outcome).
+struct AnvilOutcome {
+    kind: uint8
+    newOrigin: address
+    newType: uint64
+    newTier: uint64
+    rudaAmount: coins
+}
+
+fun pow10(k: int): int {
+    var r: int = 1;
+    var i: int = 0;
+    while (i < k) {
+        r *= 10;
+        i += 1;
+    }
+    return r;
+}
+
+// THE pure rule engine. Validates the recipe against the reported attributes and
+// returns the new content / payout. Every rejection throws a distinct named code.
+// `nativeOrigin` is the RUDA jetton master (== "N").
+fun computeAnvil(
+    recipe: uint8,
+    i1Origin: address, i1Type: uint64, i1Tier: uint64,
+    i2Origin: address, i2Type: uint64, i2Tier: uint64,
+    nativeOrigin: address,
+): AnvilOutcome {
+    if (recipe == RECIPE_COMBINE) {
+        // I(X|K|R) + I(X|K|R) -> I(X|K+1|R). Both inputs must match fully.
+        assert (i1Type == i2Type) throw ERR_ANVIL_TYPE_MISMATCH;
+        assert (i1Tier == i2Tier) throw ERR_ANVIL_TIER_MISMATCH;
+        assert (i1Origin == i2Origin) throw ERR_ANVIL_ORIGIN_MISMATCH;
+        // Two type-5 with the SAME origin is the forbidden multisplav case.
+        assert (i1Type != TYPE_MULTISPLAV) throw ERR_ANVIL_SAME_ORIGIN_MULTISPLAV;
+        if (i1Type == 0) {
+            assert (i1Tier + 1 <= TIER_CAP_TYPE0) throw ERR_ANVIL_TIER_CAP;
+        }
+        return { kind: ANVIL_OUT_UPDATE_DESTROY, newOrigin: i1Origin, newType: i1Type, newTier: i1Tier + 1, rudaAmount: 0 };
+    }
+
+    if (recipe == RECIPE_MULTISPLAV) {
+        // I(5|K|N) + I(5|0|R) -> I(5|K+1|N). Primary native, sacrifice tier-0 non-native.
+        assert (i1Type == TYPE_MULTISPLAV) throw ERR_ANVIL_NOT_TYPE5;
+        assert (i2Type == TYPE_MULTISPLAV) throw ERR_ANVIL_NOT_TYPE5;
+        assert (i1Origin == nativeOrigin) throw ERR_ANVIL_MULTISPLAV_PRIMARY_NOT_NATIVE;
+        assert (i2Tier == 0) throw ERR_ANVIL_MULTISPLAV_SACRIFICE_NOT_TIER0;
+        // Sacrifice must be a DIFFERENT origin (non-native): same origin -> forbidden.
+        assert (i2Origin != nativeOrigin) throw ERR_ANVIL_SAME_ORIGIN_MULTISPLAV;
+        return { kind: ANVIL_OUT_UPDATE_DESTROY, newOrigin: nativeOrigin, newType: TYPE_MULTISPLAV, newTier: i1Tier + 1, rudaAmount: 0 };
+    }
+
+    if (recipe == RECIPE_ZERO_TYPE) {
+        return { kind: ANVIL_OUT_UPDATE, newOrigin: i1Origin, newType: 0, newTier: i1Tier, rudaAmount: 0 };
+    }
+
+    if (recipe == RECIPE_ZERO_TIER) {
+        return { kind: ANVIL_OUT_UPDATE, newOrigin: i1Origin, newType: i1Type, newTier: 0, rudaAmount: 0 };
+    }
+
+    if (recipe == RECIPE_MELT) {
+        if (i1Origin == nativeOrigin) {
+            // Native melt: I(X|K|N) -> (10^K - 1) raw RUDA.
+            assert (i1Tier <= MELT_MAX_TIER) throw ERR_ANVIL_TIER_TOO_HIGH;
+            val amt = pow10(i1Tier) - 1;
+            return { kind: ANVIL_OUT_MELT, newOrigin: i1Origin, newType: i1Type, newTier: i1Tier, rudaAmount: amt as coins };
+        }
+        // Non-native: the ONLY melt path is I(0|10|R) -> 100 RUDA.
+        assert (i1Type == 0 && i1Tier == TIER_CAP_TYPE0) throw ERR_ANVIL_MELT_NON_NATIVE;
+        return { kind: ANVIL_OUT_MELT, newOrigin: i1Origin, newType: i1Type, newTier: i1Tier, rudaAmount: MELT_HUNDRED_RUDA };
+    }
+
+    throw ERR_ANVIL_UNKNOWN_RECIPE;
+}
+
+// =============================================================================
 //  R*-private config messages (opcodes verified unique vs the existing set)
 // =============================================================================
 
@@ -283,8 +478,11 @@ type AllowedRequests =
     | MintNft
     | MintSbt
     | RevokeSbt
-    | EditNft   // ⚒ ANVIL
-    | EditSbt   // ⚒ ANVIL
+    | EditNft   // ⚒ ANVIL (opaque content edit, owner-only)
+    | EditSbt   // ⚒ ANVIL (opaque content edit, owner-only)
+    | AnvilCombine    // ⚒ ANVIL recipe engine (two-item)
+    | AnvilTransform  // ⚒ ANVIL recipe engine (single-item transform)
+    | AnvilMelt       // ⚒ ANVIL recipe engine (single-item burn -> RUDA)
 
 
 fun onInternalMessage(in: InMessage) {
@@ -441,6 +639,43 @@ fun onInternalMessage(in: InMessage) {
                     }
                     val payloadCell = forwardPayloadSlice.loadRef();
                     var payloadSlice = payloadCell.beginParse();
+
+                    // ⚒ ANVIL 1000-RUDA mint: a tagged payload (>=32 data bits) requests
+                    // I(5|0|N). The wallet was already verified as GM's RUDA wallet above,
+                    // so the deposit is real; the depositor (transferInitiator) gets the item.
+                    if (payloadSlice.remainingBitsCount() >= 32) {
+                        val tag = payloadSlice.loadUint(32);
+                        if (tag == ANVIL_MULTISPLAV_MINT_TAG) {
+                            assert (request.jettonAmount == MULTISPLAV_MINT_STAKE) throw ERR_ANVIL_BAD_MULTISPLAV_MINT_AMOUNT;
+                            assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
+                            val toolsInfoM = storage.toolsInfo!.load();
+                            assert (toolsInfoM.nftPrinterAddress != null) throw ERR_NFT_PRINTER_NOT_SET;
+                            assert (request.transferInitiator != null) throw ERR_MISSING_REQUIRED_DATA;
+
+                            val content: NFTContent = {
+                                origin: jettonInfo.jettonMinterAddress, // native origin "N"
+                                itemType: TYPE_MULTISPLAV,
+                                tier: 0,
+                            };
+                            val index = storage.nextNftIndex;
+                            val initParams = PrinterNftItemInit {
+                                ownerAddress: request.transferInitiator!,
+                                content: content.toCell(),
+                            };
+                            val deployNft = PrinterDeployNft {
+                                queryId: 0,
+                                itemIndex: index,
+                                attachTonAmount: PRINTER_ITEM_DEPLOY_AMOUNT,
+                                initParams: initParams.toCell(),
+                            };
+                            storage.nextNftIndex = index + 1;
+                            storage.save();
+                            reserveValue(in.valueCoins);
+                            emitR3(storage.gameManagerAddress, toolsInfoM.nftPrinterAddress!, deployNft.toCell());
+                            return;
+                        }
+                    }
+
                     if (payloadSlice.remainingRefsCount() < 2) {
                         reserveValue(in.valueCoins);
                         sendEmptyBackToGameManager(storage.gameManagerAddress);
@@ -581,6 +816,109 @@ fun onInternalMessage(in: InMessage) {
                     reserveValue(in.valueCoins);
                     emitR3(storage.gameManagerAddress, toolsInfo.sbtPrinterAddress!, editItem.toCell());
                 }
+
+                // ----------------------------------------------------------------
+                //  ⚒  ANVIL recipe engine arms. Initiator MUST be the NFT printer
+                //  (it has verified the input item addresses up the gate chain).
+                //  R* validates against the REPORTED attributes and computes the
+                //  new content / payout, then returns the apply-R3 to the printer.
+                // ----------------------------------------------------------------
+                AnvilCombine => {
+                    val toolsInfo = assertAnvilFromPrinter(storage, msg.initiator);
+                    val nativeOrigin = anvilNativeOrigin(storage);
+                    val i1 = request.item1.load();
+                    val i2 = request.item2.load();
+                    val outcome = computeAnvil(
+                        request.recipe,
+                        i1.origin, i1.itemType, i1.tier,
+                        i2.origin, i2.itemType, i2.tier,
+                        nativeOrigin);
+                    val newContent: NFTContent = {
+                        origin: outcome.newOrigin, itemType: outcome.newType, tier: outcome.newTier,
+                    };
+                    val apply = PrinterAnvilApply {
+                        queryId: 0,
+                        kind: outcome.kind,
+                        item1Index: i1.index,
+                        newContent: newContent.toCell(),
+                        item2Index: i2.index,
+                        owner: request.owner,
+                    };
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, toolsInfo.nftPrinterAddress!, apply.toCell());
+                }
+
+                AnvilTransform => {
+                    val toolsInfo = assertAnvilFromPrinter(storage, msg.initiator);
+                    val nativeOrigin = anvilNativeOrigin(storage);
+                    val i1 = request.item1.load();
+                    val outcome = computeAnvil(
+                        request.recipe,
+                        i1.origin, i1.itemType, i1.tier,
+                        i1.origin, i1.itemType, i1.tier, // i2 unused for single-item recipes
+                        nativeOrigin);
+                    val newContent: NFTContent = {
+                        origin: outcome.newOrigin, itemType: outcome.newType, tier: outcome.newTier,
+                    };
+                    val apply = PrinterAnvilApply {
+                        queryId: 0,
+                        kind: outcome.kind,
+                        item1Index: i1.index,
+                        newContent: newContent.toCell(),
+                        item2Index: 0,
+                        owner: request.owner,
+                    };
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, toolsInfo.nftPrinterAddress!, apply.toCell());
+                }
+
+                AnvilMelt => {
+                    val toolsInfo = assertAnvilFromPrinter(storage, msg.initiator);
+                    assert (storage.jettonInfo != null) throw ERR_JETTON_MINTER_NOT_SET;
+                    val jettonInfo = storage.jettonInfo!.load();
+                    val nativeOrigin = jettonInfo.jettonMinterAddress;
+                    val i1 = request.item1.load();
+                    val outcome = computeAnvil(
+                        RECIPE_MELT,
+                        i1.origin, i1.itemType, i1.tier,
+                        i1.origin, i1.itemType, i1.tier,
+                        nativeOrigin);
+
+                    // (1) destroy item1 via the printer (cashback to owner happens there).
+                    val apply = PrinterAnvilApply {
+                        queryId: 0,
+                        kind: outcome.kind, // ANVIL_OUT_MELT
+                        item1Index: i1.index,
+                        newContent: beginCell().endCell(),
+                        item2Index: 0,
+                        owner: request.owner,
+                    };
+                    reserveValue(in.valueCoins);
+                    // Bounded value for the destroy hop; the rest funds the RUDA mint.
+                    emitR3Value(storage.gameManagerAddress, toolsInfo.nftPrinterAddress!, apply.toCell(),
+                        ANVIL_DESTROY_TON + ANVIL_ITEM_OP_TON, SEND_MODE_PAY_FEES_SEPARATELY);
+
+                    // (2) mint the RUDA payout to the owner (skip if amount is 0).
+                    if (outcome.rudaAmount > 0) {
+                        val forwardPayload: ForwardPayloadRemainder = beginCell().toSlice();
+                        val internalTransferStep = InternalTransferStep {
+                            queryId: 0,
+                            jettonAmount: outcome.rudaAmount,
+                            transferInitiator: null,
+                            sendExcessesTo: request.owner,
+                            forwardTonAmount: ton("0.05"),
+                            forwardPayload: forwardPayload,
+                        };
+                        val mintNewJettons = MintNewJettons {
+                            queryId: 0,
+                            mintRecipient: request.owner,
+                            tonAmount: MINT_TON_AMOUNT,
+                            internalTransferMsg: internalTransferStep.toCell(),
+                        };
+                        emitR3Value(storage.gameManagerAddress, jettonInfo.jettonMinterAddress,
+                            mintNewJettons.toCell(), 0, SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+                    }
+                }
             }
         }
 
@@ -628,6 +966,38 @@ fun emitR3(gameManagerAddress: address, recipient: address, data: cell) {
         }
     });
     r3.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+}
+
+// R* -[R3]-> GM with an EXPLICIT value + send mode (used when one tx must emit
+// MORE than one R3, e.g. MELT = destroy item1 (bounded) + mint RUDA (carry-all)).
+fun emitR3Value(gameManagerAddress: address, recipient: address, data: cell, value: coins, mode: int) {
+    val r3 = createMessage({
+        bounce: BounceMode.NoBounce,
+        dest: gameManagerAddress,
+        value: value,
+        body: R3 {
+            recipient: recipient,
+            data: data,
+        }
+    });
+    r3.send(mode);
+}
+
+// ANVIL gate: the request initiator must be the configured NFT printer collection
+// (which has already verified the input item addresses). Returns the ToolsInfo.
+fun assertAnvilFromPrinter(storage: RetranslatorStorage, initiator: address): ToolsInfo {
+    assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
+    val toolsInfo = storage.toolsInfo!.load();
+    assert (toolsInfo.nftPrinterAddress != null) throw ERR_NFT_PRINTER_NOT_SET;
+    assert (initiator == toolsInfo.nftPrinterAddress!) throw ERR_ANVIL_NOT_PRINTER;
+    return toolsInfo;
+}
+
+// The native origin "N" == the RUDA jetton master.
+fun anvilNativeOrigin(storage: RetranslatorStorage): address {
+    assert (storage.jettonInfo != null) throw ERR_JETTON_MINTER_NOT_SET;
+    val jettonInfo = storage.jettonInfo!.load();
+    return jettonInfo.jettonMinterAddress;
 }
 
 // Abort path: nothing to emit, just hand the remaining value back to GM.
@@ -810,4 +1180,23 @@ get fun get_next_nft_index(): int {
 get fun get_next_sbt_index(): int {
     var storage = lazy RetranslatorStorage.load();
     return storage.nextSbtIndex;
+}
+
+// ⚒ ANVIL recipe engine exposed for exhaustive unit testing. Returns
+// (kind, newOrigin, newType, newTier, rudaAmount); rejections throw the named
+// recipe error so tests can assert the exact exit code. `nativeOrigin` lets the
+// test drive native vs non-native origins explicitly.
+get fun get_anvil_outcome(
+    recipe: int,
+    i1Origin: address, i1Type: int, i1Tier: int,
+    i2Origin: address, i2Type: int, i2Tier: int,
+    nativeOrigin: address,
+): (int, address, int, int, coins) {
+    val o = computeAnvil(
+        recipe as uint8,
+        i1Origin, i1Type as uint64, i1Tier as uint64,
+        i2Origin, i2Type as uint64, i2Tier as uint64,
+        nativeOrigin,
+    );
+    return (o.kind, o.newOrigin, o.newType as int, o.newTier as int, o.rudaAmount);
 }

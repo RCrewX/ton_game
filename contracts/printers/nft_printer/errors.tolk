@@ -10,3 +10,7 @@ const ERROR_INVALID_ITEM_INDEX = 402
 const ERROR_INCORRECT_FORWARD_PAYLOAD = 708
 const ERROR_INVALID_WORKCHAIN = 333
 const ERROR_TOO_SMALL_REST_AMOUNT = 402
+
+// ⚒ ANVIL — extra item/collection gates (distinct from the legacy TEP-62 codes).
+const ERROR_NOT_FROM_PREV = 410        // ANVIL hop/destroy sender is not the real previous item
+const ERROR_ANVIL_OWNER_MISMATCH = 411 // the two items are not owned by the same user
