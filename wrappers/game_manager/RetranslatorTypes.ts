@@ -25,6 +25,14 @@ export const ROpcodes = {
     OP_INTERNAL_TRANSFER_STEP: 0x178d4519,
     OP_MINT_NEW_JETTONS: 0x00000015,
     OP_ASK_TO_BURN: 0x595f07bc,
+    // Printer recipe requests (wrapped in R1.data). Must match retranslator.tolk.
+    OP_MINT_NFT: 0x4d6e6674,
+    OP_MINT_SBT: 0x4d736274,
+    OP_REVOKE_SBT: 0x52766b73,
+    // Printer output bodies emitted by GM (R4). Must match the printer collections.
+    OP_PRINTER_DEPLOY_NFT: 0x00000001,
+    OP_PRINTER_DEPLOY_SBTN: 0x00000001,
+    OP_PRINTER_REVOKE_SBTN_ITEM: 0x00000004,
 } as const;
 
 // ----- Registry shapes -----
@@ -64,6 +72,11 @@ export type RequestBurn = {
 
 // ----- Output body shape (delivered by GM to a game) -----
 export type JettonUsed = { jettonAmount: bigint; data: Cell };
+
+// ----- Printer recipe request shapes (wrapped inside R1.data) -----
+export type MintNft = { receiver: Address; content: Cell };
+export type MintSbt = { receiver: Address; individualContent: Cell };
+export type RevokeSbt = { queryId: bigint; itemAddress: Address };
 
 // ----- Registry encoders -----
 export function encodeJettonInfo(info: JettonInfo): Cell {
@@ -129,5 +142,30 @@ export function encodeJettonUsed(msg: JettonUsed): Cell {
         .storeUint(ROpcodes.OP_JETTON_USED, 32)
         .storeCoins(msg.jettonAmount)
         .storeRef(msg.data)
+        .endCell();
+}
+
+// ----- Printer recipe request encoders (wrapped in R1 before sending to GM) -----
+export function encodeMintNft(msg: MintNft): Cell {
+    return beginCell()
+        .storeUint(ROpcodes.OP_MINT_NFT, 32)
+        .storeAddress(msg.receiver)
+        .storeRef(msg.content)
+        .endCell();
+}
+
+export function encodeMintSbt(msg: MintSbt): Cell {
+    return beginCell()
+        .storeUint(ROpcodes.OP_MINT_SBT, 32)
+        .storeAddress(msg.receiver)
+        .storeRef(msg.individualContent)
+        .endCell();
+}
+
+export function encodeRevokeSbt(msg: RevokeSbt): Cell {
+    return beginCell()
+        .storeUint(ROpcodes.OP_REVOKE_SBT, 32)
+        .storeUint(msg.queryId, 64)
+        .storeAddress(msg.itemAddress)
         .endCell();
 }

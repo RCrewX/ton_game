@@ -65,6 +65,9 @@ export interface NetworkDeploymentData {
     ownerAddress?: AddressInfo;
     gameManager?: AddressInfo;
     retranslator?: AddressInfo;
+    /** GM-owned, R*-governed printers (collections). admin == gameManager. */
+    nftPrinter?: AddressInfo;
+    sbtPrinter?: AddressInfo;
     jettonMinter?: AddressInfo;
     ownerJettonWallet?: AddressInfo;
     ship_station?: AddressInfo;
@@ -99,6 +102,9 @@ export interface ContractCodes {
     /** Optional: SBTN collection/item code hashes (TEP-6666) */
     sbtnCollection?: ContractCodeInfo;
     sbtnItem?: ContractCodeInfo;
+    /** Optional: GM-owned printer collection code hashes (v1 = mint + revoke) */
+    nftPrinter?: ContractCodeInfo;
+    sbtPrinter?: ContractCodeInfo;
 }
 
 /**

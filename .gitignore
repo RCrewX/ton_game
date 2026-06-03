@@ -8,6 +8,7 @@ dist
 .DS_Store
 package.ts
 .env
+*.bak.*
 .privatekey
 
 # VS Code

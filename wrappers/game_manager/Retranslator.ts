@@ -28,6 +28,8 @@ export type RetranslatorConfig = {
     jettonInfo?: Cell | null; // Cell<JettonInfo>
     gamesInfo?: Cell | null; // Cell<GamesInfo>
     toolsInfo?: Cell | null; // Cell<ToolsInfo>
+    nextNftIndex?: bigint | number; // R*-tracked printer mint counter (NFT)
+    nextSbtIndex?: bigint | number; // R*-tracked printer mint counter (SBT)
 };
 
 export function retranslatorConfigToCell(config: RetranslatorConfig): Cell {
@@ -40,6 +42,8 @@ export function retranslatorConfigToCell(config: RetranslatorConfig): Cell {
         .storeMaybeRef(config.jettonInfo ?? null)
         .storeMaybeRef(config.gamesInfo ?? null)
         .storeMaybeRef(config.toolsInfo ?? null)
+        .storeUint(config.nextNftIndex ?? 0, 64)
+        .storeUint(config.nextSbtIndex ?? 0, 256)
         .endCell();
 }
 
@@ -128,5 +132,15 @@ export class Retranslator implements Contract {
     async getToolsInfo(provider: ContractProvider): Promise<Cell | null> {
         const result = await provider.get('get_tools_info', []);
         return result.stack.readCellOpt();
+    }
+
+    async getNextNftIndex(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('get_next_nft_index', []);
+        return result.stack.readBigNumber();
+    }
+
+    async getNextSbtIndex(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('get_next_sbt_index', []);
+        return result.stack.readBigNumber();
     }
 }

@@ -1,6 +1,14 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
 import { encodeR1, encodeRedirectMessage, encodeSetRetranslator, RedirectMessage } from './types';
-import { encodeForwardMintRequest, encodeRequestBurn, ForwardMintRequest, RequestBurn } from './RetranslatorTypes';
+import {
+    encodeForwardMintRequest,
+    encodeRequestBurn,
+    encodeMintNft,
+    encodeMintSbt,
+    encodeRevokeSbt,
+    ForwardMintRequest,
+    RequestBurn,
+} from './RetranslatorTypes';
 
 // =============================================================================
 // GameManager (GM) — the stable dumb pipe + sole on-chain authority.
@@ -107,6 +115,39 @@ export class GameManager implements Contract {
         queryId: bigint = 0n,
     ) {
         await this.sendR1(provider, via, value, encodeRequestBurn({ queryId, jettonAmount, sendExcessesTo, customPayload }));
+    }
+
+    /** Convenience: R1-wrap a MintNft printer request (initiator = game OR owner). */
+    async sendMintNft(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        receiver: Address,
+        content: Cell,
+    ) {
+        await this.sendR1(provider, via, value, encodeMintNft({ receiver, content }));
+    }
+
+    /** Convenience: R1-wrap a MintSbt printer request (initiator = game OR owner). */
+    async sendMintSbt(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        receiver: Address,
+        individualContent: Cell,
+    ) {
+        await this.sendR1(provider, via, value, encodeMintSbt({ receiver, individualContent }));
+    }
+
+    /** Convenience: R1-wrap a RevokeSbt printer request (owner-only on R*). */
+    async sendRevokeSbt(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        itemAddress: Address,
+        queryId: bigint = 0n,
+    ) {
+        await this.sendR1(provider, via, value, encodeRevokeSbt({ queryId, itemAddress }));
     }
 
     async sendRedirectMessage(

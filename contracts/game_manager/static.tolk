@@ -44,6 +44,9 @@ const ERR_INVALID_GAMES_INFO = 929;  // Games info validation failed (first game
 const ERR_GAME_NOT_FOUND = 930;  // Game not found in all_games list
 const ERR_RETRANSLATOR_INACTIVE = 931;  // Retranslator kill-switch is engaged (active == false)
 const ERR_INVALID_RETRANSLATOR_SENDER = 932;  // Sender is not the configured retranslator address
+const ERR_TOOLS_INFO_NOT_SET = 933;  // ToolsInfo registry is not set (null) on R*
+const ERR_NFT_PRINTER_NOT_SET = 934;  // ToolsInfo.nftPrinterAddress is null
+const ERR_SBT_PRINTER_NOT_SET = 935;  // ToolsInfo.sbtPrinterAddress is null
 
 const SEND_MODE_CARRY_ALL_REMAINING_BALANCE: uint8 = 128;
 

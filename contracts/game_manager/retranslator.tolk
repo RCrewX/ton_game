@@ -25,6 +25,13 @@ R* never sends directly to a minter/wallet; it only returns R3 and GM sends outb
 
 const VERSION: uint64 = 1;
 
+// TON forwarded to a printer ITEM at deploy/revoke. The collection keeps the rest
+// of the carry-all balance; callers must attach enough to R1 (>= ~0.3 TON).
+const PRINTER_ITEM_DEPLOY_AMOUNT: coins = ton("0.05"); // item storage + init gas
+const PRINTER_REVOKE_FORWARD_AMOUNT: coins = ton("0.02"); // collection->item Revoke
+// Full games-list walk for a printer mint is only attempted with enough gas.
+const PRINTER_FULL_GAME_WALK_GAS: coins = ton("0.2");
+
 // =============================================================================
 //  R*-private registries & types (GM never imports these — decoupling invariant)
 // =============================================================================
@@ -91,6 +98,40 @@ struct (0x595f07bc) AskToBurn {
     customPayload: cell?
 }
 
+// ---- Printer output bodies (built here, packed into R3.data, emitted by GM) ----
+// These MUST stay byte-compatible with the printer collection message structs:
+//   PrinterDeployNft        <-> contracts/printers/nft_printer/messages.tolk DeployNft
+//   PrinterNftItemInit      <-> nft_printer NftItemInitAtDeployment (opcode-less payload)
+//   PrinterDeploySbtn       <-> contracts/printers/sbt_printer/messages.tolk DeploySbtn
+//   PrinterRevokeSbtnItem   <-> sbt_printer RevokeSbtnItem
+// DeployNft and DeploySbtn share opcode 0x00000001 but target DIFFERENT printers,
+// so there is no ambiguity (these are build-only; never parsed in a union).
+
+struct PrinterNftItemInit {
+    ownerAddress: address
+    content: cell        // Cell<SnakeString> on the item side; opaque to R*
+}
+
+struct (0x00000001) PrinterDeployNft {
+    queryId: uint64
+    itemIndex: uint64
+    attachTonAmount: coins
+    initParams: Cell<PrinterNftItemInit>
+}
+
+struct (0x00000001) PrinterDeploySbtn {
+    queryId: uint64
+    ownerAddress: address
+    index: uint256
+    attachTonAmount: coins
+    individualContent: cell
+}
+
+struct (0x00000004) PrinterRevokeSbtnItem {
+    queryId: uint64
+    itemAddress: address
+}
+
 // =============================================================================
 //  R*-private inbound request bodies (wrapped inside R2.data)
 // =============================================================================
@@ -105,6 +146,26 @@ struct (0x8b9c0d1e) RequestBurn {
     jettonAmount: coins
     sendExcessesTo: address?
     customPayload: cell?
+}
+
+// ---- Printer recipe requests (wrapped inside R1.data -> R2.data) ----
+// Opcodes verified unique vs the existing set. GM never parses these.
+//   MintNft  : mint one transferable NFT to `receiver` (initiator = game OR owner)
+//   MintSbt  : mint one soulbound SBT to `receiver`     (initiator = game OR owner)
+//   RevokeSbt: revoke an SBT item by address            (initiator = OWNER ONLY)
+struct (0x4d6e6674) MintNft {            // "Mnft"
+    receiver: address
+    content: cell                        // Cell<SnakeString> for the item; opaque to R*
+}
+
+struct (0x4d736274) MintSbt {            // "Msbt"
+    receiver: address
+    individualContent: cell              // set-once opaque content for the SBT item
+}
+
+struct (0x52766b73) RevokeSbt {          // "Rvks"
+    queryId: uint64
+    itemAddress: address                 // owner supplies the item address to revoke
 }
 
 // =============================================================================
@@ -140,6 +201,12 @@ struct RetranslatorStorage {
     jettonInfo: Cell<JettonInfo>?
     gamesInfo: Cell<GamesInfo>?
     toolsInfo: Cell<ToolsInfo>?
+    // R*-tracked printer mint counters (the chosen index scheme, O-C). Global
+    // monotonic indices: NFT items are keyed by (collection,index); SBT items by
+    // (collection,owner,index) — a GLOBALLY unique index guarantees per-owner SBT
+    // uniqueness without a per-owner dict. R* increments on each successful mint.
+    nextNftIndex: uint64
+    nextSbtIndex: uint256
 }
 
 fun RetranslatorStorage.load() {
@@ -168,6 +235,9 @@ type AllowedRequests =
     | ForwardMintRequest
     | TransferNotificationForRecipient
     | RequestBurn
+    | MintNft
+    | MintSbt
+    | RevokeSbt
 
 
 fun onInternalMessage(in: InMessage) {
@@ -359,6 +429,74 @@ fun onInternalMessage(in: InMessage) {
                     reserveValue(in.valueCoins);
                     emitR3(storage.gameManagerAddress, gameManagerWalletAddress, askToBurn.toCell());
                 }
+
+                // Mint one TEP-62 NFT to `receiver` via the NFTPrinter.
+                // Recipe policy v1: initiator = a registered game OR the owner.
+                // R* assigns the global nextNftIndex and tells GM to emit DeployNft
+                // to the printer (sender == admin == GM). [extension point: richer
+                // recipe registry lands here without touching GM.]
+                MintNft => {
+                    assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
+                    val toolsInfo = storage.toolsInfo!.load();
+                    assert (toolsInfo.nftPrinterAddress != null) throw ERR_NFT_PRINTER_NOT_SET;
+                    assertMintInitiatorAllowed(storage, msg.initiator, in.valueCoins);
+
+                    val index = storage.nextNftIndex;
+                    val initParams = PrinterNftItemInit {
+                        ownerAddress: request.receiver,
+                        content: request.content,
+                    };
+                    val deployNft = PrinterDeployNft {
+                        queryId: 0,
+                        itemIndex: index,
+                        attachTonAmount: PRINTER_ITEM_DEPLOY_AMOUNT,
+                        initParams: initParams.toCell(),
+                    };
+                    storage.nextNftIndex = index + 1;
+                    storage.save();
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, toolsInfo.nftPrinterAddress!, deployNft.toCell());
+                }
+
+                // Mint one soulbound SBT to `receiver` via the SBTPrinter.
+                // Recipe policy v1: initiator = a registered game OR the owner.
+                // Global nextSbtIndex guarantees per-owner item uniqueness.
+                MintSbt => {
+                    assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
+                    val toolsInfo = storage.toolsInfo!.load();
+                    assert (toolsInfo.sbtPrinterAddress != null) throw ERR_SBT_PRINTER_NOT_SET;
+                    assertMintInitiatorAllowed(storage, msg.initiator, in.valueCoins);
+
+                    val index = storage.nextSbtIndex;
+                    val deploySbtn = PrinterDeploySbtn {
+                        queryId: 0,
+                        ownerAddress: request.receiver,
+                        index: index,
+                        attachTonAmount: PRINTER_ITEM_DEPLOY_AMOUNT,
+                        individualContent: request.individualContent,
+                    };
+                    storage.nextSbtIndex = index + 1;
+                    storage.save();
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, toolsInfo.sbtPrinterAddress!, deploySbtn.toCell());
+                }
+
+                // Revoke an SBT item. OWNER-ONLY (high-value). The owner supplies the
+                // item address; R* tells GM to emit RevokeSbtnItem to the SBTPrinter,
+                // which forwards Revoke to the item (item checks sender == collection).
+                RevokeSbt => {
+                    assert (msg.initiator == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
+                    assert (storage.toolsInfo != null) throw ERR_TOOLS_INFO_NOT_SET;
+                    val toolsInfo = storage.toolsInfo!.load();
+                    assert (toolsInfo.sbtPrinterAddress != null) throw ERR_SBT_PRINTER_NOT_SET;
+
+                    val revokeItem = PrinterRevokeSbtnItem {
+                        queryId: request.queryId,
+                        itemAddress: request.itemAddress,
+                    };
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, toolsInfo.sbtPrinterAddress!, revokeItem.toCell());
+                }
             }
         }
 
@@ -520,6 +658,22 @@ fun checkGame(gameAddress: address, all_games: cell): uint16 {
     return 0; // Not found
 }
 
+// Recipe policy v1 for printer MINTS: initiator must be a registered game OR the
+// owner. Cheap active-game check first; full all_games walk only with enough gas.
+// THIS is the documented extension point for the future recipe registry.
+fun assertMintInitiatorAllowed(storage: RetranslatorStorage, initiator: address, valueCoins: coins) {
+    if (initiator == storage.ownerAddress) {
+        return;
+    }
+    assert (storage.gamesInfo != null) throw ERR_GAMES_NOT_SET;
+    val gamesInfo = storage.gamesInfo!.load();
+    if (initiator == gamesInfo.active_game) {
+        return;
+    }
+    assert (valueCoins >= PRINTER_FULL_GAME_WALK_GAS) throw ERR_INVALID_GAME_SENDER;
+    assert (checkGame(initiator, gamesInfo.all_games) != 0) throw ERR_GAME_NOT_FOUND;
+}
+
 // =============================================================================
 //  Get-methods
 // =============================================================================
@@ -562,4 +716,14 @@ get fun get_tools_info(): Cell<ToolsInfo>? {
 get fun get_allow_burn(): bool {
     var storage = lazy RetranslatorStorage.load();
     return storage.allow_burn;
+}
+
+get fun get_next_nft_index(): int {
+    var storage = lazy RetranslatorStorage.load();
+    return storage.nextNftIndex;
+}
+
+get fun get_next_sbt_index(): int {
+    var storage = lazy RetranslatorStorage.load();
+    return storage.nextSbtIndex;
 }
