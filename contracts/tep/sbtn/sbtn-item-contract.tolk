@@ -19,6 +19,7 @@ fun onInternalMessage(in: InMessage) {
 
     match (msg) {
         SbtnInit => {
+            assert (in.senderAddress == storage.collectionAddress) throw ERROR_NOT_FROM_COLLECTION;
             if (storage.active) {
                 throw ERROR_ALREADY_INITIALIZED
             }
@@ -87,11 +88,14 @@ fun onInternalMessage(in: InMessage) {
             storage.active = false;
             storage.save();
 
-            val restAmount = contract.getOriginalBalance() - MIN_TONS_FOR_STORAGE;
+            // Retain the storage reserve (SBTN_02 §5.1): reserve EXACTLY MIN_TONS_FOR_STORAGE,
+            // then carry-all the remainder. A bare mode-128 send would drain the account below
+            // storage tax (it ignores `value`).
+            reserveToncoinsOnBalance(MIN_TONS_FOR_STORAGE, RESERVE_MODE_EXACT_AMOUNT);
             val excessesMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: in.senderAddress,
-                value: restAmount,
+                value: 0,
                 body: Excesses { queryId: msg.queryId }
             });
             excessesMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
