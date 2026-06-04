@@ -136,6 +136,18 @@ export class Retranslator implements Contract {
         return result.stack.readCellOpt();
     }
 
+    // Raw opaque registry cells — for a hot-swap migration that copies the
+    // registries verbatim onto a new R* (see scripts/swapRetranslator.ts).
+    async getJettonInfoCell(provider: ContractProvider): Promise<Cell | null> {
+        const result = await provider.get('get_jetton_info', []);
+        return result.stack.readCellOpt();
+    }
+
+    async getGamesInfoCell(provider: ContractProvider): Promise<Cell | null> {
+        const result = await provider.get('get_games_info', []);
+        return result.stack.readCellOpt();
+    }
+
     async getNextNftIndex(provider: ContractProvider): Promise<bigint> {
         const result = await provider.get('get_next_nft_index', []);
         return result.stack.readBigNumber();
