@@ -9,7 +9,9 @@ const BASIC_STORAGE_TAX = ton("0.01");
 
 // Reel count is a single constant ("customizable" per the brief). The reward
 // tables assume 3; change here + extend the reward function if you ever grow it.
-const NUM_REELS: int = 3;
+// The generative reward rule (static.tolk computeOutcome) reads this constant and
+// does NOT hardcode "3", so the count is the only thing to touch to grow reels.
+const SSM_REELS: int = 3;
 
 // Symbol alphabet rolled by each slot. random.range(3) yields exactly these.
 //   ZERO  = "0" (nothing)   SEVEN = "7"            X = "X" (NFT tier driver)
@@ -61,7 +63,7 @@ struct (0x55310001) RollStep {
     symbols: uint8
 }
 
-// slot_{NUM_REELS-1} -> SSM: the completed 3-symbol result.
+// slot_{SSM_REELS-1} -> SSM: the completed 3-symbol result.
 struct (0x55320002) RollResult {
     ctx: Cell<RollContext>
     symbols: uint8

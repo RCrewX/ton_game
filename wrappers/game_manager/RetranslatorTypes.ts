@@ -87,9 +87,17 @@ export type EditNft = { itemAddress: Address; content: Cell };
 export type EditSbt = { itemAddress: Address; content: Cell };
 
 // ----- Structured item content schemas (built off-chain; opaque to GM/R*) -----
-// NFTContent { origin: address, type: uint64, tier: uint64 } — matches
-// contracts/printers/nft_printer/storage.tolk (Tolk field `itemType` == `type`).
-export type NFTContent = { origin: Address; type: bigint | number; tier: bigint | number };
+// NFTContent { origin: address, type: uint64, tier: uint64, seen: Maybe(^Cell) } —
+// matches contracts/printers/nft_printer/storage.tolk (Tolk field `itemType` == `type`).
+// `seen` is the multisplav (type-5) provenance Bloom filter; null/undefined for
+// non-type-5 items (a single trailing '0' bit). CONSUMER: the published NFT decoder
+// must read this trailing Maybe(^Cell).
+export type NFTContent = {
+    origin: Address;
+    type: bigint | number;
+    tier: bigint | number;
+    seen?: Cell | null;
+};
 // SBTContent { tatoo: Cell<SnakeString> } — matches sbt_printer/storage.tolk.
 export type SBTContent = { tatoo: Cell };
 
@@ -98,12 +106,18 @@ export function encodeNftContent(c: NFTContent): Cell {
         .storeAddress(c.origin)
         .storeUint(c.type, 64)
         .storeUint(c.tier, 64)
+        .storeMaybeRef(c.seen ?? null)
         .endCell();
 }
 
 export function decodeNftContent(cell: Cell): NFTContent {
     const s = cell.beginParse();
-    return { origin: s.loadAddress(), type: s.loadUintBig(64), tier: s.loadUintBig(64) };
+    return {
+        origin: s.loadAddress(),
+        type: s.loadUintBig(64),
+        tier: s.loadUintBig(64),
+        seen: s.loadMaybeRef(),
+    };
 }
 
 /** Build a SnakeString cell (short string stored as the cell's data tail). */
@@ -260,7 +274,23 @@ export const AnvilErrors = {
     TIER_TOO_HIGH: 980,
     NOT_PRINTER: 981,
     BAD_MULTISPLAV_MINT_AMOUNT: 982,
+    MULTISPLAV_TIER_CAP: 983,
+    MULTISPLAV_ORIGIN_ALREADY_SEEN: 984,
+    SAFETY_TIER_CAP: 985,
 } as const;
+
+// ⚒ Multisplav provenance Bloom filter params (mirror retranslator.tolk).
+export const MULTISPLAV_FILTER_BITS = 512;
+export const MULTISPLAV_FILTER_K = 3;
+export const MULTISPLAV_TIER_CAP = 64;
+
+// ⚒ ANVIL tier caps + type space (mirror retranslator.tolk; verified on-chain via
+// get_anvil_caps in the ABI guard spec).
+export const TIER_CAP_TYPE0 = 10;      // generic (type 0) combine cap
+export const SAFETY_TIER_CAP = 1000;   // high ceiling for all non-generic types
+export const MELT_MAX_TIER = 30;       // native melt 10^K guard (10^30 < coins max)
+export const TYPE_GENERIC = 0;
+export const TYPE_MULTISPLAV = 5;
 
 export const ANVIL_OPCODES = {
     OP_ANVIL_COMBINE: 0x416e7643,

@@ -51,9 +51,40 @@ const ANVIL_OUT_UPDATE: uint8 = 1;          // overwrite item1 content (single t
 const ANVIL_OUT_UPDATE_DESTROY: uint8 = 2;  // overwrite item1 content + destroy item2 (combine)
 const ANVIL_OUT_MELT: uint8 = 3;            // destroy item1 + mint rudaAmount RUDA to owner
 
+// =============================================================================
+//  ANVIL TYPE SPACE (the reference leaves `type` implicit — pinned here).
+//  `type` is an opaque uint64. ONLY two values carry special rules:
+//    TYPE_GENERIC   = 0 : generic item; combine tier-caps at TIER_CAP_TYPE0 (10).
+//    TYPE_MULTISPLAV= 5 : multisplav — native-origin, provenance-filtered (`seen`
+//                         Bloom), tier-up ONLY via the multisplav recipe, capped at
+//                         the tighter MULTISPLAV_TIER_CAP.
+//  EVERY other value is generic-with-no-special-rule (e.g. type 1 from the slot
+//  reward rule): combine tier-caps at the high SAFETY_TIER_CAP. Do NOT invent
+//  further semantics — the reference states none.
+// =============================================================================
+const TYPE_GENERIC: uint64 = 0;             // generic item (tier-cap 10 on combine)
 const TYPE_MULTISPLAV: uint64 = 5;          // type 5 == multisplav alloy
-const TIER_CAP_TYPE0: uint64 = 10;          // type-0 items cap at tier 10
+const TIER_CAP_TYPE0: uint64 = 10;          // type-0 (generic) items cap at tier 10
+// High safety ceiling for ALL non-generic types (type 1, 5, …) so combine can't grow
+// tier unboundedly (storage/gas sanity). type-5 has its OWN tighter cap below
+// (MULTISPLAV_TIER_CAP <= SAFETY_TIER_CAP), so this never contradicts the multisplav bound.
+const SAFETY_TIER_CAP: uint64 = 1000;
 const MELT_MAX_TIER: uint64 = 30;           // 10^K guard (10^30 < coins max) for native melt
+
+// ⚒ Multisplav provenance Bloom filter (locked decision — see note_encrypt_multisplav.txt).
+// The native item I(5|K|N) accumulates the SET of foreign origins already alloyed into
+// it; a repeat of the same origin is rejected. Storage = ONE cell of 2 x uint256 (so the
+// whole filter fits in a single <=1023-bit cell; raising BITS to 1024 would need a 2nd
+// word/cell — keep it a single tunable). Append-only (set bits, never clear). The
+// false-positive-only property is the intended trade: a real duplicate is ALWAYS caught
+// (no false-negative); a brand-new origin may RARELY be mis-flagged as seen.
+const MULTISPLAV_FILTER_BITS: int = 512;    // total filter width (tunable; <=512 = one cell)
+const MULTISPLAV_FILTER_HALF: int = 256;    // word boundary: word A = bits [0,256), B = [256,512)
+const MULTISPLAV_FILTER_K: int = 3;         // hash positions per origin
+// ⚒ FLAGGED — coordinate with the sibling caps plan. Bounds the type-5 tier (== number of
+// distinct foreign origins alloyed) so the 512-bit/k=3 filter stays in its low-FP zone
+// (~3% at 64 origins). No sibling cap exists in-tree yet; this is the proposed value.
+const MULTISPLAV_TIER_CAP: uint64 = 64;
 
 // Melt economics (FLAGGED assumption — see report). Native melt mints (10^K - 1)
 // RAW nano RUDA; the non-native type0/tier10 escape mints 100 WHOLE RUDA. Source
@@ -86,6 +117,9 @@ const ERR_ANVIL_MELT_NON_NATIVE = 979;        // non-native melt allowed only fo
 const ERR_ANVIL_TIER_TOO_HIGH = 980;          // native melt 10^K guard
 const ERR_ANVIL_NOT_PRINTER = 981;            // ANVIL request initiator is not the NFT printer
 const ERR_ANVIL_BAD_MULTISPLAV_MINT_AMOUNT = 982; // 1000-RUDA mint: wrong stake
+const ERR_ANVIL_MULTISPLAV_TIER_CAP = 983;    // type-5 alloy would exceed MULTISPLAV_TIER_CAP
+const ERR_ANVIL_MULTISPLAV_ORIGIN_ALREADY_SEEN = 984; // sacrifice origin already in the native's filter
+const ERR_ANVIL_SAFETY_TIER_CAP = 985;        // non-generic combine would exceed SAFETY_TIER_CAP
 
 // =============================================================================
 //  R*-private registries & types (GM never imports these — decoupling invariant)
@@ -203,6 +237,18 @@ struct (0x8b9c0d1e) RequestBurn {
     customPayload: cell?
 }
 
+// ⚒ SSM native-stake burn (game-gated). The SoullessSlotMachine burns the RUDA a
+// player staked on a native roll (burn-and-mint economics). Authorized like a MINT
+// — initiator must be a REGISTERED GAME (or owner) — because registered games
+// already control the RUDA supply (ForwardMintRequest mints to arbitrary
+// receivers), so letting them burn is no trust escalation. INTRINSIC to the roll,
+// so it is NOT gated by allow_burn (which only governs owner-initiated RequestBurn).
+// R* emits AskToBurn to GM's own RUDA wallet (sender == GM == owner).
+struct (0x5362726e) SsmBurnStake {   // "Sbrn"
+    queryId: uint64
+    amount: coins
+}
+
 // ---- Printer recipe requests (wrapped inside R1.data -> R2.data) ----
 // Opcodes verified unique vs the existing set. GM never parses these.
 //   MintNft  : mint one transferable NFT to `receiver` (initiator = game OR owner)
@@ -283,20 +329,24 @@ struct (0x00000007) PrinterEditSbtItem {
 // =============================================================================
 
 // NFT item content — MUST stay byte-identical to the NFTPrinter's NFTContent
-// (contracts/printers/nft_printer/storage.tolk): {origin, itemType, tier}. R*
-// builds it here for ANVIL updates; the printer/item type it on the other side.
+// (contracts/printers/nft_printer/storage.tolk): {origin, itemType, tier, seen}.
+// R* builds it here for ANVIL updates; the printer/item type it on the other side.
+// `seen` is the multisplav (type-5) provenance Bloom filter (null for non-type-5).
 struct NFTContent {
     origin: address
     itemType: uint64
     tier: uint64
+    seen: cell?
 }
 
 // Reported on-chain attributes of one NFT item (from the item's stored content).
+// `seen` rides up so the multisplav arm can check/extend the native's filter.
 struct AnvilItemAttrs {
     index: uint64
     origin: address
     itemType: uint64
     tier: uint64
+    seen: cell?
 }
 
 // Two-item recipes (combine / multisplav).
@@ -352,6 +402,82 @@ fun pow10(k: int): int {
     return r;
 }
 
+// =============================================================================
+//  ⚒ Multisplav provenance Bloom filter — R*-PRIVATE math (GM never sees these).
+//
+//  The 512-bit filter is held as ONE cell carrying two 256-bit words:
+//    word A = bits [0, 256), word B = bits [256, 512).
+//  An origin hashes to k=3 positions in [0, 512); set/test split across A/B.
+//  Append-only: addOrigin only ever ORs bits in, so a real duplicate is ALWAYS
+//  caught (no false-negative); a fresh origin may rarely collide (false-positive).
+// =============================================================================
+
+// An empty filter cell (all bits 0). The fresh native I(5|0|N) starts with this.
+fun multisplavEmptyFilter(): cell {
+    return beginCell().storeUint(0, 256).storeUint(0, 256).endCell();
+}
+
+// Hash an origin address to a 256-bit value (same shape as the design note).
+fun multisplavHashOrigin(a: address): int {
+    return beginCell().storeAddress(a).endCell().hash();
+}
+
+// k=3 bit positions in [0, MULTISPLAV_FILTER_BITS) derived from the hash.
+fun multisplavIndices(h: int): (int, int, int) {
+    val i1 = h % MULTISPLAV_FILTER_BITS;
+    val i2 = (h / MULTISPLAV_FILTER_BITS) % MULTISPLAV_FILTER_BITS;
+    val i3 = (h / (MULTISPLAV_FILTER_BITS * MULTISPLAV_FILTER_BITS)) % MULTISPLAV_FILTER_BITS;
+    return (i1, i2, i3);
+}
+
+// Test bit `idx` across the two words (idx in [0, 512)).
+fun multisplavBitGet(wordA: int, wordB: int, idx: int): bool {
+    if (idx < MULTISPLAV_FILTER_HALF) {
+        return (wordA & (1 << idx)) != 0;
+    }
+    return (wordB & (1 << (idx - MULTISPLAV_FILTER_HALF))) != 0;
+}
+
+// Set bit `idx`, returning the updated (wordA, wordB).
+fun multisplavBitSet(wordA: int, wordB: int, idx: int): (int, int) {
+    if (idx < MULTISPLAV_FILTER_HALF) {
+        return (wordA | (1 << idx), wordB);
+    }
+    return (wordA, wordB | (1 << (idx - MULTISPLAV_FILTER_HALF)));
+}
+
+// Load the two words from a filter cell (null filter => both 0 / nothing seen).
+fun multisplavLoadWords(filter: cell?): (int, int) {
+    if (filter == null) {
+        return (0, 0);
+    }
+    var s = filter.beginParse();
+    val wordA = s.loadUint(256);
+    val wordB = s.loadUint(256);
+    return (wordA, wordB);
+}
+
+// Is `a` PROBABLY already in the filter? false-positive-only (never a false-negative).
+fun multisplavProbablySeen(filter: cell?, a: address): bool {
+    val (wordA, wordB) = multisplavLoadWords(filter);
+    val h = multisplavHashOrigin(a);
+    val (i1, i2, i3) = multisplavIndices(h);
+    return multisplavBitGet(wordA, wordB, i1)
+        && multisplavBitGet(wordA, wordB, i2)
+        && multisplavBitGet(wordA, wordB, i3);
+}
+
+// Append `a` to the filter (sets its k bits), returning the new filter cell.
+fun multisplavAddOrigin(filter: cell?, a: address): cell {
+    val (wordA, wordB) = multisplavLoadWords(filter);
+    val h = multisplavHashOrigin(a);
+    val (i1, i2, i3) = multisplavIndices(h);
+    val (a1, b1) = multisplavBitSet(wordA, wordB, i1);
+    val (a2, b2) = multisplavBitSet(a1, b1, i2);
+    val (a3, b3) = multisplavBitSet(a2, b2, i3);
+    return beginCell().storeUint(a3, 256).storeUint(b3, 256).endCell();
+}
+
 // THE pure rule engine. Validates the recipe against the reported attributes and
 // returns the new content / payout. Every rejection throws a distinct named code.
 // `nativeOrigin` is the RUDA jetton master (== "N").
@@ -366,10 +492,15 @@ fun computeAnvil(
         assert (i1Type == i2Type) throw ERR_ANVIL_TYPE_MISMATCH;
         assert (i1Tier == i2Tier) throw ERR_ANVIL_TIER_MISMATCH;
         assert (i1Origin == i2Origin) throw ERR_ANVIL_ORIGIN_MISMATCH;
-        // Two type-5 with the SAME origin is the forbidden multisplav case.
+        // Two type-5 with the SAME origin is the forbidden multisplav case (type-5
+        // only ever tiers up through the multisplav recipe, never plain combine).
         assert (i1Type != TYPE_MULTISPLAV) throw ERR_ANVIL_SAME_ORIGIN_MULTISPLAV;
-        if (i1Type == 0) {
+        // Tier cap by type: generic (type 0) caps at 10; every other type caps at the
+        // high SAFETY_TIER_CAP. Distinct errors so the reason is unambiguous on-chain.
+        if (i1Type == TYPE_GENERIC) {
             assert (i1Tier + 1 <= TIER_CAP_TYPE0) throw ERR_ANVIL_TIER_CAP;
+        } else {
+            assert (i1Tier + 1 <= SAFETY_TIER_CAP) throw ERR_ANVIL_SAFETY_TIER_CAP;
         }
         return { kind: ANVIL_OUT_UPDATE_DESTROY, newOrigin: i1Origin, newType: i1Type, newTier: i1Tier + 1, rudaAmount: 0 };
     }
@@ -380,13 +511,18 @@ fun computeAnvil(
         assert (i2Type == TYPE_MULTISPLAV) throw ERR_ANVIL_NOT_TYPE5;
         assert (i1Origin == nativeOrigin) throw ERR_ANVIL_MULTISPLAV_PRIMARY_NOT_NATIVE;
         assert (i2Tier == 0) throw ERR_ANVIL_MULTISPLAV_SACRIFICE_NOT_TIER0;
-        // Sacrifice must be a DIFFERENT origin (non-native): same origin -> forbidden.
+        // Sacrifice must be NON-native: alloying the native origin into a native item is
+        // forbidden (structural guard; distinct from the provenance/duplicate check, which
+        // is applied in the handler against the native's accumulated `seen` filter).
         assert (i2Origin != nativeOrigin) throw ERR_ANVIL_SAME_ORIGIN_MULTISPLAV;
+        // Safety cap on the type-5 tier (== count of distinct origins alloyed) so the
+        // Bloom filter stays in its low false-positive zone. FLAGGED — see the cap const.
+        assert (i1Tier + 1 <= MULTISPLAV_TIER_CAP) throw ERR_ANVIL_MULTISPLAV_TIER_CAP;
         return { kind: ANVIL_OUT_UPDATE_DESTROY, newOrigin: nativeOrigin, newType: TYPE_MULTISPLAV, newTier: i1Tier + 1, rudaAmount: 0 };
     }
 
     if (recipe == RECIPE_ZERO_TYPE) {
-        return { kind: ANVIL_OUT_UPDATE, newOrigin: i1Origin, newType: 0, newTier: i1Tier, rudaAmount: 0 };
+        return { kind: ANVIL_OUT_UPDATE, newOrigin: i1Origin, newType: TYPE_GENERIC, newTier: i1Tier, rudaAmount: 0 };
     }
 
     if (recipe == RECIPE_ZERO_TIER) {
@@ -394,14 +530,21 @@ fun computeAnvil(
     }
 
     if (recipe == RECIPE_MELT) {
+        // MELT mints RUDA (the NFT is destroyed); it does NOT burn RUDA. This is the
+        // deliberate counterpart to the burn paths (SSM native stake, 1000-RUDA mint),
+        // where RUDA is CONSUMED -> burned. Keep the two distinct.
         if (i1Origin == nativeOrigin) {
-            // Native melt: I(X|K|N) -> (10^K - 1) raw RUDA.
+            // Native melt: I(X|K|N) -> (10^K - 1) raw RUDA. The tier guard keeps the
+            // arithmetic exact + overflow-safe: pow10 runs in 257-bit ints and
+            // 10^MELT_MAX_TIER (10^30) < coins max (2^120), so 10^K - 1 never overflows
+            // for K <= MELT_MAX_TIER. (A higher-tier native item must zero-tier first.)
             assert (i1Tier <= MELT_MAX_TIER) throw ERR_ANVIL_TIER_TOO_HIGH;
             val amt = pow10(i1Tier) - 1;
             return { kind: ANVIL_OUT_MELT, newOrigin: i1Origin, newType: i1Type, newTier: i1Tier, rudaAmount: amt as coins };
         }
-        // Non-native: the ONLY melt path is I(0|10|R) -> 100 RUDA.
-        assert (i1Type == 0 && i1Tier == TIER_CAP_TYPE0) throw ERR_ANVIL_MELT_NON_NATIVE;
+        // Non-native cap-out: the ONLY non-native melt is I(0|10|R) -> 100 RUDA (a
+        // deliberate exception to native-only melt; any origin at generic tier-10).
+        assert (i1Type == TYPE_GENERIC && i1Tier == TIER_CAP_TYPE0) throw ERR_ANVIL_MELT_NON_NATIVE;
         return { kind: ANVIL_OUT_MELT, newOrigin: i1Origin, newType: i1Type, newTier: i1Tier, rudaAmount: MELT_HUNDRED_RUDA };
     }
 
@@ -475,6 +618,7 @@ type AllowedRequests =
     | ForwardMintRequest
     | TransferNotificationForRecipient
     | RequestBurn
+    | SsmBurnStake    // ⚒ SSM native-stake burn (registered-game gated)
     | MintNft
     | MintSbt
     | RevokeSbt
@@ -643,6 +787,17 @@ fun onInternalMessage(in: InMessage) {
                     // ⚒ ANVIL 1000-RUDA mint: a tagged payload (>=32 data bits) requests
                     // I(5|0|N). The wallet was already verified as GM's RUDA wallet above,
                     // so the deposit is real; the depositor (transferInitiator) gets the item.
+                    //
+                    // RUDA FLOW (burn-and-mint, SSM honest-burn model): the 1000 RUDA already
+                    // landed in GM's OWN jetton wallet (the internal transfer completed before
+                    // this notification). We emit TWO R3s in this one tx:
+                    //   (1) DeployNft -> NFT printer: mint a fresh I(5|0|N) with an EMPTY filter
+                    //       to the depositor (bounded value, just enough for the deploy hop).
+                    //   (2) AskToBurn -> GM's own RUDA wallet: BURN the full 1000-RUDA stake
+                    //       (sender == GM == wallet owner, so the burn is authorized). Carry-all
+                    //       so the remaining forwarded TON funds the burn->minter chain.
+                    // The stake is intrinsic to the mint, so this burn is NOT gated by
+                    // allow_burn (that kill-switch only governs owner-initiated RequestBurn).
                     if (payloadSlice.remainingBitsCount() >= 32) {
                         val tag = payloadSlice.loadUint(32);
                         if (tag == ANVIL_MULTISPLAV_MINT_TAG) {
@@ -656,6 +811,7 @@ fun onInternalMessage(in: InMessage) {
                                 origin: jettonInfo.jettonMinterAddress, // native origin "N"
                                 itemType: TYPE_MULTISPLAV,
                                 tier: 0,
+                                seen: multisplavEmptyFilter(), // fresh, empty provenance set
                             };
                             val index = storage.nextNftIndex;
                             val initParams = PrinterNftItemInit {
@@ -670,8 +826,24 @@ fun onInternalMessage(in: InMessage) {
                             };
                             storage.nextNftIndex = index + 1;
                             storage.save();
+
+                            // (2) Burn the 1000-RUDA stake from GM's own wallet.
+                            val gameManagerWalletAddress = calcAddressOfJettonWallet(
+                                storage.gameManagerAddress, jettonInfo.jettonMinterAddress, jettonInfo.jettonWalletCode);
+                            val askToBurn = AskToBurn {
+                                queryId: 0,
+                                jettonAmount: MULTISPLAV_MINT_STAKE,
+                                sendExcessesTo: storage.gameManagerAddress,
+                                customPayload: null,
+                            };
+
                             reserveValue(in.valueCoins);
-                            emitR3(storage.gameManagerAddress, toolsInfoM.nftPrinterAddress!, deployNft.toCell());
+                            // (1) Deploy the item with a bounded value (storage + the collection->item hop).
+                            emitR3Value(storage.gameManagerAddress, toolsInfoM.nftPrinterAddress!, deployNft.toCell(),
+                                PRINTER_ITEM_DEPLOY_AMOUNT + ANVIL_ITEM_OP_TON, SEND_MODE_PAY_FEES_SEPARATELY);
+                            // (2) Burn carries the remaining balance (funds wallet->minter burn notification).
+                            emitR3Value(storage.gameManagerAddress, gameManagerWalletAddress, askToBurn.toCell(),
+                                0, SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
                             return;
                         }
                     }
@@ -707,6 +879,26 @@ fun onInternalMessage(in: InMessage) {
                         jettonAmount: request.jettonAmount,
                         sendExcessesTo: request.sendExcessesTo,
                         customPayload: request.customPayload,
+                    };
+                    reserveValue(in.valueCoins);
+                    emitR3(storage.gameManagerAddress, gameManagerWalletAddress, askToBurn.toCell());
+                }
+
+                // ⚒ SSM native-stake burn. Same authorization as a MINT (registered
+                // game OR owner) — registered games already control RUDA supply, so
+                // burning is no escalation. Intrinsic to the roll -> NOT allow_burn
+                // gated. R* builds AskToBurn and routes it to GM's own RUDA wallet.
+                SsmBurnStake => {
+                    assert (storage.jettonInfo != null) throw ERR_JETTON_MINTER_NOT_SET;
+                    val jettonInfo = storage.jettonInfo!.load();
+                    assertMintInitiatorAllowed(storage, msg.initiator, in.valueCoins);
+                    val gameManagerWalletAddress = calcAddressOfJettonWallet(
+                        storage.gameManagerAddress, jettonInfo.jettonMinterAddress, jettonInfo.jettonWalletCode);
+                    val askToBurn = AskToBurn {
+                        queryId: request.queryId,
+                        jettonAmount: request.amount,
+                        sendExcessesTo: storage.gameManagerAddress,
+                        customPayload: null,
                     };
                     reserveValue(in.valueCoins);
                     emitR3(storage.gameManagerAddress, gameManagerWalletAddress, askToBurn.toCell());
@@ -833,8 +1025,17 @@ fun onInternalMessage(in: InMessage) {
                         i1.origin, i1.itemType, i1.tier,
                         i2.origin, i2.itemType, i2.tier,
                         nativeOrigin);
+                    // ⚒ Provenance: by default the surviving item keeps item1's filter. For a
+                    // multisplav alloy, REJECT if the sacrifice's origin is already in the
+                    // native's accumulated set (the real duplicate rule — replaces the naive
+                    // two-item compare), else append it. Append-only, false-positive-only.
+                    var newSeen: cell? = i1.seen;
+                    if (request.recipe == RECIPE_MULTISPLAV) {
+                        assert (!multisplavProbablySeen(i1.seen, i2.origin)) throw ERR_ANVIL_MULTISPLAV_ORIGIN_ALREADY_SEEN;
+                        newSeen = multisplavAddOrigin(i1.seen, i2.origin);
+                    }
                     val newContent: NFTContent = {
-                        origin: outcome.newOrigin, itemType: outcome.newType, tier: outcome.newTier,
+                        origin: outcome.newOrigin, itemType: outcome.newType, tier: outcome.newTier, seen: newSeen,
                     };
                     val apply = PrinterAnvilApply {
                         queryId: 0,
@@ -857,8 +1058,9 @@ fun onInternalMessage(in: InMessage) {
                         i1.origin, i1.itemType, i1.tier,
                         i1.origin, i1.itemType, i1.tier, // i2 unused for single-item recipes
                         nativeOrigin);
+                    // Single-item transforms (zero-type/zero-tier) preserve the provenance filter.
                     val newContent: NFTContent = {
-                        origin: outcome.newOrigin, itemType: outcome.newType, tier: outcome.newTier,
+                        origin: outcome.newOrigin, itemType: outcome.newType, tier: outcome.newTier, seen: i1.seen,
                     };
                     val apply = PrinterAnvilApply {
                         queryId: 0,
@@ -1199,4 +1401,38 @@ get fun get_anvil_outcome(
         nativeOrigin,
     );
     return (o.kind, o.newOrigin, o.newType as int, o.newTier as int, o.rudaAmount);
+}
+
+// ⚒ ANVIL tier caps + type-space constants, exposed so the published ABI
+// (deployment_latest.json) can be guard-checked against the ON-CHAIN values.
+// Returns (genericCap, safetyCap, multisplavCap, meltMaxTier, typeGeneric, typeMultisplav).
+get fun get_anvil_caps(): (int, int, int, int, int, int) {
+    return (
+        TIER_CAP_TYPE0 as int,
+        SAFETY_TIER_CAP as int,
+        MULTISPLAV_TIER_CAP as int,
+        MELT_MAX_TIER as int,
+        TYPE_GENERIC as int,
+        TYPE_MULTISPLAV as int
+    );
+}
+
+// ⚒ Multisplav Bloom helpers exposed for pure unit testing (side-effect-free).
+// Filter width/params and the cap are surfaced so tests can assert them directly.
+get fun get_multisplav_params(): (int, int, int) {
+    return (MULTISPLAV_FILTER_BITS, MULTISPLAV_FILTER_K, MULTISPLAV_TIER_CAP);
+}
+
+get fun get_multisplav_empty_filter(): cell {
+    return multisplavEmptyFilter();
+}
+
+// Returns -1 (true) / 0 (false): is `a` probably already in `filter`?
+get fun get_multisplav_probably_seen(filter: cell, a: address): bool {
+    return multisplavProbablySeen(filter, a);
+}
+
+// Returns the new filter cell after appending `a`.
+get fun get_multisplav_add_origin(filter: cell, a: address): cell {
+    return multisplavAddOrigin(filter, a);
 }

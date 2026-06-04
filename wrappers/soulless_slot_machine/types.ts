@@ -10,7 +10,7 @@ import { Address, beginCell, Cell, toNano } from '@ton/core';
 export const BASIC_STORAGE_TAX = toNano('0.01');
 
 // Reel count & symbol alphabet (ssm_common.tolk).
-export const NUM_REELS = 3;
+export const SSM_REELS = 3;
 export const SYM_ZERO = 0;
 export const SYM_SEVEN = 1;
 export const SYM_X = 2;
@@ -22,10 +22,11 @@ export const RUDA_AMOUNT_100 = toNano('100');
 export const RUDA_AMOUNT_1000 = toNano('1000');
 export const CUSTOM_ALLOWED_AMOUNT = 1000000n; // exact raw, per brief
 
-export const MIN_ROLL_VALUE = toNano('0.7');
+export const MIN_ROLL_VALUE = toNano('1.0');
 export const NFT_REWARD_BUDGET = toNano('0.3');
 export const RUDA_MINT_BUDGET = toNano('0.25');
 export const ESCROW_RETURN_BUDGET = toNano('0.06');
+export const NATIVE_BURN_BUDGET = toNano('0.25');
 
 // Outcome kinds (static.tolk).
 export const OUT_NOTHING = 0;
@@ -44,6 +45,7 @@ export const Opcodes = {
     OP_ASK_TO_TRANSFER: 0x0f8a7ea5,
     OP_RETURN_EXCESSES_BACK: 0xd53276db,
     OP_SET_SSM_CONFIG: 0x5535e701,
+    OP_SSM_BURN_STAKE: 0x5362726e, // "Sbrn" — native-stake burn (R1-wrapped)
 } as const;
 
 // ----- Symbol packing (2 bits per reel) -----
@@ -55,7 +57,7 @@ export function packSymbols(reels: number[]): number {
     return s;
 }
 
-export function unpackSymbols(symbols: number, reels = NUM_REELS): number[] {
+export function unpackSymbols(symbols: number, reels = SSM_REELS): number[] {
     const out: number[] = [];
     for (let i = 0; i < reels; i++) {
         out.push((symbols >> (2 * i)) & 3);

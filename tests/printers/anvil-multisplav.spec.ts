@@ -18,8 +18,10 @@ import {
 // =============================================================================
 // ANVIL multisplav (type-5 alloy):
 //   * I(5|K|N) + I(5|0|R) -> I(5|K+1|N)   (primary native, sacrifice non-native)
-//   * 1000 RUDA -> I(5|0|N)               (jetton-intake mint; house keeps the 1000)
+//   * 1000 RUDA -> I(5|0|N)               (jetton-intake mint; the stake is BURNED)
 // plus the forbidden same-origin / non-native-primary rejections.
+// NOTE: the provenance-filter behaviour (dup rejection, tier cap) and the burn
+// assertions live in the focused multisplav-alloy.spec.ts / multisplav-mint.spec.ts.
 // =============================================================================
 
 const MULTISPLAV_MINT_TAG = 0x4d756c74; // "Mult"
@@ -74,7 +76,7 @@ describe('ANVIL multisplav (type-5)', () => {
         });
     });
 
-    it('1000 RUDA -> I(5|0|N): jetton-intake mint to the depositor', async () => {
+    it('1000 RUDA -> I(5|0|N): jetton-intake mint to the depositor (stake burned)', async () => {
         // Give the user 1000 RUDA (mint via GM -> minter).
         await S.gameManager.sendRedirectMessage(
             S.ownerAccount.getSender(),

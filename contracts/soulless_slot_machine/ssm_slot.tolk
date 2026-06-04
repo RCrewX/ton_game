@@ -39,7 +39,7 @@ fun onInternalMessage(in: InMessage) {
             val sym = random.range(3);
             val newSymbols = appendSymbol(msg.symbols, storage.reelIndex, sym);
 
-            if (storage.reelIndex >= NUM_REELS - 1) {
+            if (storage.reelIndex >= SSM_REELS - 1) {
                 // Last reel -> return the completed result to SSM.
                 val result: RollResult = {
                     ctx: msg.ctx,

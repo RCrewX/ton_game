@@ -25,14 +25,20 @@ const RUDA_AMOUNT_1000: coins = ton("1000");
 const CUSTOM_ALLOWED_AMOUNT: coins = 1000000 as coins; // exact raw, per brief
 
 // Minimum TON that must arrive WITH a roll intake (covers 3 ephemeral
-// deploys/hops + the reward send + cashback). The depositor attaches this as the
-// jetton-transfer forward TON; it survives the GM/R*/slot hops via carry-all.
-const MIN_ROLL_VALUE: coins = ton("0.7");
+// deploys/hops + the native-stake burn R1 + the reward send + cashback). The
+// depositor attaches this as the jetton-transfer forward TON; it survives the
+// GM/R*/slot hops via carry-all. FLAGGED (uap consumer): raised from 0.7 -> 1.0
+// to fund the extra burn-and-mint hop on the native path.
+const MIN_ROLL_VALUE: coins = ton("1.0");
 
 // Reward-send budgets (exact value attached; cashback gets the carry-all rest).
 const NFT_REWARD_BUDGET: coins = ton("0.3");   // R1{MintNft} -> printer item deploy chain
 const RUDA_MINT_BUDGET: coins = ton("0.25");   // R1{ForwardMintRequest} -> mint chain
 const ESCROW_RETURN_BUDGET: coins = ton("0.06"); // AskToTransfer to SSM's custom wallet
+// Native-stake burn budget: R1{SsmBurnStake} -> GM -> R* -> GM -> GM's RUDA wallet
+// -> minter. Sized above R*'s full-game-walk gas (0.2) so the registered-game gate
+// passes even when SSM is not R*'s cheap active-game.
+const NATIVE_BURN_BUDGET: coins = ton("0.25");
 
 // Outcome kinds returned by computeOutcome / the reward getter.
 const OUT_NOTHING: int = 0;
@@ -85,7 +91,7 @@ fun computeOutcome(symbols: int, isNative: bool, stake: coins): RewardOutcome {
     var nX: int = 0;
     var n7: int = 0;
     var i: int = 0;
-    while (i < NUM_REELS) {
+    while (i < SSM_REELS) {
         val s = symbolAt(symbols, i);
         if (s == SYM_X) {
             nX += 1;
@@ -214,6 +220,14 @@ struct (0x52310001) R1 {
 // Wrapped inside R1.data — native reward MINT (SSM is a registered game).
 struct (0xf62ed009) ForwardMintRequest {
     receiver: address
+    amount: coins
+}
+
+// Wrapped inside R1.data — burn the native RUDA stake (burn-and-mint). R* gates
+// this like a mint (registered game) and emits AskToBurn to GM's RUDA wallet.
+// Opcode/layout MUST match retranslator.tolk SsmBurnStake.
+struct (0x5362726e) SsmBurnStake {   // "Sbrn"
+    queryId: uint64
     amount: coins
 }
 

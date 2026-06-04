@@ -4,10 +4,11 @@ import "static"
 // =============================================================================
 // SoullessSlotMachine (SSM) — a real slot machine.
 //
-//   * Native RUDA roll  : house keeps the deposit (it landed in GM's RUDA
-//     wallet); rewards are MINTED fresh (burn-and-mint). Intake = JettonUsed
-//     routed by R* to SSM. Reward token wins -> ForwardMintRequest; NFT wins ->
-//     MintNft; loss -> only cashback.
+//   * Native RUDA roll  : the staked RUDA (sitting in GM's RUDA wallet) is BURNED
+//     on EVERY native roll via R1{SsmBurnStake}; rewards are MINTED fresh
+//     (honest burn-and-mint, symmetric). Intake = JettonUsed routed by R* to SSM.
+//     Reward token wins -> ForwardMintRequest; NFT wins -> MintNft; loss -> burn +
+//     cashback only.
 //   * Custom jetton roll: ESCROW-and-RETURN on a fully separate code path. Intake
 //     = a TEP-74 transfer-notification DIRECTLY from SSM's own custom wallet.
 //     "tokens back" -> AskToTransfer the escrow back; NFT wins -> MintNft with
@@ -74,7 +75,7 @@ fun onInternalMessage(in: InMessage) {
 
         // ---- Roll completed: the last slot returned the 3-symbol result ----
         RollResult => {
-            val lastSlot = calcAddressOfSlot(contract.getAddress(), NUM_REELS - 1, storage.ssmSlotCode);
+            val lastSlot = calcAddressOfSlot(contract.getAddress(), SSM_REELS - 1, storage.ssmSlotCode);
             assert (in.senderAddress == lastSlot) throw ERR_INVALID_SLOT_RESULT_SENDER;
 
             val ctx = msg.ctx.load();
@@ -133,6 +134,23 @@ fun startRoll(storage: SSMStorage, ctx: RollContext, msgValue: coins) {
 // RollResult arm before this runs.
 fun settleReward(storage: SSMStorage, ctx: RollContext, symbols: int) {
     val outcome = computeOutcome(symbols, ctx.isNative, ctx.stake);
+
+    // (a0) NATIVE stake burn — EVERY native roll burns the staked RUDA (honest
+    //      burn-and-mint, regardless of outcome incl. a loss). SSM is a registered
+    //      game, so R* authorizes this like a mint and routes AskToBurn to GM's
+    //      RUDA wallet. Custom rolls never burn (escrow-and-return; house can't mint
+    //      custom). Symmetry: native stake in == burned; any payout out == minted.
+    if (ctx.isNative) {
+        val burn: SsmBurnStake = { queryId: ctx.queryId, amount: ctx.stake };
+        val r1: R1 = { data: burn.toCell() };
+        val m = createMessage({
+            bounce: BounceMode.NoBounce,
+            dest: storage.ownerAddress,
+            value: NATIVE_BURN_BUDGET,
+            body: r1,
+        });
+        m.send(SEND_MODE_PAY_FEES_SEPARATELY);
+    }
 
     // (a) custom escrow return — send the staked custom jetton back to the player
     //     via SSM's own custom wallet.
@@ -193,8 +211,13 @@ fun settleReward(storage: SSMStorage, ctx: RollContext, symbols: int) {
         m.send(SEND_MODE_PAY_FEES_SEPARATELY);
     }
 
-    // (d) cashback — hand the leftover TON back to the player (also the ONLY
-    //     thing a loss produces).
+    // (d) cashback — THE single clean rule (no asymmetric quirk): refund whatever
+    //     TON is left after the bounded reward/burn budgets are paid out, on BOTH
+    //     win and loss paths. reserveValue() (called in the RollResult arm) already
+    //     kept the contract's prior balance + the BASIC_STORAGE_TAX (0.01) floor, so
+    //     the carry-all remainder here is exactly the player's excess. IGNORE_ERRORS
+    //     is the dust floor: if the remainder is below the message fee it stays put
+    //     rather than failing the settle.
     val cashback = createMessage({
         bounce: BounceMode.NoBounce,
         dest: ctx.player,

@@ -14,7 +14,7 @@ import {
     setSeed,
     readRollSymbols,
     SsmLight,
-    NUM_REELS,
+    SSM_REELS,
 } from './ssm_setup';
 
 // =============================================================================
@@ -91,7 +91,7 @@ describe('SSMSlot mechanics', () => {
         });
     });
 
-    it('a full roll deploys NUM_REELS slots, each in {0,7,X}, and self-refunds', async () => {
+    it('a full roll deploys SSM_REELS slots, each in {0,7,X}, and self-refunds', async () => {
         setSeed(S.blockchain, 7);
         const r = await S.ssm.sendJettonUsed(
             S.gm.getSender(),
@@ -107,13 +107,13 @@ describe('SSMSlot mechanics', () => {
             await S.ssm.getSlotAddress(1),
             await S.ssm.getSlotAddress(2),
         ];
-        for (let i = 0; i < NUM_REELS; i++) {
+        for (let i = 0; i < SSM_REELS; i++) {
             expect(r.transactions).toHaveTransaction({ to: slotAddrs[i], success: true });
         }
 
         const symbols = readRollSymbols(r, S.ssm.address);
         expect(symbols).not.toBeNull();
-        for (let i = 0; i < NUM_REELS; i++) {
+        for (let i = 0; i < SSM_REELS; i++) {
             const sym = (symbols! >> (2 * i)) & 3;
             expect([SYM_ZERO, SYM_SEVEN, SYM_X]).toContain(sym);
         }

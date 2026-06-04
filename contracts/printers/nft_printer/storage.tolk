@@ -29,16 +29,24 @@ struct RoyaltyParams {
 
 // =============================================================================
 //  NFTContent — the NFT item's structured, ON-CHAIN individual content.
-//  Schema: { origin: address, type: uint64, tier: uint64 }.
+//  Schema: { origin: address, type: uint64, tier: uint64, seen: Maybe(^Cell) }.
 //  `itemType` carries the user-facing `type` attribute (renamed because `type`
-//  is a Tolk keyword; the wire layout is just address+uint64+uint64, so the TS
-//  wrapper exposes it as `type`). The item persists this as `Cell<NFTContent>`;
-//  it is opaque to GM and R* (they forward it without parsing).
+//  is a Tolk keyword; the wire layout is address+uint64+uint64 + a trailing
+//  Maybe(^Cell), so the TS wrapper exposes it as `type`). The item persists this
+//  as `Cell<NFTContent>`; it is opaque to GM and R* (they forward it unparsed).
+//
+//  ⚒ `seen` is the multisplav (type-5) provenance Bloom filter — the set of
+//  foreign origins already alloyed into a native I(5|*|N). It is NULL for every
+//  non-type-5 item (a single trailing '0' bit; TEP-62 transfer/static-data never
+//  parse content, so this layout extension is transparent to them). Only R*'s
+//  multisplav arm reads/writes it; the item just stores whatever R* computed.
+//  CONSUMER NOTE: the published NFT decoder must learn this trailing Maybe(^Cell).
 // =============================================================================
 struct NFTContent {
     origin: address     // who/what minted this NFT (game or owner-supplied origin)
     itemType: uint64    // the `type` attribute
     tier: uint64
+    seen: cell?         // ⚒ multisplav Bloom provenance filter; null for non-type-5
 }
 
 // FEATURE-SPACE: version + extra are appended AFTER the proven base layout so the

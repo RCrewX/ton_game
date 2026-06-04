@@ -104,11 +104,14 @@ const ANVIL_OUT_UPDATE_DESTROY: uint8 = 2;  // overwrite item1 + destroy item2
 const ANVIL_OUT_MELT: uint8 = 3;            // destroy item1 (RUDA minted separately)
 
 // Reported on-chain attributes of one NFT item (byte-identical to retranslator.tolk).
+// `seen` is the type-5 native's provenance Bloom filter (null for non-type-5);
+// the item reports it up-chain so R*'s multisplav arm can check/extend it.
 struct AnvilItemAttrs {
     index: uint64
     origin: address
     itemType: uint64
     tier: uint64
+    seen: cell?
 }
 
 // R1 envelope to GM (opcode matches game_manager/static.tolk). The collection

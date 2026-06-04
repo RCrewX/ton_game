@@ -161,4 +161,65 @@ export class Retranslator implements Contract {
             rudaAmount: result.stack.readBigNumber(),
         };
     }
+
+    // ⚒ Multisplav Bloom filter — pure, side-effect-free getters (for unit tests).
+    async getMultisplavParams(
+        provider: ContractProvider,
+    ): Promise<{ bits: number; k: number; tierCap: number }> {
+        const result = await provider.get('get_multisplav_params', []);
+        return {
+            bits: result.stack.readNumber(),
+            k: result.stack.readNumber(),
+            tierCap: result.stack.readNumber(),
+        };
+    }
+
+    async getMultisplavEmptyFilter(provider: ContractProvider): Promise<Cell> {
+        const result = await provider.get('get_multisplav_empty_filter', []);
+        return result.stack.readCell();
+    }
+
+    async getMultisplavProbablySeen(
+        provider: ContractProvider,
+        filter: Cell,
+        addr: Address,
+    ): Promise<boolean> {
+        const result = await provider.get('get_multisplav_probably_seen', [
+            { type: 'cell', cell: filter },
+            { type: 'slice', cell: beginCell().storeAddress(addr).endCell() },
+        ]);
+        return result.stack.readBoolean();
+    }
+
+    async getMultisplavAddOrigin(
+        provider: ContractProvider,
+        filter: Cell,
+        addr: Address,
+    ): Promise<Cell> {
+        const result = await provider.get('get_multisplav_add_origin', [
+            { type: 'cell', cell: filter },
+            { type: 'slice', cell: beginCell().storeAddress(addr).endCell() },
+        ]);
+        return result.stack.readCell();
+    }
+
+    // ⚒ ANVIL tier caps + type-space constants (for the ABI guard spec).
+    async getAnvilCaps(provider: ContractProvider): Promise<{
+        genericCap: number;
+        safetyCap: number;
+        multisplavCap: number;
+        meltMaxTier: number;
+        typeGeneric: number;
+        typeMultisplav: number;
+    }> {
+        const result = await provider.get('get_anvil_caps', []);
+        return {
+            genericCap: result.stack.readNumber(),
+            safetyCap: result.stack.readNumber(),
+            multisplavCap: result.stack.readNumber(),
+            meltMaxTier: result.stack.readNumber(),
+            typeGeneric: result.stack.readNumber(),
+            typeMultisplav: result.stack.readNumber(),
+        };
+    }
 }

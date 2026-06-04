@@ -45,6 +45,14 @@ import {
     MELT_HUNDRED_RUDA,
     MULTISPLAV_MINT_STAKE,
     ANVIL_MULTISPLAV_MINT_TAG,
+    TIER_CAP_TYPE0,
+    SAFETY_TIER_CAP,
+    MELT_MAX_TIER,
+    TYPE_GENERIC,
+    TYPE_MULTISPLAV,
+    MULTISPLAV_FILTER_BITS,
+    MULTISPLAV_FILTER_K,
+    MULTISPLAV_TIER_CAP,
 } from '../wrappers/game_manager/RetranslatorTypes';
 
 import {
@@ -53,12 +61,13 @@ import {
     NFT_REWARD_BUDGET,
     RUDA_MINT_BUDGET,
     ESCROW_RETURN_BUDGET,
+    NATIVE_BURN_BUDGET,
     RUDA_AMOUNT_10,
     RUDA_AMOUNT_100,
     RUDA_AMOUNT_1000,
     CUSTOM_ALLOWED_AMOUNT,
     ONE_RUDA,
-    NUM_REELS,
+    SSM_REELS,
     SYM_ZERO,
     SYM_SEVEN,
     SYM_X,
@@ -112,7 +121,12 @@ import { SBTPrinterOp } from '../wrappers/printers/sbt_printer/SBTPrinter';
 // v2: SSM rebuilt as a slot machine (new opcodes/amounts/enums) + the ANVIL
 // recipe engine (new `anvil` opcode namespace, `retranslator` errors, ANVIL gas/
 // amounts, SSM symbol/reward + ANVIL recipe enums, `ssmSlot` contract code).
-export const CONSTANTS_SCHEMA_VERSION = 2;
+// v3: gap-closing plans — multisplav provenance (`NFTContent` now ends with a
+// Maybe(^Cell) `seen` Bloom filter; new errors 983/984; filter params), SSM native
+// stake BURN (new `SsmBurnStake` opcode, NATIVE_BURN_BUDGET, MIN_ROLL_VALUE 0.7->1.0),
+// and ANVIL tier caps + type space (SAFETY_TIER_CAP/err 985, TYPE_GENERIC/MULTISPLAV,
+// new `anvilTypeSpace`/`anvilTierCaps` + `nftContentSeen` storage-layout keys).
+export const CONSTANTS_SCHEMA_VERSION = 3;
 
 // ============================================================================
 // Serialisation helpers
@@ -268,6 +282,7 @@ export function buildGameConstants(): GameConstants {
                 NFT_REWARD_BUDGET: nano(NFT_REWARD_BUDGET),
                 RUDA_MINT_BUDGET: nano(RUDA_MINT_BUDGET),
                 ESCROW_RETURN_BUDGET: nano(ESCROW_RETURN_BUDGET),
+                NATIVE_BURN_BUDGET: nano(NATIVE_BURN_BUDGET), // native-stake burn R1 chain
             },
             subcontract: {
                 GAS_COST_FORWARD: nano(GAS_COST_FORWARD),
@@ -306,7 +321,7 @@ export function buildGameConstants(): GameConstants {
             SSM_RUDA_AMOUNT_10: nano(RUDA_AMOUNT_10),
             SSM_RUDA_AMOUNT_100: nano(RUDA_AMOUNT_100),
             SSM_RUDA_AMOUNT_1000: nano(RUDA_AMOUNT_1000),
-            SSM_NUM_REELS: NUM_REELS,
+            SSM_NUM_REELS: SSM_REELS, // published key kept stable (value unchanged = 3)
             // ⚒ ANVIL 1000-RUDA mint: forwardPayload tag (uint32) the depositor sets.
             ANVIL_MULTISPLAV_MINT_TAG: ANVIL_MULTISPLAV_MINT_TAG,
             SSM_ONE_RUDA: nano(ONE_RUDA),
@@ -314,6 +329,18 @@ export function buildGameConstants(): GameConstants {
             // ⚒ ANVIL melt/mint amounts (raw jetton units).
             ANVIL_MELT_HUNDRED_RUDA: nano(MELT_HUNDRED_RUDA),
             ANVIL_MULTISPLAV_MINT_STAKE: nano(MULTISPLAV_MINT_STAKE),
+            // ⚒ ANVIL tier caps (plain counts) — type 0 caps at 10; all other types at
+            // SAFETY_TIER_CAP; type-5 has the tighter MULTISPLAV cap; native melt 10^K guard.
+            ANVIL_TIER_CAP_TYPE0: TIER_CAP_TYPE0,
+            ANVIL_SAFETY_TIER_CAP: SAFETY_TIER_CAP,
+            ANVIL_MULTISPLAV_TIER_CAP: MULTISPLAV_TIER_CAP,
+            ANVIL_MELT_MAX_TIER: MELT_MAX_TIER,
+            // ⚒ ANVIL type space: only these two values carry special rules.
+            ANVIL_TYPE_GENERIC: TYPE_GENERIC,
+            ANVIL_TYPE_MULTISPLAV: TYPE_MULTISPLAV,
+            // ⚒ multisplav provenance Bloom filter geometry (the `seen` field).
+            ANVIL_MULTISPLAV_FILTER_BITS: MULTISPLAV_FILTER_BITS,
+            ANVIL_MULTISPLAV_FILTER_K: MULTISPLAV_FILTER_K,
         },
 
         enums: {
@@ -340,12 +367,21 @@ export function buildGameConstants(): GameConstants {
             AnvilOutcomeKind: {
                 UPDATE: AnvilOutcomeKind.UPDATE, UPDATE_DESTROY: AnvilOutcomeKind.UPDATE_DESTROY, MELT: AnvilOutcomeKind.MELT,
             },
+            // ⚒ ANVIL type space — only these two values carry special rules; every
+            // other uint64 is generic (capped at SAFETY_TIER_CAP, no special semantics).
+            AnvilTypeSpace: { GENERIC: TYPE_GENERIC, MULTISPLAV: TYPE_MULTISPLAV },
         },
 
         storageLayout: {
             X_TYPE_BITS,
             Y_TYPE_BITS,
             HP_TYPE_BITS,
+            // ⚒ NFTContent now = {origin:address, itemType:uint64, tier:uint64, seen:Maybe(^Cell)}.
+            // CONSUMER: the decoder must read the trailing Maybe(^Cell) `seen` (1 bit, +1 ref
+            // when present). `seen` is the multisplav (type-5) provenance Bloom filter cell of
+            // MULTISPLAV_FILTER_BITS bits (2x uint256); null for every non-type-5 item.
+            NFT_CONTENT_SEEN_MAYBE_REF: 1,
+            MULTISPLAV_FILTER_BITS,
         },
 
         sendModes: {

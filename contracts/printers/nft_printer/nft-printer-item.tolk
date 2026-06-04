@@ -71,7 +71,7 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == storage.ownerAddress) throw ERROR_NOT_FROM_OWNER;
             val c = storage.content.load();
             val myAttrs: AnvilItemAttrs = {
-                index: storage.itemIndex, origin: c.origin, itemType: c.itemType, tier: c.tier,
+                index: storage.itemIndex, origin: c.origin, itemType: c.itemType, tier: c.tier, seen: c.seen,
             };
             reserveAnvil(in.valueCoins);
             if (msg.hasSecond) {
@@ -103,7 +103,7 @@ fun onInternalMessage(in: InMessage) {
             assert (storage.ownerAddress == msg.owner) throw ERROR_ANVIL_OWNER_MISMATCH;
             val c = storage.content.load();
             val myAttrs: AnvilItemAttrs = {
-                index: storage.itemIndex, origin: c.origin, itemType: c.itemType, tier: c.tier,
+                index: storage.itemIndex, origin: c.origin, itemType: c.itemType, tier: c.tier, seen: c.seen,
             };
             reserveAnvil(in.valueCoins);
             val report = AnvilReportToCollection {

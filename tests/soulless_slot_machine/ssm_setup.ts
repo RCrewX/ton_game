@@ -3,7 +3,7 @@ import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { compile } from '@ton/blueprint';
 import { SoullessSlotMachine } from '../../wrappers/soulless_slot_machine/SoullessSlotMachine';
 import { SSMSlot } from '../../wrappers/soulless_slot_machine/SSMSlot';
-import { Opcodes, NUM_REELS } from '../../wrappers/soulless_slot_machine/types';
+import { Opcodes, SSM_REELS } from '../../wrappers/soulless_slot_machine/types';
 
 // =============================================================================
 // Lightweight SSM harness. The SSM "owner" is a GM stand-in treasury, so we can
@@ -64,7 +64,7 @@ export function readRollSymbols(messageResult: any, ssmAddress: Address): number
     return null;
 }
 
-// Count how many distinct slot contracts got deployed this roll (expect NUM_REELS).
+// Count how many distinct slot contracts got deployed this roll (expect SSM_REELS).
 export function countSlotDeploys(messageResult: any, slotAddrs: Address[]): number {
     let n = 0;
     for (const addr of slotAddrs) {
@@ -145,4 +145,25 @@ export function hasCashback(messageResult: any, player: Address): boolean {
     });
 }
 
-export { NUM_REELS };
+// Did SSM emit the native-stake burn R1{SsmBurnStake} to its owner (GM stand-in)?
+// Returns the burn amount, or null. (findEmittedRequest ignores this opcode, so the
+// reward-routing assertions are unaffected by the burn.)
+export function findBurnRequest(messageResult: any, ownerAddress: Address): { amount: bigint } | null {
+    for (const tx of messageResult.transactions) {
+        if (tx.inMessage?.info.type !== 'internal') continue;
+        if (!tx.inMessage?.info.dest?.equals(ownerAddress)) continue;
+        try {
+            const s = tx.inMessage.body.beginParse();
+            if (s.loadUint(32) !== Opcodes.OP_R1) continue;
+            const inner = s.loadRef().beginParse();
+            if (inner.loadUint(32) !== Opcodes.OP_SSM_BURN_STAKE) continue;
+            inner.loadUint(64); // queryId
+            return { amount: inner.loadCoins() };
+        } catch {
+            /* not our burn R1 */
+        }
+    }
+    return null;
+}
+
+export { SSM_REELS };
