@@ -7,7 +7,7 @@ import { compile } from '@ton/blueprint';
 import { Retranslator } from '../../wrappers/game_manager/Retranslator';
 import { AnvilErrors } from '../../wrappers/game_manager/RetranslatorTypes';
 import { Opcodes as SsmOpcodes } from '../../wrappers/soulless_slot_machine/types';
-import { getContractCodeData } from '../../lib/buildOutput';
+import { getContractCodeData, mergeContractCodes, ContractCodes, ContractCodeInfo } from '../../lib/buildOutput';
 import {
     W5_AUTH_EXTENSION,
     W5_ACTION_SEND_MSG,
@@ -117,5 +117,55 @@ describe('ABI guard (deployment_latest.json vs on-chain)', () => {
         for (const [name, code] of Object.entries(ShipSessionErrors)) {
             expect(errs[name]).toBe(code);
         }
+    });
+});
+
+// =============================================================================
+// Clobber-survival guard: the unified writer must NEVER strip a code-only entry
+// (shipSession / ssmSlot / *Item). This is the structural defense behind the
+// deploy/abi unification — a live deploy that hands a partial contractCodes set
+// can no longer overwrite the complete offline publish.
+// =============================================================================
+describe('contractCodes clobber defense (mergeContractCodes)', () => {
+    const ci = (h: string): ContractCodeInfo => ({ hex: '', hash: h, hashBase64: '' });
+
+    const complete: ContractCodes = {
+        gameManager: ci('gm'), retranslator: ci('r'), jettonWallet: ci('jw'), jettonMinter: ci('jm'),
+        subcontract: ci('sc'),
+        games: {
+            ton_race_game: { game: ci('g'), ship: ci('sh'), coordinateCell: ci('cc') },
+            soulless_slot_machine: { soullessSlotMachine: ci('ssm'), ssmSlot: ci('slot') },
+        },
+        sbtCollection: ci('sbtc'), sbtItem: ci('sbti'), sbtnCollection: ci('sbtnc'), sbtnItem: ci('sbtni'),
+        nftItem: ci('nfti'), nftPrinterItem: ci('npi'), sbtPrinterItem: ci('spi'),
+        nftPrinter: ci('np'), sbtPrinter: ci('sp'),
+        shipSession: ci('654aa59e'),
+    };
+
+    // The OLD deploySystem bug shape: a code set that forgot the code-only entries.
+    const partial: ContractCodes = {
+        gameManager: ci('gm2'), jettonWallet: ci('jw2'), jettonMinter: ci('jm2'), subcontract: ci('sc2'),
+        games: {
+            ton_race_game: { game: ci('g2'), ship: ci('sh2'), coordinateCell: ci('cc2') },
+            soulless_slot_machine: { soullessSlotMachine: ci('ssm2') }, // ssmSlot OMITTED
+        },
+        sbtCollection: ci('sbtc'), sbtItem: ci('sbti'), sbtnCollection: ci('sbtnc'), sbtnItem: ci('sbtni'),
+        nftItem: ci('nfti'), nftPrinterItem: ci('npi'), sbtPrinterItem: ci('spi'),
+        nftPrinter: ci('np'), sbtPrinter: ci('sp'),
+        // shipSession OMITTED — the exact clobber that blocked the W5 consumer.
+    };
+
+    it('a partial write cannot strip shipSession or ssmSlot (footgun closed)', () => {
+        const merged = mergeContractCodes(complete, partial)!;
+        // code-only entries absent from `incoming` SURVIVE from the existing set:
+        expect(merged.shipSession?.hash).toBe('654aa59e');
+        expect(merged.games.soulless_slot_machine.ssmSlot?.hash).toBe('slot');
+        // incoming values still win where present:
+        expect(merged.gameManager.hash).toBe('gm2');
+        expect(merged.games.ton_race_game.ship.hash).toBe('sh2');
+    });
+
+    it('undefined incoming preserves the full set unchanged', () => {
+        expect(mergeContractCodes(complete, undefined)).toBe(complete);
     });
 });

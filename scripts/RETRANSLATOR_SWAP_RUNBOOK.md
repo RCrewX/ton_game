@@ -20,11 +20,12 @@ atomically, and leaves the old R\* inert.
    erroring) and the R\*↔printer counters desync. `swapRetranslator.ts` reads and migrates them for you —
    never hand-set them to 0. (Sandbox test "swap WITHOUT migrating the counter" demonstrates the corruption.)
 
-2. **Do NOT run `pnpm abi` (buildAbi) after a swap.** `buildAbi.ts` recomputes every address from the
-   *default* R\* config (version 1), so it would overwrite the swapped R\* address in
-   `deployment_latest.json` with the stale version-1 address. The swap script already writes the correct
-   new R\* address via the canonical writer. `buildAbi` is only for ABI/contract-code changes, which a swap
-   is not. (If you must run it for an unrelated ABI change, re-apply the R\* address afterwards.)
+2. **Do NOT run `pnpm abi` after a swap.** `pnpm abi` (= `deploy --offline`, via
+   `scripts/lib/abiCore.ts`) recomputes every address from the *default* R\* config (version 1), so it
+   would overwrite the swapped R\* address in `deployment_latest.json` with the stale version-1 address.
+   The swap script already writes the correct new R\* address via the canonical writer. `pnpm abi` is only
+   for ABI/contract-code changes, which a swap is not. (If you must run it for an unrelated ABI change,
+   re-apply the R\* address afterwards.)
 
 3. **`active` cannot be toggled on-chain.** There is no `SetActive` message (it is set only at deploy).
    "Disabling" the old R\* = GM simply stops routing to it after the repoint. Do not expect to freeze it.

@@ -313,52 +313,92 @@ export function writeFullDeploymentData(data: DeploymentData): void {
 }
 
 /**
+ * Deep-merge contract codes so a partial `incoming` set can NEVER strip an entry that
+ * exists in `existing`. This closes the clobber class: a producer that forgets a
+ * code-only entry (shipSession / ssmSlot / *Item) can no longer overwrite a complete
+ * set with a partial one — surviving entries are carried forward. `incoming` values
+ * win where present; the nested `games` codes are merged per-game.
+ *
+ * NOTE: the canonical producer (`scripts/lib/abiCore.ts buildFullContractCodes`) always
+ * emits the COMPLETE set, so this is a second line of defense for any other writer.
+ */
+export function mergeContractCodes(
+    existing: ContractCodes | undefined,
+    incoming: ContractCodes | undefined,
+): ContractCodes | undefined {
+    if (!incoming) return existing;
+    if (!existing) return incoming;
+    return {
+        ...existing,
+        ...incoming,
+        games: {
+            ton_race_game: {
+                ...existing.games?.ton_race_game,
+                ...incoming.games?.ton_race_game,
+            } as TonRaceGameCodes,
+            soulless_slot_machine: {
+                ...existing.games?.soulless_slot_machine,
+                ...incoming.games?.soulless_slot_machine,
+            } as SoullessSlotMachineCodes,
+        },
+    };
+}
+
+/**
  * Write deployment data for a specific network.
- * Preserves data for the other network and contract codes.
- * 
+ * Preserves data for the other network, the full constants, and ALL contract codes.
+ *
+ * INVARIANT (clobber defense): this writer carries `constants` forward and DEEP-MERGES
+ * the incoming `contractCodes` over the existing set, so it can never drop a code-only
+ * entry or the constants block. (Previously it did `contractCodes ?? existing` — a full
+ * replace — and omitted `constants`, which is how an offline ShipSession publish got
+ * overwritten by a live deploy.)
+ *
  * Creates:
  * - deployment_info/deployment_latest.json
  * - deployment_info/all/deployment-<timestamp>.json
- * 
+ *
  * @param network - The network being deployed to
  * @param networkData - The deployment data for this network
- * @param contractCodes - Optional contract codes (if provided, updates the shared codes)
+ * @param contractCodes - Optional contract codes (merged over the existing shared codes)
  */
 export function writeDeploymentData(
-    network: Network, 
+    network: Network,
     networkData: NetworkDeploymentData,
     contractCodes?: ContractCodes
 ): void {
     const timestamp = new Date().toISOString();
-    
+
     // Read existing data
     const existingData = readDeploymentData();
-    
+
     // Check if contract codes have changed (if both exist)
     const otherNetwork: Network = network === 'testnet' ? 'mainnet' : 'testnet';
     const otherNetworkData = existingData[otherNetwork];
-    
+
     if (otherNetworkData.deployed && contractCodes && existingData.contractCodes) {
         const existingCodes = existingData.contractCodes;
-        const codesChanged = 
+        const codesChanged =
             existingCodes.gameManager?.hash !== contractCodes.gameManager?.hash ||
             existingCodes.jettonMinter?.hash !== contractCodes.jettonMinter?.hash ||
             existingCodes.jettonWallet?.hash !== contractCodes.jettonWallet?.hash ||
             existingCodes.subcontract?.hash !== contractCodes.subcontract?.hash;
-        
+
         if (codesChanged) {
             console.log(`⚠️  Contract codes changed. ${otherNetwork} deployment may need redeploy.`);
         }
     }
-    
-    // Update the data for the target network
+
+    // Update the data for the target network — carry constants forward + merge codes
+    // so no code-only entry (shipSession/ssmSlot/*Item) can be stripped.
     const data: DeploymentData = {
         timestamp,
-        contractCodes: contractCodes ?? existingData.contractCodes,
+        constants: existingData.constants,
+        contractCodes: mergeContractCodes(existingData.contractCodes, contractCodes),
         testnet: network === 'testnet' ? networkData : existingData.testnet,
         mainnet: network === 'mainnet' ? networkData : existingData.mainnet,
     };
-    
+
     writeFullDeploymentData(data);
 }
 

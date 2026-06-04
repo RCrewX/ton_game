@@ -42,12 +42,17 @@ import {
     NetworkDeploymentData,
     DeploymentData,
     ContractCodes,
-    formatAddress,
-    getContractCodeData,
     writeFullDeploymentData,
     readDeploymentData,
 } from '../lib/buildOutput';
 import { buildGameConstants } from '../lib/gameConstants';
+import {
+    compileAllContracts,
+    buildFullContractCodes,
+    calculateNetworkAddresses,
+    createPrinters,
+    buildOfflineDeploymentData,
+} from './lib/abiCore';
 import {
     ProviderManager,
     getTonClientWithRateLimit,
@@ -74,12 +79,15 @@ const BASE_MINT_AMOUNT = 5500n;
 interface CliOptions {
     network: Network;
     shipStationId: bigint;
+    /** Offline ABI publish: assemble the full artifact with placeholder addrs, no RPC/keys. */
+    offline: boolean;
 }
 
 function parseCliArgs(): CliOptions {
     const args = process.argv.slice(2);
     let network: Network = 'testnet';
     let shipStationId = 1n;
+    let offline = false;
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -88,6 +96,8 @@ function parseCliArgs(): CliOptions {
             network = 'mainnet';
         } else if (arg === '--testnet') {
             network = 'testnet';
+        } else if (arg === '--offline') {
+            offline = true;
         } else if (arg === '--id' && args[i + 1]) {
             const parsed = BigInt(args[++i]);
             if (parsed < 1n) {
@@ -104,6 +114,8 @@ Usage:
 Options:
   --testnet       Deploy to testnet (default)
   --mainnet       Deploy to mainnet
+  --offline       Regenerate deployment_latest.json OFFLINE (full ABI, placeholder
+                  addrs, deployed:false). No RPC/keys. Same as 'pnpm abi'.
   --id <n>        Ship station ID (default: 1)
   --help, -h      Show this help
 
@@ -131,7 +143,7 @@ Examples:
         }
     }
 
-    return { network, shipStationId };
+    return { network, shipStationId, offline };
 }
 
 // ============================================================================
@@ -478,31 +490,8 @@ async function sendAndWait(
 // item + a collection-gated SetContent handler) as their item code.
 // ============================================================================
 
-// v1: NFT royalty -> owner (5%). Tune as needed; off-chain only affects metadata.
-const PRINTER_NFT_ROYALTY = { numerator: 5, denominator: 100 };
-
-function createPrinters(
-    ownerAddress: Address,
-    gameManagerAddress: Address,
-    nftPrinterCode: Cell,
-    sbtPrinterCode: Cell,
-    nftItemCode: Cell,
-    sbtnItemCode: Cell,
-) {
-    const nftPrinter = NFTPrinter.createFromConfig(
-        {
-            nftItemCode,
-            adminAddress: gameManagerAddress,
-            royaltyParams: { ...PRINTER_NFT_ROYALTY, royaltyAddress: ownerAddress },
-        },
-        nftPrinterCode,
-    );
-    const sbtPrinter = SBTPrinter.createFromConfig(
-        { sbtnItemCode, adminAddress: gameManagerAddress },
-        sbtPrinterCode,
-    );
-    return { nftPrinter, sbtPrinter };
-}
+// createPrinters() + PRINTER_NFT_ROYALTY now live in scripts/lib/abiCore.ts (single
+// assembly), imported above and reused by both the live deploy and the offline producer.
 
 // v1 toolsInfo carries ONLY the printer addresses (fees stay off).
 function buildToolsInfo(nftPrinter: Address, sbtPrinter: Address): ToolsInfo {
@@ -539,110 +528,49 @@ function decodeToolsPrinters(cell: Cell | null): { nft: Address | null; sbt: Add
 // Address Calculation
 // ============================================================================
 
-export function calculateNetworkAddresses(
-    ownerAddress: Address,
-    gameManagerCode: Cell,
-    retranslatorCode: Cell,
-    gameCode: Cell,
-    shipCode: Cell,
-    coordinateCellCode: Cell,
-    ssmCode: Cell,
-    ssmSlotCode: Cell,
-    jettonMinterCode: Cell,
-    jettonWalletCode: Cell,
-    subcontractCode: Cell,
-    nftPrinterCode: Cell,
-    sbtPrinterCode: Cell,
-    nftItemCode: Cell,
-    sbtnItemCode: Cell,
-    isTestnet: boolean,
-    shipStationId: bigint,
-    ownerPublicKey: bigint,
-    jettonContentUri: string
-): NetworkDeploymentData {
-    const gameManager = GameManager.createFromConfig({ ownerAddress }, gameManagerCode);
-
-    const retranslator = Retranslator.createFromConfig({
-        gameManagerAddress: gameManager.address,
-        ownerAddress,
-        active: true,
-    }, retranslatorCode);
-
-    const game = Game.createFromConfig({
-        managerAddress: gameManager.address,
-        shipCode,
-        coordinateCellCode,
-    }, gameCode);
-
-    const jettonMinter = JettonMinter.createFromConfig({
-        admin: gameManager.address,
-        content: jettonContentToCell({ type: 1, uri: jettonContentUri }),
-        wallet_code: jettonWalletCode,
-    }, jettonMinterCode);
-
-    // SSM: GM is owner; the RUDA minter is the native NFT origin. (Full deploy
-    // wiring + registration happen in plan 3; here we just compute the address.)
-    const ssm = SoullessSlotMachine.createFromConfig(
-        {
-            ownerAddress: gameManager.address,
-            ssmSlotCode,
-            rudaMasterAddress: jettonMinter.address,
-        },
-        ssmCode
-    );
-
-    const ownerJettonWallet = JettonWallet.createFromConfig({
-        ownerAddress,
-        minterAddress: jettonMinter.address,
-    }, jettonWalletCode);
-
-    const ownerShip = Ship.createFromConfig({
-        userAddress: ownerAddress,
-        gameAddress: game.address,
-        coordinateCellCode,
-    }, shipCode);
-
-    const shipStation = Subcontract.createFromConfig({
-        ownerAddress,
-        id: shipStationId,
-        ownerPublicKey,
-    }, subcontractCode);
-
-    const { nftPrinter, sbtPrinter } = createPrinters(
-        ownerAddress, gameManager.address, nftPrinterCode, sbtPrinterCode, nftItemCode, sbtnItemCode,
-    );
-
-    return {
-        deployed: false,
-        ownerAddress: formatAddress(ownerAddress, isTestnet),
-        gameManager: formatAddress(gameManager.address, isTestnet),
-        retranslator: formatAddress(retranslator.address, isTestnet),
-        nftPrinter: formatAddress(nftPrinter.address, isTestnet),
-        sbtPrinter: formatAddress(sbtPrinter.address, isTestnet),
-        jettonMinter: formatAddress(jettonMinter.address, isTestnet),
-        ownerJettonWallet: formatAddress(ownerJettonWallet.address, isTestnet),
-        ship_station: formatAddress(shipStation.address, isTestnet),
-        games: {
-            ton_race_game: {
-                game: formatAddress(game.address, isTestnet),
-                ownerShip: formatAddress(ownerShip.address, isTestnet),
-            },
-            soulless_slot_machine: {
-                ssm: formatAddress(ssm.address, isTestnet),
-            },
-        },
-    };
-}
+// calculateNetworkAddresses() now lives in scripts/lib/abiCore.ts (single assembly),
+// imported above and shared by the live deploy + the offline producer.
 
 // ============================================================================
 // Main Deployment Logic
 // ============================================================================
+
+/**
+ * `pnpm deploy --offline` (alias `pnpm abi`): regenerate deployment_latest.json OFFLINE.
+ * Owner address from $DEPLOY_OWNER_ADDRESS or the existing json. No RPC/keys; placeholder
+ * ship_station (pubkey=0); deployed:false. Uses the SAME shared assembly as the live deploy,
+ * so the full contractCodes (incl. shipSession) is always written.
+ */
+async function runOfflineAbi(): Promise<void> {
+    console.log('\n=== TON Game ABI (offline publish) ===');
+    const existing = readDeploymentData();
+    const ownerStr =
+        process.env.DEPLOY_OWNER_ADDRESS ||
+        existing.testnet?.ownerAddress?.nonBounceable ||
+        existing.mainnet?.ownerAddress?.nonBounceable;
+    if (!ownerStr) {
+        throw new Error('No owner address found (set $DEPLOY_OWNER_ADDRESS or provide an existing deployment json).');
+    }
+    const ownerAddress = Address.parse(ownerStr);
+    console.log('Compiling contracts (offline)...');
+    const data = await buildOfflineDeploymentData(ownerAddress);
+    writeFullDeploymentData(data);
+    console.log('✅ ABI regenerated (offline, deployed:false). Run `pnpm deploy` to make addresses live.');
+}
 
 async function main(): Promise<void> {
     const options = parseCliArgs();
     const { network, shipStationId } = options;
     const isTestnet = network === 'testnet';
     const timestamp = new Date().toISOString();
+
+    // OFFLINE ABI publish — no RPC, no keys. Same producer + shared assembly as a live
+    // deploy, but with placeholder addresses (ownerPublicKey=0 → only ship_station is a
+    // placeholder) and deployed:false. This is what `pnpm abi` runs.
+    if (options.offline) {
+        await runOfflineAbi();
+        return;
+    }
 
     console.log('\n=== TON Game System Deployment ===');
     console.log(`Network: ${network}`);
@@ -693,66 +621,25 @@ async function main(): Promise<void> {
     const existingData = readDeploymentData();
 
     try {
-        // Compile all contracts
+        // Compile all contracts (single source of truth — includes the code-only
+        // contracts: ssmSlot, shipSession, *Item).
         console.log('Compiling contracts...');
-        const gameManagerCode = await compile('GameManager');
-        const retranslatorCode = await compile('Retranslator');
-        const gameCode = await compile('Game');
-        const shipCode = await compile('Ship');
-        const coordinateCellCode = await compile('CoordinateCell');
-        const ssmCode = await compile('SoullessSlotMachine');
-        const ssmSlotCode = await compile('SSMSlot');
-        const jettonWalletCode = await compile('JettonWallet');
-        const jettonMinterCode = await compile('JettonMinter');
-        const subcontractCode = await compile('Subcontract');
-        const sbtItemCode = await compile('SBTItem');
-        const sbtCollectionCode = await compile('SBTCollection');
-        const sbtnItemCode = await compile('SBTNItem');
-        const sbtnCollectionCode = await compile('SBTNCollection');
-        const nftItemCode = await compile('NFTItem');
-        // The printers use their OWN editable item variants (standard NFTItem/SBTNItem
-        // + a collection-gated SetContent edit handler; storage layout identical, so
-        // address derivation is unchanged). These are the codes the GM-owned printer
-        // collections deploy as their items.
-        const nftPrinterItemCode = await compile('NFTPrinterItem');
-        const sbtPrinterItemCode = await compile('SBTPrinterItem');
-        const nftPrinterCode = await compile('NFTPrinter');
-        const sbtPrinterCode = await compile('SBTPrinter');
+        const compiled = await compileAllContracts();
+        const {
+            gameManagerCode, retranslatorCode, gameCode, shipCode, coordinateCellCode,
+            ssmCode, ssmSlotCode, jettonWalletCode, jettonMinterCode, subcontractCode,
+            sbtItemCode, sbtCollectionCode, sbtnItemCode, sbtnCollectionCode, nftItemCode,
+            nftPrinterItemCode, sbtPrinterItemCode, nftPrinterCode, sbtPrinterCode,
+        } = compiled;
         console.log('Contracts compiled successfully');
         console.log('');
 
         const jettonContentUri = process.env.JETTON_CONTENT_URI || 'https://example.com/jetton.json';
         console.log(`Jetton content URI: ${jettonContentUri}`);
 
-        // Build contract codes
-        const contractCodes: ContractCodes = {
-            gameManager: getContractCodeData(gameManagerCode),
-            retranslator: getContractCodeData(retranslatorCode),
-            jettonWallet: getContractCodeData(jettonWalletCode),
-            jettonMinter: getContractCodeData(jettonMinterCode),
-            subcontract: getContractCodeData(subcontractCode),
-            games: {
-                ton_race_game: {
-                    game: getContractCodeData(gameCode),
-                    ship: getContractCodeData(shipCode),
-                    coordinateCell: getContractCodeData(coordinateCellCode),
-                },
-                soulless_slot_machine: {
-                    soullessSlotMachine: getContractCodeData(ssmCode),
-                    // SSM embeds this code in its storage to deploy ephemeral slots.
-                    ssmSlot: getContractCodeData(ssmSlotCode),
-                },
-            },
-            sbtCollection: getContractCodeData(sbtCollectionCode),
-            sbtItem: getContractCodeData(sbtItemCode),
-            sbtnCollection: getContractCodeData(sbtnCollectionCode),
-            sbtnItem: getContractCodeData(sbtnItemCode),
-            nftItem: getContractCodeData(nftItemCode),
-            nftPrinterItem: getContractCodeData(nftPrinterItemCode),
-            sbtPrinterItem: getContractCodeData(sbtPrinterItemCode),
-            nftPrinter: getContractCodeData(nftPrinterCode),
-            sbtPrinter: getContractCodeData(sbtPrinterCode),
-        };
+        // Build the COMPLETE contract codes (incl. shipSession) via the shared assembly.
+        // Never hand-roll this list — that is how code-only entries got dropped.
+        const contractCodes: ContractCodes = buildFullContractCodes(compiled);
 
         // Calculate addresses for both networks
         console.log('Calculating addresses...');
