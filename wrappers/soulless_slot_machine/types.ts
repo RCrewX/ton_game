@@ -108,14 +108,15 @@ export function encodeRollIntakeData(player: Address, queryId: bigint | number =
     return beginCell().storeAddress(player).storeUint(queryId, 64).endCell();
 }
 
-// Native: the full nested forwardPayload the depositor attaches to the RUDA
-// transfer so R* routes a JettonUsed{amount, data} to the SSM game.
-//   forwardPayload = ^[ ^gameAddressCell, ^dataCell ]
+// Native: the forwardPayload the depositor attaches to the RUDA transfer so R*
+// routes a JettonUsed{amount, data} to the SSM game. R* loadRef's the transfer's
+// forwardPayload to THIS cell, which must directly hold [^gameAddressCell, ^dataCell]
+// (same shape as test_utils.buildJettonUsageForwardPayload — NOT double-wrapped).
+//   forwardPayload (the cell returned here) = [ ^gameAddressCell, ^dataCell ]
 export function buildNativeRollForwardPayload(ssmAddress: Address, player: Address, queryId: bigint | number = 0): Cell {
     const gameAddressCell = beginCell().storeAddress(ssmAddress).endCell();
     const dataCell = encodeRollIntakeData(player, queryId);
-    const inner = beginCell().storeRef(gameAddressCell).storeRef(dataCell).endCell();
-    return beginCell().storeRef(inner).endCell();
+    return beginCell().storeRef(gameAddressCell).storeRef(dataCell).endCell();
 }
 
 // Custom: CustomRollPayload {master, player, queryId} (one ref inside the

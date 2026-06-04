@@ -539,7 +539,7 @@ function decodeToolsPrinters(cell: Cell | null): { nft: Address | null; sbt: Add
 // Address Calculation
 // ============================================================================
 
-function calculateNetworkAddresses(
+export function calculateNetworkAddresses(
     ownerAddress: Address,
     gameManagerCode: Cell,
     retranslatorCode: Cell,
@@ -739,6 +739,8 @@ async function main(): Promise<void> {
                 },
                 soulless_slot_machine: {
                     soullessSlotMachine: getContractCodeData(ssmCode),
+                    // SSM embeds this code in its storage to deploy ephemeral slots.
+                    ssmSlot: getContractCodeData(ssmSlotCode),
                 },
             },
             sbtCollection: getContractCodeData(sbtCollectionCode),

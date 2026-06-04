@@ -55,6 +55,8 @@ export interface TonRaceGameCodes {
 
 export interface SoullessSlotMachineCodes {
     soullessSlotMachine: ContractCodeInfo;
+    /** SSMSlot — the ephemeral per-reel contract SSM deploys each roll. */
+    ssmSlot?: ContractCodeInfo;
 }
 
 /**

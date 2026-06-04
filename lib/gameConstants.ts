@@ -37,6 +37,14 @@ import {
     GAS_COST_SET_TOOLS_INFO,
     GAS_COST_SET_ALLOW_BURN,
     GAS_COST_REQUEST_BURN,
+    ANVIL_OPCODES,
+    AnvilRecipe,
+    AnvilOutcomeKind,
+    ANVIL_ITEM_OP_TON,
+    ANVIL_DESTROY_TON,
+    MELT_HUNDRED_RUDA,
+    MULTISPLAV_MINT_STAKE,
+    ANVIL_MULTISPLAV_MINT_TAG,
 } from '../wrappers/game_manager/RetranslatorTypes';
 
 import {
@@ -50,6 +58,14 @@ import {
     RUDA_AMOUNT_1000,
     CUSTOM_ALLOWED_AMOUNT,
     ONE_RUDA,
+    NUM_REELS,
+    SYM_ZERO,
+    SYM_SEVEN,
+    SYM_X,
+    OUT_NOTHING,
+    OUT_NFT,
+    OUT_MINT_RUDA,
+    OUT_RETURN_ESCROW,
 } from '../wrappers/soulless_slot_machine/types';
 
 import {
@@ -93,7 +109,10 @@ import { SBTPrinterOp } from '../wrappers/printers/sbt_printer/SBTPrinter';
  * Bump when the *shape* of the `constants` section changes (not when a value
  * changes) so consumers can guard against incompatible layouts.
  */
-export const CONSTANTS_SCHEMA_VERSION = 1;
+// v2: SSM rebuilt as a slot machine (new opcodes/amounts/enums) + the ANVIL
+// recipe engine (new `anvil` opcode namespace, `retranslator` errors, ANVIL gas/
+// amounts, SSM symbol/reward + ANVIL recipe enums, `ssmSlot` contract code).
+export const CONSTANTS_SCHEMA_VERSION = 2;
 
 // ============================================================================
 // Serialisation helpers
@@ -197,6 +216,10 @@ export function buildGameConstants(): GameConstants {
             gameManager: hexMap(GameManagerOpcodes),
             retranslator: hexMap(RetranslatorOpcodes),
             soullessSlotMachine: hexMap(SsmOpcodes),
+            // ⚒ ANVIL recipe engine — R*-private request/result + printer item-flow
+            // ops. The recipe-request opcodes (Combine/Transform/Melt) + the apply
+            // body live on R*; the item-flow ops live on the NFT printer item/coll.
+            anvil: hexMap(ANVIL_OPCODES),
             subcontract: hexMap(SubcontractOpcodes),
             tonRaceGame: hexMap(TrgOpcodes),
             jetton: hexMap(staticNumberMap(JettonOp as unknown as Record<string, unknown>)),
@@ -211,6 +234,8 @@ export function buildGameConstants(): GameConstants {
         errors: {
             common: parseErrorCodes('contracts/ton_race_game/static/errors.tolk'),
             gameManager: parseErrorCodes('contracts/game_manager/static.tolk'),
+            // R* recipe-engine + dispatch errors (incl. ANVIL 970..982) live here.
+            retranslator: parseErrorCodes('contracts/game_manager/retranslator.tolk'),
             soullessSlotMachine: parseErrorCodes('contracts/soulless_slot_machine/static.tolk'),
             subcontract: parseErrorCodes('contracts/subcontract/static.tolk'),
             tonRaceGame: parseErrorCodes('contracts/ton_race_game/static/errors.tolk'),
@@ -232,6 +257,11 @@ export function buildGameConstants(): GameConstants {
                 GAS_COST_SET_TOOLS_INFO: nano(GAS_COST_SET_TOOLS_INFO),
                 GAS_COST_SET_ALLOW_BURN: nano(GAS_COST_SET_ALLOW_BURN),
                 GAS_COST_REQUEST_BURN: nano(GAS_COST_REQUEST_BURN),
+            },
+            anvil: {
+                // per-hop budgets inside the ANVIL return chain
+                ANVIL_ITEM_OP_TON: nano(ANVIL_ITEM_OP_TON),
+                ANVIL_DESTROY_TON: nano(ANVIL_DESTROY_TON),
             },
             soullessSlotMachine: {
                 MIN_ROLL_VALUE: nano(MIN_ROLL_VALUE),
@@ -276,8 +306,14 @@ export function buildGameConstants(): GameConstants {
             SSM_RUDA_AMOUNT_10: nano(RUDA_AMOUNT_10),
             SSM_RUDA_AMOUNT_100: nano(RUDA_AMOUNT_100),
             SSM_RUDA_AMOUNT_1000: nano(RUDA_AMOUNT_1000),
+            SSM_NUM_REELS: NUM_REELS,
+            // ⚒ ANVIL 1000-RUDA mint: forwardPayload tag (uint32) the depositor sets.
+            ANVIL_MULTISPLAV_MINT_TAG: ANVIL_MULTISPLAV_MINT_TAG,
             SSM_ONE_RUDA: nano(ONE_RUDA),
             SSM_CUSTOM_ALLOWED_AMOUNT: CUSTOM_ALLOWED_AMOUNT.toString(),
+            // ⚒ ANVIL melt/mint amounts (raw jetton units).
+            ANVIL_MELT_HUNDRED_RUDA: nano(MELT_HUNDRED_RUDA),
+            ANVIL_MULTISPLAV_MINT_STAKE: nano(MULTISPLAV_MINT_STAKE),
         },
 
         enums: {
@@ -290,6 +326,19 @@ export function buildGameConstants(): GameConstants {
             JettonUsageMode: {
                 SHIP_UPGRADE: JettonUsageMode.SHIP_UPGRADE,
                 FAST_TRAVEL_UPGRADE: JettonUsageMode.FAST_TRAVEL_UPGRADE,
+            },
+            // ⚒ SSM slot machine: reel symbols + reward outcome kinds.
+            SsmSymbol: { ZERO: SYM_ZERO, SEVEN: SYM_SEVEN, X: SYM_X },
+            SsmRewardKind: {
+                NOTHING: OUT_NOTHING, NFT: OUT_NFT, MINT_RUDA: OUT_MINT_RUDA, RETURN_ESCROW: OUT_RETURN_ESCROW,
+            },
+            // ⚒ ANVIL recipe codes + outcome kinds.
+            AnvilRecipe: {
+                COMBINE: AnvilRecipe.COMBINE, MULTISPLAV: AnvilRecipe.MULTISPLAV,
+                ZERO_TYPE: AnvilRecipe.ZERO_TYPE, ZERO_TIER: AnvilRecipe.ZERO_TIER, MELT: AnvilRecipe.MELT,
+            },
+            AnvilOutcomeKind: {
+                UPDATE: AnvilOutcomeKind.UPDATE, UPDATE_DESTROY: AnvilOutcomeKind.UPDATE_DESTROY, MELT: AnvilOutcomeKind.MELT,
             },
         },
 

@@ -267,7 +267,21 @@ export const ANVIL_OPCODES = {
     OP_ANVIL_TRANSFORM: 0x416e7654,
     OP_ANVIL_MELT: 0x416e764d,
     OP_PRINTER_ANVIL_APPLY: 0x416e7641,
+    // item-flow ops (printer item/collection); match nft_printer/messages.tolk
+    OP_ANVIL_INIT: 0x416e7601,
+    OP_ANVIL_HOP: 0x416e7602,
+    OP_ANVIL_REPORT_TO_COLLECTION: 0x416e7603,
+    OP_SET_NFT_CONTENT_AND_DESTROY: 0x416e7604,
+    OP_ANVIL_DESTROY_FROM_SIBLING: 0x416e7605,
+    OP_ANVIL_DESTROY: 0x416e7606,
 } as const;
+
+// ANVIL gas budgets + amounts (mirror retranslator.tolk). nano strings published.
+export const ANVIL_ITEM_OP_TON = toNano('0.05');     // collection -> item op hop
+export const ANVIL_DESTROY_TON = toNano('0.05');     // item1 -> item2 destroy hop
+export const MELT_HUNDRED_RUDA = toNano('100');      // non-native I(0|10|R) -> 100 RUDA
+export const MULTISPLAV_MINT_STAKE = toNano('1000'); // 1000 RUDA -> I(5|0|N)
+export const ANVIL_MULTISPLAV_MINT_TAG = 0x4d756c74; // "Mult" forwardPayload tag
 
 export type AnvilGetInput = {
     recipe: number;
