@@ -44,7 +44,11 @@ describe('SSM native stake burn (burn-and-mint)', () => {
         it(`burns exactly the staked ${stake} on EVERY native outcome (win + loss)`, async () => {
             const kinds = new Set<number>();
 
-            for (let seed = 1; seed <= 18; seed++) {
+            // A loss (000) is only ~1/27 per roll, so a fixed seed window is unreliable.
+            // Scan until BOTH a loss and a win have been seen (early-break), asserting the
+            // burn on every single roll regardless of outcome (the real property: the
+            // native burn is unconditional). The cap makes a miss statistically impossible.
+            for (let seed = 1; seed <= 300 && !(kinds.has(OUT_NOTHING) && (kinds.has(OUT_NFT) || kinds.has(OUT_MINT_RUDA))); seed++) {
                 setSeed(S.blockchain, seed);
                 const r = await S.ssm.sendJettonUsed(S.gm.getSender(), toNano('1.5'), stake, S.player.address, BigInt(seed));
 
@@ -75,7 +79,7 @@ describe('SSM native stake burn (burn-and-mint)', () => {
                 }
             }
 
-            // Burn was exercised across at least a loss AND a win in this seed sweep.
+            // The burn was exercised across at least a loss AND a win.
             expect(kinds.has(OUT_NOTHING)).toBe(true);
             expect(kinds.has(OUT_NFT) || kinds.has(OUT_MINT_RUDA)).toBe(true);
         });

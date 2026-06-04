@@ -200,6 +200,6 @@ describe('SSM + ANVIL cross-system e2e', () => {
         expect(Number(c.opcodes.anvil.OP_PRINTER_ANVIL_APPLY)).toBe(ANVIL_OPCODES.OP_PRINTER_ANVIL_APPLY);
         // Enums published for the consumer.
         expect(c.enums.AnvilRecipe.COMBINE).toBe(AnvilRecipe.COMBINE);
-        expect(c.schemaVersion).toBe(2);
+        expect(c.schemaVersion).toBe(3); // bumped by the multisplav/burn/caps gap plans
     });
 });

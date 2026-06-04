@@ -156,13 +156,18 @@ fun isAllowedRudaAmount(amount: coins): bool {
 
 // =============================================================================
 //  NFT content — MUST stay byte-identical to the NFTPrinter's NFTContent
-//  (contracts/printers/nft_printer/storage.tolk): {origin, itemType, tier}.
+//  (contracts/printers/nft_printer/storage.tolk): {origin, itemType, tier, seen}.
 //  SSM builds it and ships it as the opaque `content` cell inside MintNft.
+//  `seen` is the multisplav (type-5) provenance Bloom filter — ALWAYS null for an
+//  SSM-minted item. It MUST be present (as a null Maybe-ref) so the layout matches
+//  the printer item, which parses content as the 4-field NFTContent on every ANVIL
+//  op / get_nft_content_fields; a 3-field cell would throw when the item loads it.
 // =============================================================================
 struct NFTContent {
     origin: address
     itemType: uint64
     tier: uint64
+    seen: cell?
 }
 
 // =============================================================================

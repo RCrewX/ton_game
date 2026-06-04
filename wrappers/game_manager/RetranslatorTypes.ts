@@ -277,6 +277,7 @@ export const AnvilErrors = {
     MULTISPLAV_TIER_CAP: 983,
     MULTISPLAV_ORIGIN_ALREADY_SEEN: 984,
     SAFETY_TIER_CAP: 985,
+    RECIPE_ARITY: 986,
 } as const;
 
 // ⚒ Multisplav provenance Bloom filter params (mirror retranslator.tolk).

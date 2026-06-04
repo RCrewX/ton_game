@@ -120,6 +120,7 @@ const ERR_ANVIL_BAD_MULTISPLAV_MINT_AMOUNT = 982; // 1000-RUDA mint: wrong stake
 const ERR_ANVIL_MULTISPLAV_TIER_CAP = 983;    // type-5 alloy would exceed MULTISPLAV_TIER_CAP
 const ERR_ANVIL_MULTISPLAV_ORIGIN_ALREADY_SEEN = 984; // sacrifice origin already in the native's filter
 const ERR_ANVIL_SAFETY_TIER_CAP = 985;        // non-generic combine would exceed SAFETY_TIER_CAP
+const ERR_ANVIL_RECIPE_ARITY = 986;           // recipe sent on the wrong arity arm (2-item vs 1-item)
 
 // =============================================================================
 //  R*-private registries & types (GM never imports these — decoupling invariant)
@@ -1017,6 +1018,11 @@ fun onInternalMessage(in: InMessage) {
                 // ----------------------------------------------------------------
                 AnvilCombine => {
                     val toolsInfo = assertAnvilFromPrinter(storage, msg.initiator);
+                    // ARITY GUARD: the two-item arm accepts ONLY two-item recipes. Without
+                    // this, a user could send a single-item report tagged recipe=COMBINE (or
+                    // vice-versa) and have computeAnvil emit an UPDATE_DESTROY with item2Index=0
+                    // — a free tier-up that destroys NFT index 0. Reject the mismatch.
+                    assert (request.recipe == RECIPE_COMBINE || request.recipe == RECIPE_MULTISPLAV) throw ERR_ANVIL_RECIPE_ARITY;
                     val nativeOrigin = anvilNativeOrigin(storage);
                     val i1 = request.item1.load();
                     val i2 = request.item2.load();
@@ -1051,6 +1057,10 @@ fun onInternalMessage(in: InMessage) {
 
                 AnvilTransform => {
                     val toolsInfo = assertAnvilFromPrinter(storage, msg.initiator);
+                    // ARITY GUARD: the single-item arm accepts ONLY single-item transforms.
+                    // Blocks a single-item report tagged recipe=COMBINE/MULTISPLAV/MELT from
+                    // reaching computeAnvil's two-item / melt branches on this path.
+                    assert (request.recipe == RECIPE_ZERO_TYPE || request.recipe == RECIPE_ZERO_TIER) throw ERR_ANVIL_RECIPE_ARITY;
                     val nativeOrigin = anvilNativeOrigin(storage);
                     val i1 = request.item1.load();
                     val outcome = computeAnvil(

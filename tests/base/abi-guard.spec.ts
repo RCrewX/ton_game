@@ -78,6 +78,8 @@ describe('ABI guard (deployment_latest.json vs on-chain)', () => {
         expect(errs.ERR_ANVIL_MULTISPLAV_ORIGIN_ALREADY_SEEN).toBe(AnvilErrors.MULTISPLAV_ORIGIN_ALREADY_SEEN);
         expect(errs.ERR_ANVIL_MELT_NON_NATIVE).toBe(AnvilErrors.MELT_NON_NATIVE);
         expect(errs.ERR_ANVIL_TIER_TOO_HIGH).toBe(AnvilErrors.TIER_TOO_HIGH);
+        expect(errs.ERR_ANVIL_NOT_PRINTER).toBe(AnvilErrors.NOT_PRINTER);
+        expect(errs.ERR_ANVIL_RECIPE_ARITY).toBe(AnvilErrors.RECIPE_ARITY);
     });
 
     it('published SSM burn opcode matches the wrapper', () => {

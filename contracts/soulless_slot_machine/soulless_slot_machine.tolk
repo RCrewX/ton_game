@@ -196,6 +196,7 @@ fun settleReward(storage: SSMStorage, ctx: RollContext, symbols: int) {
             origin: ctx.origin,
             itemType: outcome.nftType,
             tier: outcome.nftTier,
+            seen: null, // SSM never mints a multisplav item; empty provenance slot
         };
         val mint: MintNft = {
             receiver: ctx.player,
