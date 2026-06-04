@@ -112,11 +112,14 @@ describe('Jetton Minting', () => {
             op: Opcodes.OP_REQUEST_MINT,
         });
 
+        // New architecture: the game wraps ForwardMintRequest in an R1 to the
+        // dumb-pipe GM (which forwards R2 -> R* -> R3). The game->GM hop therefore
+        // carries op R1, not the inner FORWARD_MINT_REQUEST. (See request-ship-to-mint.)
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.game.address,
             to: SC_System.gameManager.address,
             success: true,
-            op: Opcodes.OP_FORWARD_MINT_REQUEST,
+            op: GameManagerOpcodes.OP_R1,
         });
 
         expect(SC_System.messageResult.transactions).toHaveTransaction({
@@ -205,11 +208,14 @@ describe('Jetton Minting', () => {
             op: Opcodes.OP_REQUEST_MINT,
         });
 
+        // New architecture: the game wraps ForwardMintRequest in an R1 to the
+        // dumb-pipe GM (which forwards R2 -> R* -> R3). The game->GM hop therefore
+        // carries op R1, not the inner FORWARD_MINT_REQUEST. (See request-ship-to-mint.)
         expect(SC_System.messageResult.transactions).toHaveTransaction({
             from: SC_System.game.address,
             to: SC_System.gameManager.address,
             success: true,
-            op: Opcodes.OP_FORWARD_MINT_REQUEST,
+            op: GameManagerOpcodes.OP_R1,
         });
 
         expect(SC_System.messageResult.transactions).toHaveTransaction({
