@@ -254,7 +254,7 @@ fun onInternalMessage(in: InMessage) {
         }
         FastTravelUpgrade => {
             var storage = lazy ShipStorage.load();
-            assert (in.senderAddress == storage.gameAddress) throw ERR_INVALID_USER_SENDER;
+            assert (in.senderAddress == storage.gameAddress) throw ERR_INVALID_GAME_SENDER;
             assert (storage.movement_in_process == false) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
             assert (storage.gameFields != null) throw ERR_GAME_FIELDS_NOT_INITIALIZED;
 

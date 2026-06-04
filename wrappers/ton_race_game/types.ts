@@ -47,6 +47,7 @@ import {
     storeXY,
     HardTravelInfo,
     storeHardTravelInfo,
+    HP_TYPE_BITS,
 } from './structs';
 
 export enum JettonUsageMode {
@@ -141,7 +142,7 @@ export type LiteralyAnything = {
 
 export type MoveShipToCC = {
     user: Address;
-    ship_hp: bigint; // uint256
+    ship_hp: bigint; // uint64 (HP_TYPE)
     mode: MoveMode;
 };
 
@@ -245,7 +246,7 @@ export type JettonUsed = {
 };
 
 export type ShipUpgrade = {
-    hpIncrease: bigint; // uint256
+    hpIncrease: bigint; // uint64 (HP_TYPE)
 };
 
 export type FastTravelUpgrade = {
@@ -311,7 +312,7 @@ export function encodeMoveShipToCC(msg: MoveShipToCC): Cell {
     const b = beginCell();
     b.storeUint(Opcodes.OP_MOVE_SHIP_TO_CC, 32);
     b.storeAddress(msg.user);
-    b.storeUint(msg.ship_hp, 256);
+    b.storeUint(msg.ship_hp, HP_TYPE_BITS);
     storeMoveMode(b, msg.mode);
     return b.endCell();
 }
@@ -401,7 +402,7 @@ export function encodeLaunchHardTravel(msg: LaunchHardTravel): Cell {
     const b = beginCell();
     b.storeUint(Opcodes.OP_LAUNCH_HARD_TRAVEL, 32);
     b.storeAddress(msg.user);
-    b.storeUint(msg.ship_hp, 256);
+    b.storeUint(msg.ship_hp, HP_TYPE_BITS);
     storeHardTravelInfo(b, msg.info);
     return b.endCell();
 }
@@ -410,7 +411,7 @@ export function encodeHardTravel(msg: HardTravel): Cell {
     const b = beginCell();
     b.storeUint(Opcodes.OP_HARD_TRAVEL, 32);
     b.storeAddress(msg.user);
-    b.storeUint(msg.ship_hp, 256);
+    b.storeUint(msg.ship_hp, HP_TYPE_BITS);
     storeHardTravelInfo(b, msg.info);
     storeMoveData(b, msg.moveData);
     b.storeUint(msg.turnIndex, 8);
@@ -471,7 +472,7 @@ export function encodeJettonUsed(msg: JettonUsed): Cell {
 export function encodeShipUpgrade(msg: ShipUpgrade): Cell {
     const b = beginCell();
     b.storeUint(Opcodes.OP_SHIP_UPGRADE, 32);
-    b.storeUint(msg.hpIncrease, 256);
+    b.storeUint(msg.hpIncrease, HP_TYPE_BITS);
     return b.endCell();
 }
 

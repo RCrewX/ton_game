@@ -190,8 +190,9 @@ fun generateRandomResult(base: HP_TYPE): RandomResult {
 }
 
 fun buildGameFields(max_hp: HP_TYPE): Cell<GameFields> {
-    // Dirty hack: using storeUint(0, 256) for X because of the way the compiler optimizes the code
-    val gameFields: Cell<GameFields> = beginCell().storeUint(0, X_TYPE_BITS).storeUint(0, Y_TYPE_BITS).storeUint(max_hp, HP_TYPE_BITS).storeCoins(0).endCell() as Cell<GameFields>;
+    // X is a signed int64 (X_TYPE); store it as signed to match XY.load's loadInt. Value is 0 here
+    // (initial position), so this is bit-identical to the previous storeUint but type-correct.
+    val gameFields: Cell<GameFields> = beginCell().storeInt(0, X_TYPE_BITS).storeUint(0, Y_TYPE_BITS).storeUint(max_hp, HP_TYPE_BITS).storeCoins(0).endCell() as Cell<GameFields>;
     return gameFields;
 }
 
