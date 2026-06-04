@@ -17,12 +17,14 @@ fun onInternalMessage(in: InMessage) {
     match (msg) {
         ManualDeploy => {
 
-            // assert gas>const_min_to_deploy-fee 
-            assert (in.valueCoins >= GAS_COST_MANUAL_DEPLOY - BASIC_STORAGE_TAX) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            assert (contract.getOriginalBalance() > (2 * GAS_COST_MANUAL_DEPLOY) - BASIC_STORAGE_TAX) throw ERR_NOT_ENOUGH_BALANCE;
-            // No auth check needed - anyone can send manual deploy messages
+            // Owner-only: ManualDeploy must come from the stored owner address. Checked FIRST so a
+            // non-owner gets ERR_INVALID_OWNER_SENDER instead of a misleading gas/balance error.
             var storage = lazy SubcontractStorage.load();
             assert (in.senderAddress == storage.ownerAddress) throw ERR_INVALID_OWNER_SENDER;
+
+            // assert gas>const_min_to_deploy-fee
+            assert (in.valueCoins >= GAS_COST_MANUAL_DEPLOY - BASIC_STORAGE_TAX) throw ERR_MESSAGE_VALUE_TOO_LOW;
+            assert (contract.getOriginalBalance() > (2 * GAS_COST_MANUAL_DEPLOY) - BASIC_STORAGE_TAX) throw ERR_NOT_ENOUGH_BALANCE;
 
             val cashbackMessage = createMessage({
                 bounce: BounceMode.NoBounce,

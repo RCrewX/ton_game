@@ -750,6 +750,10 @@ fun onInternalMessage(in: InMessage) {
                         forwardTonAmount: forwardTonAmount,
                         forwardPayload: forwardPayload,
                     };
+                    // Guard the unsigned `coins` subtraction below: without this, the active-game
+                    // fast path (which skips the >=0.2 check) underflows on low value and throws an
+                    // opaque arithmetic exception instead of a named error.
+                    assert (in.valueCoins >= MINT_TON_AMOUNT + BASIC_STORAGE_TAX) throw ERR_MESSAGE_VALUE_TOO_LOW;
                     var dif = in.valueCoins - MINT_TON_AMOUNT - BASIC_STORAGE_TAX;
                     val mintNewJettons = MintNewJettons {
                         queryId: 0,

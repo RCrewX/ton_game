@@ -31,7 +31,7 @@ const OP_REQUEST_TO_MOVE: uint32 = 0xf2a70b07;
 const MAX_MOVE_MODE: uint8 = 3;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Errors (940+ range, isolated from game 901-937 and subcontract 901-932)
+// Errors (950+ range, isolated from game 901-937 and subcontract 901-932)
 // ─────────────────────────────────────────────────────────────────────────────
 const ERR_INVALID_SIGNATURE = 950;     // not signed by the session public key
 const ERR_BAD_SEQNO = 951;             // replayed / out-of-order seqno

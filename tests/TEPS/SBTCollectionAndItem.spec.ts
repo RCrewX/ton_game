@@ -309,6 +309,10 @@ describe('03_sbt', () => {
                 op: Op.Excesses,
                 success: true,
             });
+            // Regression: Destroy must retain the storage reserve (reserve EXACT MIN_TONS_FOR_STORAGE,
+            // then carry-all). A bare mode-128 send would ignore `value` and drain the item to 0.
+            const itemState = await blockchain.getContract(sbtItem.address);
+            expect(itemState.balance).toBeGreaterThanOrEqual(toNano('0.04'));
         });
 
         it('should send request_owner after destroy and receive OwnerInfo with addr_none', async () => {

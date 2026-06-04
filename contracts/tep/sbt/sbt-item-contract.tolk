@@ -117,11 +117,14 @@ fun onInternalMessage(in: InMessage) {
             storage.authority = null;
             storage.save();
 
-            val restAmount = contract.getOriginalBalance() - MIN_TONS_FOR_STORAGE;
+            // Retain the storage reserve: reserve EXACTLY MIN_TONS_FOR_STORAGE, then carry-all
+            // the remainder. A bare mode-128 send ignores `value` and would drain the account
+            // below the storage tax (mirrors the sbtn Destroy fix).
+            reserveToncoinsOnBalance(MIN_TONS_FOR_STORAGE, RESERVE_MODE_EXACT_AMOUNT);
             val excessesMsg = createMessage({
                 bounce: BounceMode.NoBounce,
                 dest: in.senderAddress,
-                value: restAmount,
+                value: 0,
                 body: Excesses { queryId: msg.queryId }
             });
             excessesMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
