@@ -114,6 +114,16 @@ import { Op as JettonOp, Errors as JettonErrors } from '../wrappers/tep/jetton/J
 import { NFTPrinterOp } from '../wrappers/printers/nft_printer/NFTPrinter';
 import { SBTPrinterOp } from '../wrappers/printers/sbt_printer/SBTPrinter';
 
+import {
+    W5_AUTH_EXTENSION,
+    W5_ACTION_SEND_MSG,
+    OP_REQUEST_TO_MOVE as SHIP_SESSION_OP_REQUEST_TO_MOVE,
+    OP_REVOKE_SESSION,
+    BASIC_STORAGE_TAX as SHIP_SESSION_BASIC_STORAGE_TAX,
+    TRIGGER_GAS as SHIP_SESSION_TRIGGER_GAS,
+    GAS_MARGIN as SHIP_SESSION_GAS_MARGIN,
+} from '../wrappers/ship_session/types';
+
 /**
  * Bump when the *shape* of the `constants` section changes (not when a value
  * changes) so consumers can guard against incompatible layouts.
@@ -126,7 +136,11 @@ import { SBTPrinterOp } from '../wrappers/printers/sbt_printer/SBTPrinter';
 // stake BURN (new `SsmBurnStake` opcode, NATIVE_BURN_BUDGET, MIN_ROLL_VALUE 0.7->1.0),
 // and ANVIL tier caps + type space (SAFETY_TIER_CAP/err 985, TYPE_GENERIC/MULTISPLAV,
 // new `anvilTypeSpace`/`anvilTierCaps` + `nftContentSeen` storage-layout keys).
-export const CONSTANTS_SCHEMA_VERSION = 3;
+// v4: ShipSession W5 wallet-extension published — new `opcodes.shipSession`
+// (extn/send-msg/RequestToMove/revoke), `errors.shipSession` (950..959),
+// `gasCosts.shipSession`, and `shipSession*` storageLayout wire-format keys, plus a
+// `shipSession` code-hash in contractCodes. Code-only (per-user contract, no address).
+export const CONSTANTS_SCHEMA_VERSION = 4;
 
 // ============================================================================
 // Serialisation helpers
@@ -243,6 +257,15 @@ export function buildGameConstants(): GameConstants {
             // The R1 recipe opcodes (MintNft/MintSbt/RevokeSbt) live under `retranslator`.
             nftPrinter: hexMap(NFTPrinterOp),
             sbtPrinter: hexMap(SBTPrinterOp),
+            // ShipSession W5 wallet-extension (per-user contract). The consumer needs
+            // these to build the extn body it asks the wallet to emit and to parse the
+            // session move / revoke flows. W5_* are wallet-v5r1 wire tags it mirrors.
+            shipSession: hexMap({
+                W5_AUTH_EXTENSION,
+                W5_ACTION_SEND_MSG,
+                OP_REQUEST_TO_MOVE: SHIP_SESSION_OP_REQUEST_TO_MOVE,
+                OP_REVOKE_SESSION,
+            }),
         },
 
         errors: {
@@ -258,6 +281,8 @@ export function buildGameConstants(): GameConstants {
             sbt: parseErrorCodes('contracts/tep/sbt/errors.tolk'),
             nftPrinter: parseErrorCodes('contracts/printers/nft_printer/errors.tolk'),
             sbtPrinter: parseErrorCodes('contracts/printers/sbt_printer/errors.tolk'),
+            // ShipSession 950..959 (live-parsed so they never drift from the contract).
+            shipSession: parseErrorCodes('contracts/ship_session/static.tolk'),
         },
 
         gasCosts: {
@@ -303,6 +328,11 @@ export function buildGameConstants(): GameConstants {
                 GAS_COST_SHIP_UPGRADE: nano(GAS_COST_SHIP_UPGRADE),
                 GAS_COST_RESET_SHIP: nano(GAS_COST_RESET_SHIP),
                 GAS_COST_TRANSFER_NOTIFICATION: nano(GAS_COST_TRANSFER_NOTIFICATION),
+            },
+            shipSession: {
+                BASIC_STORAGE_TAX: nano(SHIP_SESSION_BASIC_STORAGE_TAX),
+                TRIGGER_GAS: nano(SHIP_SESSION_TRIGGER_GAS), // value of the extn hop ShipSession -> wallet
+                GAS_MARGIN: nano(SHIP_SESSION_GAS_MARGIN),
             },
         },
 
@@ -382,6 +412,16 @@ export function buildGameConstants(): GameConstants {
             // MULTISPLAV_FILTER_BITS bits (2x uint256); null for every non-type-5 item.
             NFT_CONTENT_SEEN_MAYBE_REF: 1,
             MULTISPLAV_FILTER_BITS,
+            // ShipSession signed-request wire format (the consumer ports the serializer):
+            //   SessionInner = seqno:uint32, validUntil:uint32, moveMode:uint8,
+            //                  shipAddress:address, selfAddress:address
+            //   externalEnvelope = signature:bits512 ++ ^inner   (sign over inner.hash())
+            // The address fields are standard MsgAddressInt (267 bits); only the
+            // fixed-width prefixes + the signature width are publishable as numbers.
+            SHIP_SESSION_SEQNO_BITS: 32,
+            SHIP_SESSION_VALID_UNTIL_BITS: 32,
+            SHIP_SESSION_MOVE_MODE_BITS: 8,
+            SHIP_SESSION_SIGNATURE_BITS: 512,
         },
 
         sendModes: {

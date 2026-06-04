@@ -63,6 +63,8 @@ async function main(): Promise<void> {
     const sbtPrinterItemCode = await compile('SBTPrinterItem');
     const nftPrinterCode = await compile('NFTPrinter');
     const sbtPrinterCode = await compile('SBTPrinter');
+    // ShipSession: per-user W5 wallet-extension (code-only, no singleton address).
+    const shipSessionCode = await compile('ShipSession');
 
     const contractCodes: ContractCodes = {
         gameManager: getContractCodeData(gameManagerCode),
@@ -90,6 +92,7 @@ async function main(): Promise<void> {
         sbtPrinterItem: getContractCodeData(sbtPrinterItemCode),
         nftPrinter: getContractCodeData(nftPrinterCode),
         sbtPrinter: getContractCodeData(sbtPrinterCode),
+        shipSession: getContractCodeData(shipSessionCode),
     };
 
     const testnet = calculateNetworkAddresses(

@@ -110,6 +110,13 @@ export interface ContractCodes {
     /** Optional: printer item variant code hashes (standard item + SetContent edit) */
     nftPrinterItem?: ContractCodeInfo;
     sbtPrinterItem?: ContractCodeInfo;
+    /**
+     * Optional: ShipSession — the per-USER W5 wallet-extension contract (code-only,
+     * like ssmSlot/*Item: deployed per wallet from config, no singleton address).
+     * The uap consumer reads this code-hash + the `shipSession` constants to build
+     * the install / session-move / revoke flows.
+     */
+    shipSession?: ContractCodeInfo;
 }
 
 /**
