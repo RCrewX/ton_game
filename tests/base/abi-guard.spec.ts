@@ -7,6 +7,16 @@ import { compile } from '@ton/blueprint';
 import { Retranslator } from '../../wrappers/game_manager/Retranslator';
 import { AnvilErrors } from '../../wrappers/game_manager/RetranslatorTypes';
 import { Opcodes as SsmOpcodes } from '../../wrappers/soulless_slot_machine/types';
+import { getContractCodeData } from '../../lib/buildOutput';
+import {
+    W5_AUTH_EXTENSION,
+    W5_ACTION_SEND_MSG,
+    OP_REQUEST_TO_MOVE as SHIP_SESSION_OP_REQUEST_TO_MOVE,
+    OP_REVOKE_SESSION,
+    ShipSessionErrors,
+} from '../../wrappers/ship_session/types';
+
+const hex8 = (op: number) => '0x' + (op >>> 0).toString(16).padStart(8, '0');
 
 // =============================================================================
 // ABI drift guard: the PUBLISHED deployment_latest.json must match the ON-CHAIN
@@ -40,8 +50,8 @@ describe('ABI guard (deployment_latest.json vs on-chain)', () => {
         abi = loadAbi();
     }, 120000);
 
-    it('schema version is current (v3)', () => {
-        expect(abi.constants.schemaVersion).toBe(3);
+    it('schema version is current (v4)', () => {
+        expect(abi.constants.schemaVersion).toBe(4);
         expect(abi.testnet.deployed).toBe(false); // offline ABI publish; redeploy to flip
     });
 
@@ -85,5 +95,27 @@ describe('ABI guard (deployment_latest.json vs on-chain)', () => {
     it('published SSM burn opcode matches the wrapper', () => {
         const published = abi.constants.opcodes.soullessSlotMachine.OP_SSM_BURN_STAKE;
         expect(published).toBe('0x' + (SsmOpcodes.OP_SSM_BURN_STAKE >>> 0).toString(16).padStart(8, '0'));
+    });
+
+    // --- ShipSession (per-user W5 wallet-extension; code-only) ---------------
+    it('published ShipSession code-hash matches the freshly compiled contract', async () => {
+        const ssCode = await compile('ShipSession');
+        expect(abi.contractCodes.shipSession).toBeDefined();
+        expect(abi.contractCodes.shipSession.hash).toBe(getContractCodeData(ssCode).hash);
+    });
+
+    it('published ShipSession opcodes match the wrapper', () => {
+        const ops = abi.constants.opcodes.shipSession;
+        expect(ops.W5_AUTH_EXTENSION).toBe(hex8(W5_AUTH_EXTENSION));
+        expect(ops.W5_ACTION_SEND_MSG).toBe(hex8(W5_ACTION_SEND_MSG));
+        expect(ops.OP_REQUEST_TO_MOVE).toBe(hex8(SHIP_SESSION_OP_REQUEST_TO_MOVE));
+        expect(ops.OP_REVOKE_SESSION).toBe(hex8(OP_REVOKE_SESSION));
+    });
+
+    it('published ShipSession error codes (950..959) match the wrapper map', () => {
+        const errs = abi.constants.errors.shipSession;
+        for (const [name, code] of Object.entries(ShipSessionErrors)) {
+            expect(errs[name]).toBe(code);
+        }
     });
 });
