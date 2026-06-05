@@ -1,7 +1,41 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
-import { encodeRequestToMove, encodeRequestToFastTravel, encodeRequestToHardTravel, encodeRequestShipToMint, encodeResetShip, loadGameFieldsOpt } from './types';
+import { sign } from '@ton/crypto';
+import {
+    encodeRequestToMove,
+    encodeRequestToFastTravel,
+    encodeRequestToHardTravel,
+    encodeRequestShipToMint,
+    encodeResetShip,
+    encodeSetSessionKey,
+    encodeSessionMoveInner,
+    encodeShipExternalEnvelope,
+    loadGameFieldsOpt,
+    SetSessionKey,
+} from './types';
 import { MoveMode, XY, HP_TYPE_BITS, HardTravelInfo } from './structs';
 import { Coins, loadCoins } from '@ton/sandbox/dist/config/config.tlb-gen';
+
+/**
+ * Build the session-key-signed external message body that authorises ONE bounded move/exit.
+ * Signed by the SESSION key — never the wallet key (no per-move wallet popup).
+ *
+ * Sandbox note: the @ton ContractProvider does not expose external(), so tests deliver
+ * this via `blockchain.sendMessage(external({ to: ship.address, body }))`.
+ */
+export function buildShipSessionMoveExternal(args: {
+    sessionSecretKey: Buffer;
+    seqno: number;
+    validUntil: number; // MUST equal the ship's stored sessionValidUntil
+    moveMode: number; // MoveMode uint8 (LEFT/UP/RIGHT/EXIT)
+}): Cell {
+    const innerCell = encodeSessionMoveInner({
+        seqno: args.seqno,
+        validUntil: args.validUntil,
+        moveMode: args.moveMode,
+    });
+    const signature = sign(innerCell.hash(), args.sessionSecretKey);
+    return encodeShipExternalEnvelope(signature, innerCell);
+}
 
 export type ShipConfig = {
     userAddress: Address,
@@ -19,6 +53,7 @@ export function shipConfigToCell(config: ShipConfig): Cell {
         .storeRef(config.coordinateCellCode)
         .storeBit(false) // movement_in_process: false
         .storeCoins(0) // pending_mint_amount: 0
+        .storeMaybeRef(null) // sessionInfo: null (no active session on a fresh ship)
         .endCell();
 }
 
@@ -108,5 +143,35 @@ export class Ship implements Contract {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: encodeRequestShipToMint(),
         });
+    }
+
+    /** One-time session authorise / rotate / revoke (must come from the ship's userAddress).
+     *  Any TON sent stays on the ship as the float that funds external moves. */
+    async sendSetSessionKey(provider: ContractProvider, via: Sender, value: bigint, msg: SetSessionKey) {
+        return await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: encodeSetSessionKey(msg),
+        });
+    }
+
+    async getSessionPublicKey(provider: ContractProvider): Promise<bigint> {
+        const result = await provider.get('get_session_public_key', []);
+        return result.stack.readBigNumber();
+    }
+
+    async getSessionSeqno(provider: ContractProvider): Promise<number> {
+        const result = await provider.get('get_session_seqno', []);
+        return result.stack.readNumber();
+    }
+
+    async getSessionValidUntil(provider: ContractProvider): Promise<number> {
+        const result = await provider.get('get_session_valid_until', []);
+        return result.stack.readNumber();
+    }
+
+    async getSessionMovesLeft(provider: ContractProvider): Promise<number> {
+        const result = await provider.get('get_session_moves_left', []);
+        return result.stack.readNumber();
     }
 }

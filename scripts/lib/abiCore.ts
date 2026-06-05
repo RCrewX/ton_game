@@ -6,10 +6,10 @@
  *   - `pnpm deploy --offline`  (alias: `pnpm abi`) — placeholder addresses, deployed:false, no RPC/keys
  *
  * Because every path calls `buildFullContractCodes()`, no producer can ever emit a
- * PARTIAL `contractCodes` set. This structurally removes the "ShipSession clobber"
- * class (a live deploy used to overwrite the offline publish with a code set that
- * omitted the code-only contracts). To add a new contract: add it in ONE place here
- * (`compileAllContracts` + `buildFullContractCodes`) and every producer picks it up.
+ * PARTIAL `contractCodes` set. This structurally removes the code-only clobber class
+ * (a live deploy used to overwrite the offline publish with a code set that omitted
+ * the code-only contracts like ssmSlot / *Item). To add a new contract: add it in ONE
+ * place here (`compileAllContracts` + `buildFullContractCodes`) and every producer picks it up.
  */
 import { Address, Cell } from '@ton/core';
 import { compile } from '@ton/blueprint';
@@ -34,7 +34,7 @@ import { buildGameConstants } from '../../lib/gameConstants';
 
 // ============================================================================
 // Compile — every contract in ONE place (incl. the code-only ones: ssmSlot,
-// shipSession, *Item — the entries a hand-rolled list keeps forgetting).
+// *Item — the entries a hand-rolled list keeps forgetting).
 // ============================================================================
 
 export interface CompiledContracts {
@@ -57,8 +57,6 @@ export interface CompiledContracts {
     sbtPrinterItemCode: Cell;
     nftPrinterCode: Cell;
     sbtPrinterCode: Cell;
-    /** Per-user W5 wallet-extension (code-only, no singleton address). */
-    shipSessionCode: Cell;
 }
 
 export async function compileAllContracts(): Promise<CompiledContracts> {
@@ -83,7 +81,6 @@ export async function compileAllContracts(): Promise<CompiledContracts> {
         sbtPrinterItemCode: await compile('SBTPrinterItem'),
         nftPrinterCode: await compile('NFTPrinter'),
         sbtPrinterCode: await compile('SBTPrinter'),
-        shipSessionCode: await compile('ShipSession'),
     };
 }
 
@@ -120,8 +117,6 @@ export function buildFullContractCodes(c: CompiledContracts): ContractCodes {
         sbtPrinterItem: getContractCodeData(c.sbtPrinterItemCode),
         nftPrinter: getContractCodeData(c.nftPrinterCode),
         sbtPrinter: getContractCodeData(c.sbtPrinterCode),
-        // The fix: ShipSession is a first-class code-only entry, never omitted.
-        shipSession: getContractCodeData(c.shipSessionCode),
     };
 }
 

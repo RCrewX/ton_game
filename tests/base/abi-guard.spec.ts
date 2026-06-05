@@ -7,14 +7,8 @@ import { compile } from '@ton/blueprint';
 import { Retranslator } from '../../wrappers/game_manager/Retranslator';
 import { AnvilErrors } from '../../wrappers/game_manager/RetranslatorTypes';
 import { Opcodes as SsmOpcodes } from '../../wrappers/soulless_slot_machine/types';
-import { getContractCodeData, mergeContractCodes, ContractCodes, ContractCodeInfo } from '../../lib/buildOutput';
-import {
-    W5_AUTH_EXTENSION,
-    W5_ACTION_SEND_MSG,
-    OP_REQUEST_TO_MOVE as SHIP_SESSION_OP_REQUEST_TO_MOVE,
-    OP_REVOKE_SESSION,
-    ShipSessionErrors,
-} from '../../wrappers/ship_session/types';
+import { mergeContractCodes, ContractCodes, ContractCodeInfo } from '../../lib/buildOutput';
+import { Opcodes as GameOpcodes } from '../../wrappers/ton_race_game/types';
 
 const hex8 = (op: number) => '0x' + (op >>> 0).toString(16).padStart(8, '0');
 
@@ -50,8 +44,8 @@ describe('ABI guard (deployment_latest.json vs on-chain)', () => {
         abi = loadAbi();
     }, 120000);
 
-    it('schema version is current (v4)', () => {
-        expect(abi.constants.schemaVersion).toBe(4);
+    it('schema version is current (v5)', () => {
+        expect(abi.constants.schemaVersion).toBe(5);
         // `deployed` is deploy-STATE, not ABI schema: it is legitimately `true` after a
         // real testnet deploy and `false` on an offline `pnpm abi` publish. deployment_info/
         // is gitignored (a local artifact), so this guard — which is about ABI/on-chain drift —
@@ -101,26 +95,38 @@ describe('ABI guard (deployment_latest.json vs on-chain)', () => {
         expect(published).toBe('0x' + (SsmOpcodes.OP_SSM_BURN_STAKE >>> 0).toString(16).padStart(8, '0'));
     });
 
-    // --- ShipSession (per-user W5 wallet-extension; code-only) ---------------
-    it('published ShipSession code-hash matches the freshly compiled contract', async () => {
-        const ssCode = await compile('ShipSession');
-        expect(abi.contractCodes.shipSession).toBeDefined();
-        expect(abi.contractCodes.shipSession.hash).toBe(getContractCodeData(ssCode).hash);
+    // --- Native ship session (W5 ShipSession retired in v5) ------------------
+    it('the retired shipSession code-only entry is gone from contractCodes + opcodes/errors', () => {
+        expect(abi.contractCodes.shipSession).toBeUndefined();
+        expect(abi.constants.opcodes.shipSession).toBeUndefined();
+        expect(abi.constants.errors.shipSession).toBeUndefined();
+        expect(abi.constants.gasCosts.shipSession).toBeUndefined();
     });
 
-    it('published ShipSession opcodes match the wrapper', () => {
-        const ops = abi.constants.opcodes.shipSession;
-        expect(ops.W5_AUTH_EXTENSION).toBe(hex8(W5_AUTH_EXTENSION));
-        expect(ops.W5_ACTION_SEND_MSG).toBe(hex8(W5_ACTION_SEND_MSG));
-        expect(ops.OP_REQUEST_TO_MOVE).toBe(hex8(SHIP_SESSION_OP_REQUEST_TO_MOVE));
-        expect(ops.OP_REVOKE_SESSION).toBe(hex8(OP_REVOKE_SESSION));
+    it('published native session opcode (SetSessionKey) matches the wrapper', () => {
+        expect(abi.constants.opcodes.tonRaceGame.OP_SET_SESSION_KEY).toBe(hex8(GameOpcodes.OP_SET_SESSION_KEY));
     });
 
-    it('published ShipSession error codes (950..959) match the wrapper map', () => {
-        const errs = abi.constants.errors.shipSession;
-        for (const [name, code] of Object.entries(ShipSessionErrors)) {
-            expect(errs[name]).toBe(code);
-        }
+    it('published native session error codes (950..960) are present + live-parsed', () => {
+        const errs = abi.constants.errors.tonRaceGame;
+        expect(errs.ERR_INVALID_SIGNATURE).toBe(950);
+        expect(errs.ERR_BAD_SEQNO).toBe(951);
+        expect(errs.ERR_EXPIRED).toBe(952);
+        expect(errs.ERR_SESSION_EXPIRED).toBe(953);
+        expect(errs.ERR_INVALID_MOVE_MODE).toBe(956);
+        expect(errs.ERR_BUDGET_EXHAUSTED).toBe(957);
+        expect(errs.ERR_INSUFFICIENT_FLOAT).toBe(958);
+        expect(errs.ERR_NO_SESSION).toBe(960);
+    });
+
+    it('published native session wire widths match the storageLayout contract', () => {
+        const sl = abi.constants.storageLayout;
+        expect(sl.SHIP_SESSION_PUBKEY_BITS).toBe(256);
+        expect(sl.SHIP_SESSION_SEQNO_BITS).toBe(32);
+        expect(sl.SHIP_SESSION_VALID_UNTIL_BITS).toBe(32);
+        expect(sl.SHIP_SESSION_MOVES_LEFT_BITS).toBe(16);
+        expect(sl.SHIP_SESSION_MOVE_MODE_BITS).toBe(8);
+        expect(sl.SHIP_SESSION_SIGNATURE_BITS).toBe(512);
     });
 });
 
@@ -143,7 +149,6 @@ describe('contractCodes clobber defense (mergeContractCodes)', () => {
         sbtCollection: ci('sbtc'), sbtItem: ci('sbti'), sbtnCollection: ci('sbtnc'), sbtnItem: ci('sbtni'),
         nftItem: ci('nfti'), nftPrinterItem: ci('npi'), sbtPrinterItem: ci('spi'),
         nftPrinter: ci('np'), sbtPrinter: ci('sp'),
-        shipSession: ci('654aa59e'),
     };
 
     // The OLD deploySystem bug shape: a code set that forgot the code-only entries.
@@ -156,13 +161,11 @@ describe('contractCodes clobber defense (mergeContractCodes)', () => {
         sbtCollection: ci('sbtc'), sbtItem: ci('sbti'), sbtnCollection: ci('sbtnc'), sbtnItem: ci('sbtni'),
         nftItem: ci('nfti'), nftPrinterItem: ci('npi'), sbtPrinterItem: ci('spi'),
         nftPrinter: ci('np'), sbtPrinter: ci('sp'),
-        // shipSession OMITTED — the exact clobber that blocked the W5 consumer.
     };
 
-    it('a partial write cannot strip shipSession or ssmSlot (footgun closed)', () => {
+    it('a partial write cannot strip the code-only ssmSlot entry (footgun closed)', () => {
         const merged = mergeContractCodes(complete, partial)!;
         // code-only entries absent from `incoming` SURVIVE from the existing set:
-        expect(merged.shipSession?.hash).toBe('654aa59e');
         expect(merged.games.soulless_slot_machine.ssmSlot?.hash).toBe('slot');
         // incoming values still win where present:
         expect(merged.gameManager.hash).toBe('gm2');

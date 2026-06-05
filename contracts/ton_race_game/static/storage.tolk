@@ -30,6 +30,11 @@ struct ShipStorage {
     coordinateCellCode: cell
     movement_in_process: bool
     pending_mint_amount: coins
+    // Native session-key authorisation, in its OWN ref cell (appended at the END). A
+    // one-time internal SetSessionKey (from userAddress) authorises an Ed25519 browser
+    // key to sign external move/exit messages, bounded by expiry + a move budget. null
+    // ref = no active session (the default on a fresh ship).
+    sessionInfo: Cell<SessionInfo>?
 }
 
 

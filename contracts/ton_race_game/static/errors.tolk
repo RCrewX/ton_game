@@ -55,4 +55,15 @@ const ERR_HARD_TRAVEL_EXIT_MODE = 937  // HardTravel: EXIT mode not allowed
 const ERR_HARD_TRAVEL_MAX_TURNS_INVALID = 938  // HardTravel: maxTurns must be < 100
 const ERR_HARD_TRAVEL_VALUE_TOO_LOW = 939  // HardTravel: message value below HARD_TRAVEL_MIN_VALUE
 const ERR_UNKNOWN_MESSAGE = 0xFFFF  // Unknown message type (body not empty but doesn't match any known message)
+
+// Native session-key errors (external move/exit path). 950+ range, isolated from the
+// game's 901-939. Names reuse the retired ship_session contract's vocabulary.
+const ERR_INVALID_SIGNATURE = 950   // external not signed by the stored session public key
+const ERR_BAD_SEQNO = 951           // replayed / out-of-order session seqno
+const ERR_EXPIRED = 952             // inner.validUntil != stored sessionValidUntil (sig not bound to this session)
+const ERR_SESSION_EXPIRED = 953     // now() > sessionValidUntil (session time-box passed)
+const ERR_INVALID_MOVE_MODE = 956   // moveMode outside move/exit (LEFT/UP/RIGHT/EXIT)
+const ERR_BUDGET_EXHAUSTED = 957    // sessionMovesLeft == 0
+const ERR_INSUFFICIENT_FLOAT = 958  // ship float too low to fund the external move
+const ERR_NO_SESSION = 960          // no active session (sessionPublicKey == 0)
 // Helper-specific errors

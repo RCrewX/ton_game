@@ -131,6 +131,29 @@ struct (0x5a1f0b21) FastTravelUpgrade {
 struct (0x6a3b8fdd) ResetShip {}
 
 struct (0x53035644) RequestShipToMint {}
+
+// Native session authorisation (one-time internal message; userAddress-gated).
+// sessionPublicKey = 0 ⇒ revoke. A new key ⇒ rotate (seqno reset to 0). Any TON
+// carried with this message tops up the ship float that funds external moves.
+struct (0x5e55104b) SetSessionKey {
+    sessionPublicKey: SHIP_SESSION_PUBKEY_TYPE
+    validUntil: SHIP_SESSION_VALID_UNTIL_TYPE
+    movesLeft: SHIP_SESSION_MOVES_LEFT_TYPE
+}
+
+// The session-key-signed payload for an external move/exit. Its cell hash is what the
+// session key signs. moveMode is a MoveMode (LEFT/UP/RIGHT/EXIT) — move/exit ONLY.
+struct SessionMoveInner {
+    seqno: SHIP_SESSION_SEQNO_TYPE
+    validUntil: SHIP_SESSION_VALID_UNTIL_TYPE
+    moveMode: uint8
+}
+
+// External envelope: signature(512) ++ ^inner (sign over inner.hash()).
+struct ShipExternalEnvelope {
+    signature: bits512
+    inner: cell
+}
 // To Game
 
 struct (0xf5cc90ff) RequestMint {

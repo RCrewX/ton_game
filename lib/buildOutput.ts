@@ -110,13 +110,6 @@ export interface ContractCodes {
     /** Optional: printer item variant code hashes (standard item + SetContent edit) */
     nftPrinterItem?: ContractCodeInfo;
     sbtPrinterItem?: ContractCodeInfo;
-    /**
-     * Optional: ShipSession — the per-USER W5 wallet-extension contract (code-only,
-     * like ssmSlot/*Item: deployed per wallet from config, no singleton address).
-     * The uap consumer reads this code-hash + the `shipSession` constants to build
-     * the install / session-move / revoke flows.
-     */
-    shipSession?: ContractCodeInfo;
 }
 
 /**
@@ -315,7 +308,7 @@ export function writeFullDeploymentData(data: DeploymentData): void {
 /**
  * Deep-merge contract codes so a partial `incoming` set can NEVER strip an entry that
  * exists in `existing`. This closes the clobber class: a producer that forgets a
- * code-only entry (shipSession / ssmSlot / *Item) can no longer overwrite a complete
+ * code-only entry (ssmSlot / *Item) can no longer overwrite a complete
  * set with a partial one — surviving entries are carried forward. `incoming` values
  * win where present; the nested `games` codes are merged per-game.
  *
@@ -351,7 +344,7 @@ export function mergeContractCodes(
  * INVARIANT (clobber defense): this writer carries `constants` forward and DEEP-MERGES
  * the incoming `contractCodes` over the existing set, so it can never drop a code-only
  * entry or the constants block. (Previously it did `contractCodes ?? existing` — a full
- * replace — and omitted `constants`, which is how an offline ShipSession publish got
+ * replace — and omitted `constants`, which is how an offline code-only publish could get
  * overwritten by a live deploy.)
  *
  * Creates:
@@ -390,7 +383,7 @@ export function writeDeploymentData(
     }
 
     // Update the data for the target network — carry constants forward + merge codes
-    // so no code-only entry (shipSession/ssmSlot/*Item) can be stripped.
+    // so no code-only entry (ssmSlot/*Item) can be stripped.
     const data: DeploymentData = {
         timestamp,
         constants: existingData.constants,

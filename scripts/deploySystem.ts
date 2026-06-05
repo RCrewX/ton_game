@@ -539,7 +539,7 @@ function decodeToolsPrinters(cell: Cell | null): { nft: Address | null; sbt: Add
  * `pnpm deploy --offline` (alias `pnpm abi`): regenerate deployment_latest.json OFFLINE.
  * Owner address from $DEPLOY_OWNER_ADDRESS or the existing json. No RPC/keys; placeholder
  * ship_station (pubkey=0); deployed:false. Uses the SAME shared assembly as the live deploy,
- * so the full contractCodes (incl. shipSession) is always written.
+ * so the full contractCodes (incl. the code-only entries) is always written.
  */
 async function runOfflineAbi(): Promise<void> {
     console.log('\n=== TON Game ABI (offline publish) ===');
@@ -622,7 +622,7 @@ async function main(): Promise<void> {
 
     try {
         // Compile all contracts (single source of truth — includes the code-only
-        // contracts: ssmSlot, shipSession, *Item).
+        // contracts: ssmSlot, *Item).
         console.log('Compiling contracts...');
         const compiled = await compileAllContracts();
         const {
@@ -637,7 +637,7 @@ async function main(): Promise<void> {
         const jettonContentUri = process.env.JETTON_CONTENT_URI || 'https://example.com/jetton.json';
         console.log(`Jetton content URI: ${jettonContentUri}`);
 
-        // Build the COMPLETE contract codes (incl. shipSession) via the shared assembly.
+        // Build the COMPLETE contract codes (incl. the code-only entries) via the shared assembly.
         // Never hand-roll this list — that is how code-only entries got dropped.
         const contractCodes: ContractCodes = buildFullContractCodes(compiled);
 

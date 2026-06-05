@@ -4,18 +4,59 @@ import "static/helper"
 import "static/errors"
 import "static/structs"
 import "static/constants"
+import "@stdlib/gas-payments"   // acceptExternalMessage (the rest of the crypto/reserve primitives live in @stdlib/common)
 
-type AllowedMessagesToShip = 
-    | MoveEnd 
+type AllowedMessagesToShip =
+    | MoveEnd
     | HardTravelMoveEnd
     | RequestToMove
-    | RequestToHardTravel 
+    | RequestToHardTravel
     | ShipUpgrade
     | RequestToFastTravel
     | RequestShipToMint
+    | SetSessionKey
     | AnyMessage
     | ResetShip
     | FastTravelUpgrade
+
+// Shared move pipeline used by BOTH the internal wallet-signed RequestToMove and the
+// external session-key-signed move/exit. `effValue` is the value semantics handed to the
+// EXACT-amount reserve: the move carries (effValue - storage tax) to the coordinate cell.
+//  - internal: effValue = in.valueCoins  (forwards the gas the wallet sent — unchanged)
+//  - external: effValue = SESSION_MOVE_FLOAT (funds the move from the ship's own float)
+// On-chain effect (movement lock, MoveShipToCC, async MoveEnd) is identical for both.
+fun runMove(moveMode: MoveMode, effValue: coins) {
+    var storage = lazy ShipStorage.load();
+    assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
+    // Check we have enough balance for the operation: gas cost + coordinate cell gas
+    assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
+
+    if (storage.gameFields == null) {
+        var gameFields = buildGameFields(BASIC_SHIP_HP);
+        storage.gameFields = gameFields;
+        storage.max_hp = BASIC_SHIP_HP;
+        storage.movement_in_process = false;
+        storage.save();
+    }
+    storage.movement_in_process = true;
+    storage.save();
+    var gameFields: GameFields = lazy storage.gameFields!.load();
+    reserveValue(effValue);
+    // Send enough TON for coordinate cell operations (storage + Move message)
+    val coordinateCellGas = GAS_COST_MOVE_SHIP_TO_CC;
+    val moveMsg = createMessage({
+        bounce: BounceMode.NoBounce,
+        dest: calcDeployedCoordinateCell(storage.gameAddress, gameFields.xy.x, gameFields.xy.y, storage.coordinateCellCode, contract.getCode()),
+        value: coordinateCellGas,
+        body: MoveShipToCC {
+            user: storage.userAddress,
+            mode: moveMode,
+            ship_hp: gameFields.hp,
+        }
+    });
+    // Use send_mode=128 to carry all remaining balance (excesses)
+    moveMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+}
 
 get fun currentGameData(): GameFields? {
     var storage: ShipStorage = lazy ShipStorage.load();
@@ -130,40 +171,14 @@ fun onInternalMessage(in: InMessage) {
             cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         }
         RequestToMove => {
-            // Using lazy for partial update - compiler handles efficient write-back via toCell()
+            // Wallet-signed (internal) move. Auth + value checks here; the move itself
+            // (balance check, gameFields init, movement lock, MoveShipToCC) runs in the
+            // shared runMove — identical on-chain effect as the external session path.
             var storage = lazy ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
             assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
             assert (in.valueCoins >= TODO_TOTAL_GAS_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            // Check we have enough balance for the operation: gas cost + coordinate cell gas
-            assert (contract.getOriginalBalance() >= GAS_COST_REQUEST_TO_MOVE + GAS_COST_MOVE_SHIP_TO_CC) throw ERR_INSUFFICIENT_BALANCE_FOR_OPERATION;
-
-            if (storage.gameFields == null) {
-                var gameFields = buildGameFields(BASIC_SHIP_HP);
-                storage.gameFields = gameFields;
-                storage.max_hp = BASIC_SHIP_HP;
-                storage.movement_in_process = false;
-                storage.save();
-            }
-            storage.movement_in_process = true;
-            storage.save();
-            var gameFields: GameFields = lazy storage.gameFields!.load();
-            reserveValue(in.valueCoins);
-            // Send enough TON for coordinate cell operations (storage + Move message)
-            // Need enough for: initial storage fee (if new cell) + gas for Move + buffer
-            val coordinateCellGas = GAS_COST_MOVE_SHIP_TO_CC;
-            val moveMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: calcDeployedCoordinateCell(storage.gameAddress, gameFields.xy.x, gameFields.xy.y, storage.coordinateCellCode, contract.getCode()),
-                value: coordinateCellGas,
-                body: MoveShipToCC {
-                    user: in.senderAddress,
-                    mode: msg.mode,
-                    ship_hp: gameFields.hp,
-                }
-            });
-            // Use send_mode=128 to carry all remaining balance (excesses)
-            moveMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+            runMove(msg.mode, in.valueCoins);
         }
         RequestToFastTravel => {
 
@@ -314,6 +329,25 @@ fun onInternalMessage(in: InMessage) {
             });
             cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
         },
+        SetSessionKey => {
+            // One-time authorise / rotate / revoke. Wallet-only, gated EXACTLY like every
+            // other user op. sessionPublicKey=0 ⇒ revoke; a new key ⇒ rotate (seqno reset).
+            // Any TON carried with this message stays on the ship as the float that funds
+            // external moves (no explicit refund — that is the intended top-up path).
+            var storage = lazy ShipStorage.load();
+            assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
+            if (msg.sessionPublicKey == 0) {
+                storage.sessionInfo = null;                 // revoke
+            } else {
+                storage.sessionInfo = SessionInfo {         // authorise / rotate (fresh seqno)
+                    sessionPublicKey: msg.sessionPublicKey,
+                    sessionSeqno: 0,
+                    sessionValidUntil: msg.validUntil,
+                    sessionMovesLeft: msg.movesLeft,
+                }.toCell();
+            }
+            storage.save();
+        },
         RequestToHardTravel => {
             var storage = lazy ShipStorage.load();
             assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
@@ -352,4 +386,90 @@ fun onInternalMessage(in: InMessage) {
             assert (in.body.isEmpty()) throw ERR_UNKNOWN_MESSAGE
         }
     }
+}
+
+// External session-key-signed entrypoint — the per-move path that needs NO wallet popup.
+// The session key (authorised once via SetSessionKey) signs a SessionMoveInner; the ship
+// verifies it against the stored session key + bounds (expiry, budget, seqno, move/exit
+// only) and runs the SAME move pipeline as the wallet path. Mirrors the safe ordering of
+// contracts/subcontract/subcontract.tolk: every check happens BEFORE acceptExternalMessage,
+// so an unsigned / forged / out-of-bounds external is dropped within the gas credit and the
+// ship pays nothing (anti gas-drain).
+fun onExternalMessage(inMsg: slice) {
+    // Cheap parse first — no acceptExternalMessage() until everything checks out.
+    val env = ShipExternalEnvelope.fromSlice(inMsg);
+    val innerCell = env.inner;
+    val signature = env.signature;
+
+    var storage = lazy ShipStorage.load();
+
+    // 0) There must be an active session at all.
+    assert (storage.sessionInfo != null) throw ERR_NO_SESSION;
+    var session: SessionInfo = lazy storage.sessionInfo!.load();
+
+    // 1) Signature must be from the stored session public key — BEFORE accept (anti gas-drain).
+    val hash = innerCell.hash();
+    val signatureSlice = signature as slice;
+    val ok = isSignatureValid(hash, signatureSlice, session.sessionPublicKey);
+    if (!ok) {
+        throw ERR_INVALID_SIGNATURE;
+    }
+
+    val inner = SessionMoveInner.fromCell(innerCell);
+
+    // 2) Replay protection.
+    assert (inner.seqno == session.sessionSeqno) throw ERR_BAD_SEQNO;
+    // 3) Whole-session time-box.
+    assert (blockchain.now() <= session.sessionValidUntil) throw ERR_SESSION_EXPIRED;
+    // 4) Bind the signature to THIS session (validUntil rotates with every SetSessionKey).
+    assert (inner.validUntil == session.sessionValidUntil) throw ERR_EXPIRED;
+    // 5) Move budget.
+    assert (session.sessionMovesLeft > 0) throw ERR_BUDGET_EXHAUSTED;
+    // 6) Move-mode bound — only LEFT/UP/RIGHT/EXIT; a session key can NEVER trigger
+    //    upgrade / withdraw / claim / reset (those stay internal == userAddress).
+    assert (inner.moveMode <= MOVE_MODE_EXIT) throw ERR_INVALID_MOVE_MODE;
+    // 7) Don't burn a budget unit while a move is already pending.
+    assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
+    // 8) Enough float to actually fund the move from the ship's own balance. The external
+    //    carries no value, so the float must cover the whole SESSION_MOVE_FLOAT the move sends
+    //    onward (plus the storage floor) — otherwise the reserve would underflow.
+    assert (contract.getOriginalBalance() >= SESSION_MOVE_FLOAT + BASIC_STORAGE_TAX) throw ERR_INSUFFICIENT_FLOAT;
+
+    // All checks passed — only now does the ship pay gas.
+    acceptExternalMessage();
+
+    // Bump seqno + consume one budget unit FIRST and commit (wallet pattern): replay is
+    // impossible even if the move pipeline below were to throw.
+    session.sessionSeqno += 1;
+    session.sessionMovesLeft -= 1;
+    storage.sessionInfo = session.toCell();
+    storage.save();
+    commitContractDataAndActions();
+
+    runMove(moveModeFromUint(inner.moveMode), SESSION_MOVE_FLOAT);
+}
+
+get fun get_session_public_key(): SHIP_SESSION_PUBKEY_TYPE {
+    var storage: ShipStorage = lazy ShipStorage.load();
+    if (storage.sessionInfo == null) { return 0; }
+    var session: SessionInfo = lazy storage.sessionInfo!.load();
+    return session.sessionPublicKey;
+}
+get fun get_session_seqno(): SHIP_SESSION_SEQNO_TYPE {
+    var storage: ShipStorage = lazy ShipStorage.load();
+    if (storage.sessionInfo == null) { return 0; }
+    var session: SessionInfo = lazy storage.sessionInfo!.load();
+    return session.sessionSeqno;
+}
+get fun get_session_valid_until(): SHIP_SESSION_VALID_UNTIL_TYPE {
+    var storage: ShipStorage = lazy ShipStorage.load();
+    if (storage.sessionInfo == null) { return 0; }
+    var session: SessionInfo = lazy storage.sessionInfo!.load();
+    return session.sessionValidUntil;
+}
+get fun get_session_moves_left(): SHIP_SESSION_MOVES_LEFT_TYPE {
+    var storage: ShipStorage = lazy ShipStorage.load();
+    if (storage.sessionInfo == null) { return 0; }
+    var session: SessionInfo = lazy storage.sessionInfo!.load();
+    return session.sessionMovesLeft;
 }

@@ -48,6 +48,11 @@ import {
     HardTravelInfo,
     storeHardTravelInfo,
     HP_TYPE_BITS,
+    SHIP_SESSION_PUBKEY_BITS,
+    SHIP_SESSION_SEQNO_BITS,
+    SHIP_SESSION_VALID_UNTIL_BITS,
+    SHIP_SESSION_MOVES_LEFT_BITS,
+    SHIP_SESSION_MOVE_MODE_BITS,
 } from './structs';
 
 export enum JettonUsageMode {
@@ -88,6 +93,8 @@ export const Opcodes = {
     OP_HARD_TRAVEL: 0x2f168b85,
     OP_REQUEST_TO_HARD_TRAVEL: 0x18dd41ae,
     OP_HARD_TRAVEL_MOVE_END: 0x8e7f9a0b,
+    // Native session-key authorisation (one-time internal authorise/rotate/revoke).
+    OP_SET_SESSION_KEY: 0x5e55104b,
 } as const;
 
 export function loadGameFieldsOpt(stack: TupleReader): GameFields | null {
@@ -485,6 +492,50 @@ export function encodeFastTravelUpgrade(msg: FastTravelUpgrade): Cell {
 
 export function encodeResetShip(): Cell {
     return beginCell().storeUint(Opcodes.OP_RESET_SHIP, 32).endCell();
+}
+
+// -------------------------
+// Native session-key authorisation (internal SetSessionKey + external move envelope)
+// -------------------------
+
+export type SetSessionKey = {
+    sessionPublicKey: bigint; // Ed25519 (256 bits); 0 ⇒ revoke
+    validUntil: number; // unix seconds — session time-box
+    movesLeft: number; // move budget (uint16)
+};
+
+/** Encode the one-time internal SetSessionKey body (must be sent by the ship's userAddress). */
+export function encodeSetSessionKey(msg: SetSessionKey): Cell {
+    return beginCell()
+        .storeUint(Opcodes.OP_SET_SESSION_KEY, 32)
+        .storeUint(msg.sessionPublicKey, SHIP_SESSION_PUBKEY_BITS)
+        .storeUint(msg.validUntil, SHIP_SESSION_VALID_UNTIL_BITS)
+        .storeUint(msg.movesLeft, SHIP_SESSION_MOVES_LEFT_BITS)
+        .endCell();
+}
+
+/** The session-key-signed payload. Its cell hash is what the session key signs. Layout MUST
+ *  match struct SessionMoveInner in static/messages.tolk: seqno:u32 validUntil:u32 moveMode:u8 */
+export type SessionMoveInner = {
+    seqno: number;
+    validUntil: number;
+    moveMode: number; // MoveMode uint8: LEFT=0 UP=1 RIGHT=2 EXIT=3
+};
+
+export function encodeSessionMoveInner(inner: SessionMoveInner): Cell {
+    return beginCell()
+        .storeUint(inner.seqno, SHIP_SESSION_SEQNO_BITS)
+        .storeUint(inner.validUntil, SHIP_SESSION_VALID_UNTIL_BITS)
+        .storeUint(inner.moveMode, SHIP_SESSION_MOVE_MODE_BITS)
+        .endCell();
+}
+
+/** External envelope: signature(512) ++ ^inner. Matches struct ShipExternalEnvelope. */
+export function encodeShipExternalEnvelope(signature: Buffer, inner: Cell): Cell {
+    return beginCell()
+        .storeBuffer(signature) // 512 bits
+        .storeRef(inner)
+        .endCell();
 }
 
 // -------------------------

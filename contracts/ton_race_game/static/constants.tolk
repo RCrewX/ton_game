@@ -27,6 +27,20 @@ const GAS_COST_WITHDRAW_NFT: coins = ton("0.05"); // Gas for NFT operations duri
 // HardTravel: user must send > 1 TON; minimum = 1 TON + gas for first hop (Ship -> current CC)
 const HARD_TRAVEL_MIN_VALUE: coins = ton("1") + GAS_COST_MOVE_SHIP_TO_CC;
 
+// Native session (external move/exit) ─────────────────────────────────────────
+// Upper bound for a session move's moveMode (LEFT=0 UP=1 RIGHT=2 EXIT=3). Must equal
+// MoveMode.EXIT; a session key may ONLY trigger move/exit, never any other ship op.
+const MOVE_MODE_EXIT: uint8 = 3;
+// The external carries NO value; the move is funded from the ship's float. This is the
+// effective value handed to runMove: it reserves (balance - SESSION_MOVE_FLOAT + tax) so the
+// move carries ~SESSION_MOVE_FLOAT onward. It must cover the FULL downstream chain (cells the
+// value flows through retain storage + pay gas at each hop, then the MoveEnd cashback), so it
+// is sized like a real internal move — the game's own tests send 1 TON per move and the move
+// path is only proven at that level. Excess flows back to userAddress via the MoveEnd cashback
+// exactly as the wallet path, so this is round-tripped, not spent; the owner tops the ship
+// float up via SetSessionKey value (or a plain transfer) to fund the next batch of moves.
+const SESSION_MOVE_FLOAT: coins = ton("1");
+
 // Note: SEND_MODE constants from stdlib:
 // SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE = 64 (carry remaining message value)
 // SEND_MODE_CARRY_ALL_REMAINING_BALANCE = 128 (carry all remaining balance)

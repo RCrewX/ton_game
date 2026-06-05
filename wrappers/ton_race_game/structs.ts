@@ -5,6 +5,14 @@ export const Y_TYPE_BITS: number = 64
 export const X_TYPE_BITS: number = 64
 export const HP_TYPE_BITS: number = 64
 
+// Native ship session-key wire widths — must match contracts/ton_race_game/static/structs.tolk.
+export const SHIP_SESSION_PUBKEY_BITS: number = 256
+export const SHIP_SESSION_SEQNO_BITS: number = 32
+export const SHIP_SESSION_VALID_UNTIL_BITS: number = 32
+export const SHIP_SESSION_MOVES_LEFT_BITS: number = 16
+export const SHIP_SESSION_MOVE_MODE_BITS: number = 8
+export const SHIP_SESSION_SIGNATURE_BITS: number = 512
+
 // =======================
 // Типы
 // =======================

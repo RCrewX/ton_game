@@ -59,6 +59,8 @@ fun calcDeployedShip(
         coordinateCellCode: coordinateCellCode,
         movement_in_process: false,
         pending_mint_amount: 0,
+        // No active session on a freshly-deployed ship.
+        sessionInfo: null,
     };
 
     val dataCell: cell = initStorage.toCell();
@@ -82,6 +84,16 @@ fun reserveValue(msgValue: coins, delta: coins = 0) {
     reserveToncoinsOnBalance(base + delta, RESERVE_MODE_EXACT_AMOUNT);
 }
 
+
+// Convert a raw uint8 (e.g. from a signed external SessionMoveInner) into a MoveMode.
+// Tolk has no int->enum cast; callers MUST bound-check v <= MOVE_MODE_EXIT first (this
+// maps any value >= 3 to EXIT). Used by the ship's external session move path.
+fun moveModeFromUint(v: uint8): MoveMode {
+    if (v == 0) { return MoveMode.LEFT; }
+    if (v == 1) { return MoveMode.UP; }
+    if (v == 2) { return MoveMode.RIGHT; }
+    return MoveMode.EXIT;
+}
 
 fun coordinate_plus_mode(x: X_TYPE, mode: MoveMode):X_TYPE {
     match (mode) {
