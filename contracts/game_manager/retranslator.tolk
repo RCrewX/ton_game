@@ -86,17 +86,18 @@ const MULTISPLAV_FILTER_K: int = 3;         // hash positions per origin
 // (~3% at 64 origins). No sibling cap exists in-tree yet; this is the proposed value.
 const MULTISPLAV_TIER_CAP: uint64 = 64;
 
-// Melt economics (FLAGGED assumption — see report). Native melt mints (10^K - 1)
-// RAW nano RUDA; the non-native type0/tier10 escape mints 100 WHOLE RUDA. Source
-// is fresh mint via the GM mint path (NFT is burned), matching the SSM model.
-const MELT_HUNDRED_RUDA: coins = ton("100");
+// Melt economics. RUDA is 0-decimal / raw 1:1 — one whole RUDA == one raw unit.
+// Native melt mints (10^K - 1) raw RUDA; the non-native type0/tier10 escape mints
+// 100 RUDA (raw). Source is fresh mint via the GM mint path (NFT is burned),
+// matching the SSM model.
+const MELT_HUNDRED_RUDA: coins = 100 as coins;
 
 // 1000 RUDA -> I(5|0|N): the user transfers RUDA to GM with a TAGGED forwardPayload
 // (>=32 data bits). The normal game-usage payload carries 0 data bits, so the tag
 // is unambiguous. The house keeps the 1000 RUDA (it lands in GM's wallet); a fresh
 // type-5 tier-0 native item is minted to the depositor (burn-and-mint, SSM model).
 const ANVIL_MULTISPLAV_MINT_TAG: uint32 = 0x4d756c74; // "Mult"
-const MULTISPLAV_MINT_STAKE: coins = ton("1000");     // FLAGGED: 1000 whole RUDA (9-dec)
+const MULTISPLAV_MINT_STAKE: coins = 1000 as coins;   // 1000 RUDA (raw; RUDA is 0-decimal)
 
 // TON budgets for the ANVIL return chain (printer item ops + the melt mint).
 const ANVIL_ITEM_OP_TON: coins = ton("0.05");   // collection -> item update/destroy hop

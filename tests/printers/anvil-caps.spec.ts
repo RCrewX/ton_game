@@ -118,7 +118,7 @@ describe('ANVIL caps + melt exactness + type space (pure)', () => {
         for (const origin of [A.address, B.address]) {
             const o = await R.getAnvilOutcome(input({ recipe: AnvilRecipe.MELT, i1Origin: origin, i1Type: 0, i1Tier: 10 }));
             expect(o.kind).toBe(AnvilOutcomeKind.MELT);
-            expect(o.rudaAmount).toBe(toNano('100'));
+            expect(o.rudaAmount).toBe(100n); // MELT_HUNDRED_RUDA raw (0-decimal)
         }
         // Any other non-native melt is rejected.
         expect(await exitOf(input({ recipe: AnvilRecipe.MELT, i1Origin: A.address, i1Type: 0, i1Tier: 9 }))).toBe(AnvilErrors.MELT_NON_NATIVE);

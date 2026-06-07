@@ -310,8 +310,8 @@ export const ANVIL_OPCODES = {
 // ANVIL gas budgets + amounts (mirror retranslator.tolk). nano strings published.
 export const ANVIL_ITEM_OP_TON = toNano('0.05');     // collection -> item op hop
 export const ANVIL_DESTROY_TON = toNano('0.05');     // item1 -> item2 destroy hop
-export const MELT_HUNDRED_RUDA = toNano('100');      // non-native I(0|10|R) -> 100 RUDA
-export const MULTISPLAV_MINT_STAKE = toNano('1000'); // 1000 RUDA -> I(5|0|N)
+export const MELT_HUNDRED_RUDA = 100n;               // non-native I(0|10|R) -> 100 RUDA (raw; 0-decimal)
+export const MULTISPLAV_MINT_STAKE = 1000n;          // 1000 RUDA -> I(5|0|N) (raw; 0-decimal)
 export const ANVIL_MULTISPLAV_MINT_TAG = 0x4d756c74; // "Mult" forwardPayload tag
 
 export type AnvilGetInput = {

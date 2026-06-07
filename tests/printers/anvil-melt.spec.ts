@@ -47,7 +47,7 @@ describe('ANVIL melt (burn -> RUDA)', () => {
         await S.user.send({ to: i1.address, value: toNano('1.5'), body: anvilInitBody(AnvilRecipe.MELT, false, 0) });
 
         expect(await itemAlive(S, i1.address)).toBe(false);
-        expect(await userRudaWallet().getJettonBalance()).toBe(toNano('100'));
+        expect(await userRudaWallet().getJettonBalance()).toBe(100n); // MELT_HUNDRED_RUDA raw (0-decimal)
     });
 
     it('non-native melt that is not I(0|10|R) is rejected; item survives', async () => {

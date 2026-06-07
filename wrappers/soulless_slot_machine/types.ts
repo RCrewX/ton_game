@@ -15,11 +15,11 @@ export const SYM_ZERO = 0;
 export const SYM_SEVEN = 1;
 export const SYM_X = 2;
 
-// Allowed stakes (static.tolk). RUDA assumed 9-decimal => raw = whole * 10^9.
-export const ONE_RUDA = toNano('1');
-export const RUDA_AMOUNT_10 = toNano('10');
-export const RUDA_AMOUNT_100 = toNano('100');
-export const RUDA_AMOUNT_1000 = toNano('1000');
+// Allowed stakes (static.tolk). RUDA is 0-decimal / 1:1 => whole RUDA == raw unit.
+export const ONE_RUDA = 1n;
+export const RUDA_AMOUNT_10 = 10n;
+export const RUDA_AMOUNT_100 = 100n;
+export const RUDA_AMOUNT_1000 = 1000n;
 export const CUSTOM_ALLOWED_AMOUNT = 1000000n; // exact raw, per brief
 
 export const MIN_ROLL_VALUE = toNano('1.0');

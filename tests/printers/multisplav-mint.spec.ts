@@ -1,7 +1,7 @@
 import { beginCell, toNano } from '@ton/core';
 import { SandboxContract, TreasuryContract } from '@ton/sandbox';
 import '@ton/test-utils';
-import { AnvilErrors, ANVIL_MULTISPLAV_MINT_TAG, decodeNftContent } from '../../wrappers/game_manager/RetranslatorTypes';
+import { AnvilErrors, ANVIL_MULTISPLAV_MINT_TAG, MULTISPLAV_MINT_STAKE, decodeNftContent } from '../../wrappers/game_manager/RetranslatorTypes';
 import { JettonMinter } from '../../wrappers/tep/jetton/JettonMinter';
 import { JettonWallet } from '../../wrappers/tep/jetton/JettonWallet';
 import { NFTItem } from '../../wrappers/tep/nft/NFTItem';
@@ -58,9 +58,9 @@ describe('ANVIL 1000-RUDA multisplav mint (+ burn)', () => {
         const supplyBaseline = await S.jettonMinter.getTotalSupply();
         const gmBaseline = await gmWallet().getJettonBalance();
 
-        await fundUser(toNano('1000'));
-        expect(await userWallet().getJettonBalance()).toBe(toNano('1000'));
-        expect(await S.jettonMinter.getTotalSupply()).toBe(supplyBaseline + toNano('1000'));
+        await fundUser(MULTISPLAV_MINT_STAKE);
+        expect(await userWallet().getJettonBalance()).toBe(MULTISPLAV_MINT_STAKE);
+        expect(await S.jettonMinter.getTotalSupply()).toBe(supplyBaseline + MULTISPLAV_MINT_STAKE);
 
         const newIndex = Number(await S.retranslator.getNextNftIndex());
 
@@ -68,7 +68,7 @@ describe('ANVIL 1000-RUDA multisplav mint (+ burn)', () => {
         await userWallet().sendTransfer(
             S.user.getSender(),
             toNano('1.5'),            // TON for transfer + forward chain
-            toNano('1000'),           // full RUDA stake
+            MULTISPLAV_MINT_STAKE,    // full RUDA stake (raw 1000; 0-decimal)
             S.gameManager.address,    // recipient = GM (house wallet)
             S.user.address,           // excess back to user
             null as any,
@@ -98,12 +98,12 @@ describe('ANVIL 1000-RUDA multisplav mint (+ burn)', () => {
     });
 
     it('rejects a wrong stake amount — no mint, no burn', async () => {
-        await fundUser(toNano('500'));
+        await fundUser(500n);
         const supplyAfterFund = await S.jettonMinter.getTotalSupply();
         const indexBefore = await S.retranslator.getNextNftIndex();
         const taggedPayload = beginCell().storeUint(TAG, 32).endCell();
         const r = await userWallet().sendTransfer(
-            S.user.getSender(), toNano('1.5'), toNano('500'),
+            S.user.getSender(), toNano('1.5'), 500n, // wrong stake (raw 500 != 1000)
             S.gameManager.address, S.user.address, null as any, toNano('1'), taggedPayload,
         );
         expect(r.transactions).toHaveTransaction({

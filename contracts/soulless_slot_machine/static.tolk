@@ -12,16 +12,16 @@ import "ssm_common"
 // -----------------------------------------------------------------------------
 // Allowed stake amounts.
 //
-// ASSUMPTION (flagged in the report): the brief's "10 / 100 / 1000 RUDA (raw
-// whole jettons -> convert via decimals)" is encoded against a 9-decimal RUDA
-// (the codebase mints/treats jetton balances in nano, e.g. toNano('1000')). So a
-// whole RUDA == ton("1") raw. Change these three constants if RUDA decimals != 9.
-// The custom amount is an EXACT raw value (1_000_000) per the brief.
+// RUDA is 0-decimal / 1:1: one whole RUDA == one raw jetton unit (a balance of
+// "10 RUDA" is the integer 10). This matches native melt (retranslator.tolk:
+// pow10(K)-1 raw) and Upgrade Hull, which already operate on raw volumes. So the
+// stakes are the raw integers 10 / 100 / 1000. The custom amount is an EXACT raw
+// value (1_000_000) per the brief.
 // -----------------------------------------------------------------------------
-const ONE_RUDA: coins = ton("1");                 // 1 whole RUDA in raw units
-const RUDA_AMOUNT_10: coins = ton("10");
-const RUDA_AMOUNT_100: coins = ton("100");
-const RUDA_AMOUNT_1000: coins = ton("1000");
+const ONE_RUDA: coins = 1 as coins;                 // 1 whole RUDA == 1 raw unit (RUDA is 0-decimal)
+const RUDA_AMOUNT_10: coins = 10 as coins;
+const RUDA_AMOUNT_100: coins = 100 as coins;
+const RUDA_AMOUNT_1000: coins = 1000 as coins;
 const CUSTOM_ALLOWED_AMOUNT: coins = 1000000 as coins; // exact raw, per brief
 
 // Minimum TON that must arrive WITH a roll intake (covers 3 ephemeral
