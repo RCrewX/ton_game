@@ -25,7 +25,9 @@ type AllowedMessagesToShip =
 //  - internal: effValue = in.valueCoins  (forwards the gas the wallet sent — unchanged)
 //  - external: effValue = SESSION_MOVE_FLOAT (funds the move from the ship's own float)
 // On-chain effect (movement lock, MoveShipToCC, async MoveEnd) is identical for both.
-fun runMove(moveMode: MoveMode, effValue: coins) {
+// `isSessionMove` records the origin so the async MoveEnd can route the cashback: an
+// auto-mode (session) move keeps its leftover float on the ship; a wallet move refunds owner.
+fun runMove(moveMode: MoveMode, effValue: coins, isSessionMove: bool) {
     var storage = lazy ShipStorage.load();
     assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
     // Check we have enough balance for the operation: gas cost + coordinate cell gas
@@ -35,10 +37,12 @@ fun runMove(moveMode: MoveMode, effValue: coins) {
         var gameFields = buildGameFields(BASIC_SHIP_HP);
         storage.gameFields = gameFields;
         storage.max_hp = BASIC_SHIP_HP;
-        storage.movement_in_process = false;
         storage.save();
     }
+    // Lock the ship to THIS move (the lock itself doesn't care how it started), and record
+    // whether the move is an auto (session) move so MoveEnd can keep its cashback on the ship.
     storage.movement_in_process = true;
+    storage.cashback_to_ship = isSessionMove;
     storage.save();
     var gameFields: GameFields = lazy storage.gameFields!.load();
     reserveValue(effValue);
@@ -117,22 +121,30 @@ fun onInternalMessage(in: InMessage) {
                 gameFields.hp = msgGameFields.hp;
                 gameFields.jettonAmount += msgGameFields.jettonAmount;
             }
+            // Capture the cashback routing before we clear the in-flight flags.
+            val keepCashbackOnShip = storage.cashback_to_ship;
             storage.gameFields = gameFields.toCell();
             storage.movement_in_process = false;
+            storage.cashback_to_ship = false;
             if (totalReward > 0) {
                 storage.pending_mint_amount += totalReward;
             }
             storage.save();
 
-            reserveValue(in.valueCoins);
-            val cashbackMsg = createMessage({
-                bounce: BounceMode.NoBounce,
-                dest: storage.userAddress,
-                value: 0,
-                body: ReturnExcessesBack {queryId:0},
-            });
-            // Use send_mode=128 to carry all remaining balance (excesses)
-            cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+            if (!keepCashbackOnShip) {
+                // Wallet (internal) move: refund the leftover gas to the owner as before.
+                reserveValue(in.valueCoins);
+                val cashbackMsg = createMessage({
+                    bounce: BounceMode.NoBounce,
+                    dest: storage.userAddress,
+                    value: 0,
+                    body: ReturnExcessesBack {queryId:0},
+                });
+                // Use send_mode=128 to carry all remaining balance (excesses)
+                cashbackMsg.send(SEND_MODE_CARRY_ALL_REMAINING_BALANCE);
+            }
+            // Auto mode (session move): send NO cashback — the leftover float stays on the
+            // ship so the next session move is already funded (no owner top-up between moves).
         }
         HardTravelMoveEnd => {
             var storage: ShipStorage = lazy ShipStorage.load();
@@ -178,7 +190,7 @@ fun onInternalMessage(in: InMessage) {
             assert (in.senderAddress == storage.userAddress) throw ERR_INVALID_USER_SENDER;
             assert (!storage.movement_in_process) throw ERR_MOVEMENT_ALREADY_IN_PROCESS;
             assert (in.valueCoins >= TODO_TOTAL_GAS_TO_MOVE) throw ERR_MESSAGE_VALUE_TOO_LOW;
-            runMove(msg.mode, in.valueCoins);
+            runMove(msg.mode, in.valueCoins, false);
         }
         RequestToFastTravel => {
 
@@ -446,7 +458,7 @@ fun onExternalMessage(inMsg: slice) {
     storage.save();
     commitContractDataAndActions();
 
-    runMove(moveModeFromUint(inner.moveMode), SESSION_MOVE_FLOAT);
+    runMove(moveModeFromUint(inner.moveMode), SESSION_MOVE_FLOAT, true);
 }
 
 get fun get_session_public_key(): SHIP_SESSION_PUBKEY_TYPE {

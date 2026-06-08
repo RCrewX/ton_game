@@ -58,6 +58,8 @@ fun calcDeployedShip(
         fastTravelInfo: null,
         coordinateCellCode: coordinateCellCode,
         movement_in_process: false,
+        // No move in flight, so no pending cashback routing either.
+        cashback_to_ship: false,
         pending_mint_amount: 0,
         // No active session on a freshly-deployed ship.
         sessionInfo: null,

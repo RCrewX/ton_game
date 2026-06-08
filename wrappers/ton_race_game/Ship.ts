@@ -51,7 +51,8 @@ export function shipConfigToCell(config: ShipConfig): Cell {
         .storeMaybeRef(null) // gameFields: null
         .storeMaybeRef(null) // fastTravelInfo: null
         .storeRef(config.coordinateCellCode)
-        .storeBit(false) // movement_in_process: false
+        .storeBit(false) // movement_in_process: false (no move in flight)
+        .storeBit(false) // cashback_to_ship: false (no auto move in flight)
         .storeCoins(0) // pending_mint_amount: 0
         .storeMaybeRef(null) // sessionInfo: null (no active session on a fresh ship)
         .endCell();

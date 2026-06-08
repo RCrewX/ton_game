@@ -106,6 +106,8 @@ describe('Ship — native session-key move/exit (external-signed)', () => {
         expect(await ship.getSessionSeqno()).toBe(0);
         expect(await ship.getSessionMovesLeft()).toBe(5);
 
+        const balanceBefore = await ship.getTonBalance();
+
         const body = buildShipSessionMoveExternal({
             sessionSecretKey: sessionKp.secretKey,
             seqno: 0,
@@ -125,6 +127,18 @@ describe('Ship — native session-key move/exit (external-signed)', () => {
             op: Opcodes.OP_MOVE_END,
             success: true,
         });
+
+        // Auto mode: the cashback stays ON the ship — MoveEnd must NOT refund the owner,
+        // so the float is preserved for the next session move (no owner top-up between moves).
+        expect(res.transactions).not.toHaveTransaction({
+            from: ship.address,
+            to: SC.ownerAccount.address,
+            op: Opcodes.OP_RETURN_EXCESSES_BACK,
+        });
+        // The ship keeps (almost) all of its balance — only gas is burned, not a whole float
+        // drained to the owner. (A drained move would drop the ship toward its storage floor.)
+        const balanceAfter = await ship.getTonBalance();
+        expect(balanceAfter).toBeGreaterThan(balanceBefore - toNano('0.5'));
 
         // Ship advanced (0,0) -> (0,1); the session metered the move.
         const gd = await ship.getCurrentGameData();
